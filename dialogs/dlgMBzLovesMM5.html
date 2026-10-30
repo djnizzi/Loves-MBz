@@ -1,0 +1,107 @@
+<html class="dialog">
+
+<head>
+    <title>MBz loves MM5</title>
+    <script src="file:///mminit.js"></script>
+    <script src="dlgMBzLovesMM5.js"></script>
+    <script type="module" src="file:///commonControls.js"></script>
+    <style type="text/css">
+        .mbzScroll { overflow: auto; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; }
+        .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        .mbzTable th {
+            position: sticky;
+            top: 0;
+            text-align: left;
+            padding: 4px 8px;
+            font-weight: bold;
+            white-space: nowrap;
+            background: var(--backgroundColor, rgba(128, 128, 128, 0.15));
+            border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+        }
+        .mbzTable td {
+            padding: 3px 8px;
+            vertical-align: top;
+            border-top: 1px solid rgba(128, 128, 128, 0.2);
+        }
+        .mbzTable td.mbzText { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mbzTable td.mbzGuid { font-family: monospace; white-space: nowrap; user-select: text; }
+        .mbzTable tbody tr { cursor: pointer; }
+        .mbzTable tbody tr:hover { background: rgba(128, 128, 128, 0.12); }
+        .mbzTable tbody tr.mbzSelected { background: rgba(80, 140, 220, 0.22); }
+        .mbzEmpty { opacity: 0.35; }
+        .mbzButton { padding: 0 14px; line-height: 24px; }
+        .mbzEdit {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(128, 128, 128, 0.35);
+        }
+        .mbzEditRow { align-items: center; gap: 8px; }
+        .mbzFieldLabel { min-width: 9em; opacity: 0.8; }
+        .mbzEditRow input, .mbzEditRow select {
+            padding: 2px 6px;
+            font-family: monospace;
+            min-width: 0;
+        }
+        .mbzEditRow input:disabled { opacity: 0.45; }
+    </style>
+</head>
+
+<body data-posSaveName="dlgMBzLovesMM5" data-defaultSize="1180,720">
+    <div class="flex column fill padding">
+
+        <label data-id="summary" class="padding" data-localize>Reading MusicBrainz IDs...</label>
+
+        <div class="fill mbzScroll" style="min-height: 120px;">
+            <table class="mbzTable">
+                <thead>
+                    <tr>
+                        <th data-localize>Track</th>
+                        <th data-localize>Album</th>
+                        <th data-localize>Artist</th>
+                        <th data-localize>MusicBrainz Release ID</th>
+                        <th data-localize>MusicBrainz Release Group ID</th>
+                        <th data-localize>MusicBrainz Artist ID</th>
+                    </tr>
+                </thead>
+                <tbody data-id="rows"></tbody>
+            </table>
+        </div>
+
+        <div class="mbzEdit" data-id="editPanel">
+            <label data-id="editTarget" class="mbzEditTarget" data-localize>Select a track above to view or set its MusicBrainz IDs.</label>
+
+            <div class="flex row mbzEditRow">
+                <label class="mbzFieldLabel" data-localize>Release ID</label>
+                <input data-id="edtRelease" class="fill" spellcheck="false" autocomplete="off" />
+                <label class="mbzFieldLabel" data-localize>Release group ID</label>
+                <input data-id="edtGroup" class="fill" spellcheck="false" autocomplete="off" />
+            </div>
+
+            <div class="flex row mbzEditRow">
+                <label class="mbzFieldLabel" data-localize>Artist ID</label>
+                <select data-id="cboArtist" style="display: none;"></select>
+                <input data-id="edtArtist" class="fill" spellcheck="false" autocomplete="off" />
+            </div>
+
+            <div class="flex row mbzEditRow">
+                <div class="button mbzButton" data-id="btnSave" data-localize>Save changes</div>
+                <div class="button mbzButton" data-id="btnClear" data-localize>Clear these IDs</div>
+                <label data-id="editStatus" class="fill"></label>
+            </div>
+        </div>
+
+        <div class="flex row padding" style="align-items: center; gap: 8px;">
+            <div class="button mbzButton" data-id="btnCopy" data-localize>Copy table</div>
+            <div class="button mbzButton" data-id="btnReload" data-localize>Reload</div>
+            <label data-id="copyStatus" class="fill"></label>
+        </div>
+
+        <div data-control-class="Buttons">
+            <div data-id="btnClose" data-default="1" data-esc></div>
+        </div>
+    </div>
+</body>
+
+</html>
