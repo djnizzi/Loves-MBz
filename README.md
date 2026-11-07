@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.0**.
+Current version: **0.3.1**.
 
 ---
 
@@ -153,11 +153,18 @@ Values made up only of valid IDs are stored in dashed lower-case form. The tab r
 tags and changes made in the built-in **Custom** tab survive. It never writes
 the album or artist database fields.
 
+A track with no MusicBrainz extended tags is not a dead end. Use **Add tag** at
+the bottom of the tab: pick the tag, type a value and click **Add** — the new
+row is marked *(not saved yet)* and is written when you click **OK**, under the
+canonical `MUSICBRAINZ_*` name. Clear the value of such a row before **OK** to
+discard it. Clearing a tag that already exists still removes it.
+
 With several tracks selected, the tab shows only tags that occur once on every
 track with the same stored name and value — typically album-level tags such as
 the release, release-group and album-artist IDs. Editing one applies the new
 value to every selected track; clearing it removes the tag from every selected
-track. Per-track tags such as `MUSICBRAINZ_TRACKID` are not shown in group mode.
+track, and a tag added with **Add tag** is written to every selected track.
+Per-track tags such as `MUSICBRAINZ_TRACKID` are not shown in group mode.
 Group editing also requires every selected track to be in the library.
 
 In Party Mode the values are disabled but the links still work. The file format
@@ -301,6 +308,15 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.1
+- **Add a tag** — the MusicBrainz tab no longer stops at what a track already
+  has. A picker at the bottom of the tab adds a tag the track is missing, under
+  its canonical `MUSICBRAINZ_*` name, and keeps it alongside whatever the
+  built-in Custom tab queued.
+- **Group adding** — in a multi-track selection the same picker adds the tag to
+  every selected track through the group patch, so an album can be given a
+  release or release-group ID in one step.
 
 ### 0.3.0
 - **Renamed to Loves MBz** — the addon id is now `lovesMBz` (was `mbzLovesMM5`).

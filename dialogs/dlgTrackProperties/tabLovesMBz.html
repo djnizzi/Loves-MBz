@@ -38,6 +38,28 @@
         .mbzExtValue.mbzExtInvalid {
             outline: 1px solid #d9534f;
         }
+        .mbzExtAdd {
+            align-items: center;
+            gap: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(128, 128, 128, 0.25);
+        }
+        .mbzExtAddTag {
+            min-width: 14em;
+            max-width: 26em;
+            padding: 2px 4px;
+        }
+        .mbzExtAddValue {
+            min-width: 12em;
+            padding: 2px 5px;
+            font-family: monospace;
+        }
+        .mbzExtAddButton {
+            white-space: nowrap;
+        }
+        .mbzExtTable tr.mbzExtNew td {
+            border-top: 1px dashed rgba(128, 128, 128, 0.55);
+        }
         .mbzExtLinks {
             white-space: nowrap;
         }
@@ -68,6 +90,14 @@
         </div>
 
         <label data-id="mbzExtEmpty" class="mbzExtEmpty" style="display: none;"></label>
+
+        <div class="flex row mbzExtAdd" data-id="mbzExtAddBar">
+            <label class="mbzExtLabel" data-localize>Add tag</label>
+            <select data-id="mbzExtAddTag" class="mbzExtAddTag"></select>
+            <input data-id="mbzExtAddValue" class="mbzExtAddValue fill" spellcheck="false" autocomplete="off" />
+            <div class="button mbzExtAddButton" data-id="mbzExtAddButton" data-localize>Add</div>
+        </div>
+
         <label data-id="mbzExtStatus"></label>
     </div>
 </div>

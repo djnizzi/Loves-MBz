@@ -568,8 +568,54 @@
         MUSICBRAINZTRMID: { entity: '', label: 'TRM ID' }
     };
 
+    /**
+     * Tags the properties tab can add. Writing the Vorbis-style
+     * MUSICBRAINZ_* name keeps one spelling for every file format.
+     */
+    var MUSICBRAINZ_TAG_NAMES = [
+        'MUSICBRAINZ_ALBUMID',
+        'MUSICBRAINZ_RELEASEGROUPID',
+        'MUSICBRAINZ_ALBUMARTISTID',
+        'MUSICBRAINZ_ARTISTID',
+        'MUSICBRAINZ_TRACKID',
+        'MUSICBRAINZ_RELEASETRACKID',
+        'MUSICBRAINZ_WORKID',
+        'MUSICBRAINZ_LABELID',
+        'MUSICBRAINZ_ORIGINALALBUMID',
+        'MUSICBRAINZ_ORIGINALARTISTID',
+        'MUSICBRAINZ_COMPOSERID',
+        'MUSICBRAINZ_LYRICISTID',
+        'MUSICBRAINZ_CONDUCTORID',
+        'MUSICBRAINZ_ARRANGERID',
+        'MUSICBRAINZ_PERFORMERID',
+        'MUSICBRAINZ_PRODUCERID',
+        'MUSICBRAINZ_ENGINEERID',
+        'MUSICBRAINZ_MIXERID',
+        'MUSICBRAINZ_REMIXERID',
+        'MUSICBRAINZ_DJMIXERID',
+        'MUSICBRAINZ_DISCID',
+        'MUSICBRAINZ_ALBUMSTATUS',
+        'MUSICBRAINZ_ALBUMTYPE',
+        'MUSICBRAINZ_ALBUMCOUNTRY',
+        'MUSICBRAINZ_ALBUMRELEASEDATE'
+    ];
+
     function musicBrainzTagInfo(title) {
         return MUSICBRAINZ_ENTITIES[normalizeExtendedTagName(title)] || null;
+    }
+
+    /**
+     * @returns {Array<{name: string, label: string, entity: string}>}
+     */
+    function musicBrainzTagChoices() {
+        return MUSICBRAINZ_TAG_NAMES.map(function (name) {
+            var info = musicBrainzTagInfo(name);
+            return {
+                name: name,
+                label: info ? info.label : name,
+                entity: info ? info.entity : ''
+            };
+        });
     }
 
     function isMusicBrainzExtendedTag(title) {
@@ -654,6 +700,17 @@
 
         (edits || []).forEach(function (edit) {
             var title = String(edit && edit.title !== undefined ? edit.title : '');
+            var newValue = String(edit && edit.value !== undefined && edit.value !== null ? edit.value : '');
+
+            // add:true appends a tag the track does not have yet. An empty
+            // value cancels the add instead of writing an empty tag.
+            if (edit && edit.add) {
+                if (!title || !newValue.trim()) return;
+                result.push({ title: title, value: newValue });
+                appliedEdits.push({ title: title, value: newValue, added: true });
+                return;
+            }
+
             var occurrence = parseInt(edit && edit.occurrence, 10);
             if (!title || !(occurrence >= 0)) return;
 
@@ -790,6 +847,7 @@
         normalizeGuid: normalizeGuid,
         normalizeExtendedTagName: normalizeExtendedTagName,
         musicBrainzTagInfo: musicBrainzTagInfo,
+        musicBrainzTagChoices: musicBrainzTagChoices,
         isMusicBrainzExtendedTag: isMusicBrainzExtendedTag,
         extendedTagGuids: extendedTagGuids,
         musicBrainzUrl: musicBrainzUrl,

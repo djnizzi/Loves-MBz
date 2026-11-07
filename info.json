@@ -1,8 +1,8 @@
 {
     "title": "Loves MBz",
     "id": "lovesMBz",
-    "description": "Exposes the MusicBrainz IDs MediaMonkey keeps in its database but never shows: Albums.MBGID (release), Albums.MBRGGID (release group) and Artists.MBGID (artist). Adds three read-only tracklist columns, a dialog that lists, copies and can set those IDs, and a Track Properties tab that links and edits per-track MusicBrainz extended tags, including group editing of tags shared by the selected tracks.",
-    "version": "0.3.0",
+    "description": "Exposes the MusicBrainz IDs MediaMonkey keeps in its database but never shows: Albums.MBGID (release), Albums.MBRGGID (release group) and Artists.MBGID (artist). Adds three read-only tracklist columns, a dialog that lists, copies and can set those IDs, and a Track Properties tab that links and edits per-track MusicBrainz extended tags, including adding missing tags and group editing of tags shared by the selected tracks.",
+    "version": "0.3.1",
     "author": "NiZDesign",
     "type": "general",
     "icon": "lovesMBz.svg",

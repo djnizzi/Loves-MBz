@@ -16,6 +16,10 @@
  * tags. A group save sends a patch through MediaMonkey's group track, so
  * per-track tags such as recording IDs are left alone.
  *
+ * A track with no MusicBrainz tags is not a dead end: the add row at the bottom
+ * writes a new tag under its canonical MUSICBRAINZ_* name, for one track or for
+ * every track of a group selection.
+ *
  * Links open on musicbrainz.org; IDs that are not valid UUIDs are left in the
  * value but are not linkified.
  */
@@ -59,6 +63,129 @@ function mbzExtShowEmpty(ui, text) {
     ui.table.style.display = 'none';
     ui.empty.style.display = '';
     ui.empty.textContent = text;
+}
+
+function mbzExtShowAddBar(ui, readOnly) {
+    if (!ui || !ui.addBar) return;
+    ui.addBar.style.display = (readOnly || !window.mbzMbgid) ? 'none' : '';
+}
+
+function mbzExtPopulateAddChoices(ui, mbz) {
+    if (!ui || !ui.addTag || !mbz || typeof mbz.musicBrainzTagChoices !== 'function') return;
+    if (ui.addTag.options && ui.addTag.options.length) return;
+
+    mbz.musicBrainzTagChoices().forEach(function (choice) {
+        var option = document.createElement('option');
+        option.value = choice.name;
+        option.textContent = choice.label + ' \u2014 ' + choice.name;
+        option.title = choice.name;
+        ui.addTag.appendChild(option);
+    });
+}
+
+function mbzExtNextOccurrence(title) {
+    var count = 0;
+    mbzExtRows.forEach(function (row) {
+        if (row.title === title) count++;
+    });
+    return count;
+}
+
+function mbzExtUpdateSummary(ui) {
+    if (!ui || !mbzExtRows.length) return;
+
+    if (mbzExtGroup) {
+        ui.summary.textContent = mbzExtRows.length === 1
+            ? sprintf(_('1 MusicBrainz tag for all %d selected tracks.'), mbzExtGroup.trackCount)
+            : sprintf(_('%d MusicBrainz tags for all %d selected tracks.'), mbzExtRows.length, mbzExtGroup.trackCount);
+        return;
+    }
+
+    ui.summary.textContent = mbzExtRows.length === 1
+        ? _('1 MusicBrainz extended tag.')
+        : sprintf(_('%d MusicBrainz extended tags.'), mbzExtRows.length);
+}
+
+function mbzExtRowValue(row) {
+    if (!row) return '';
+    if (row.input) return row.input.value;
+    return row.pendingValue !== undefined ? row.pendingValue : row.originalValue;
+}
+
+function mbzExtHasChanges() {
+    for (var i = 0; i < mbzExtRows.length; i++) {
+        var row = mbzExtRows[i];
+        var value = mbzExtRowValue(row);
+
+        if (row.isNew) {
+            // A pending row with no value is a cancelled add, not a change.
+            if (String(value).trim()) return true;
+            continue;
+        }
+
+        if (value !== row.originalValue) return true;
+    }
+
+    return false;
+}
+
+function mbzExtUpdateStatus() {
+    if (!mbzExtUI) return;
+
+    mbzExtUI.status.textContent = mbzExtHasChanges()
+        ? (mbzExtGroup
+            ? _('Unsaved changes. Click OK to apply them to all selected tracks.')
+            : _('Unsaved changes. Click OK to save.'))
+        : '';
+}
+
+function mbzExtAddPending(ui, mbz) {
+    if (!ui || !mbz || window.isReadOnly) return;
+
+    var title = ui.addTag ? String(ui.addTag.value || '') : '';
+    var value = ui.addValue ? String(ui.addValue.value || '').trim() : '';
+
+    if (!title) {
+        ui.status.textContent = _('Choose a MusicBrainz tag to add.');
+        return;
+    }
+
+    if (!value) {
+        ui.status.textContent = _('Enter a value for the tag you want to add.');
+        return;
+    }
+
+    var duplicate = false;
+    mbzExtRows.forEach(function (row) {
+        if (row.title === title && String(mbzExtRowValue(row)) === value) duplicate = true;
+    });
+
+    if (duplicate) {
+        ui.status.textContent = _('That tag and value are already listed.');
+        return;
+    }
+
+    mbzExtRows.push({
+        title: title,
+        occurrence: mbzExtNextOccurrence(title),
+        originalValue: '',
+        pendingValue: value,
+        isNew: true,
+        info: mbz.musicBrainzTagInfo(title),
+        input: null,
+        linkCell: null
+    });
+
+    ui.table.style.display = '';
+    ui.empty.style.display = 'none';
+    if (ui.addValue) ui.addValue.value = '';
+
+    window.modified = true;
+    window.tagModified = true;
+
+    mbzExtRenderRows(ui, false);
+    mbzExtUpdateSummary(ui);
+    mbzExtUpdateStatus();
 }
 
 function mbzExtEntityLabel(entity) {
@@ -105,7 +232,7 @@ function mbzExtRenderLinks(row) {
 }
 
 function mbzExtValueForSave(row, mbz) {
-    var value = row.input ? row.input.value : row.originalValue;
+    var value = mbzExtRowValue(row);
     if (!row.info || !row.info.entity) return value;
 
     var parsed = mbz.extendedTagGuids(value);
@@ -150,10 +277,10 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
         ui.summary.textContent = '';
         if (groupInfo) {
             mbzExtShowEmpty(ui, sprintf(
-                _('No MusicBrainz extended tags have the same value on all %d selected tracks. Select a single track to see all of its tags.'),
+                _('No MusicBrainz extended tags have the same value on all %d selected tracks. Select a single track to see all of its tags, or add one below to set it on every selected track.'),
                 groupInfo.trackCount));
         } else {
-            mbzExtShowEmpty(ui, _('This track has no MusicBrainz extended tags. MusicBrainz release, release-group and artist IDs are stored on the album and artist rows, not in ExtendedTags.'));
+            mbzExtShowEmpty(ui, _('This track has no MusicBrainz extended tags. Add one below. The MusicBrainz release, release-group and artist IDs are stored on the album and artist rows, not in ExtendedTags.'));
         }
         return;
     }
@@ -163,21 +290,22 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
 
     if (groupInfo) {
         mbzExtGroupIntro(ui, readOnly, groupInfo.trackCount);
-        ui.summary.textContent = mbzExtRows.length === 1
-            ? sprintf(_('1 MusicBrainz tag is identical on all %d selected tracks.'), groupInfo.trackCount)
-            : sprintf(_('%d MusicBrainz tags are identical on all %d selected tracks.'), mbzExtRows.length, groupInfo.trackCount);
-    } else {
-        ui.summary.textContent = mbzExtRows.length === 1
-            ? _('1 MusicBrainz extended tag.')
-            : sprintf(_('%d MusicBrainz extended tags.'), mbzExtRows.length);
-
-        if (!readOnly) {
-            ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. Edit a value and click OK to save it; clear a value to remove that tag.');
-        }
+    } else if (!readOnly) {
+        ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. Edit a value and click OK to save it; clear a value to remove that tag.');
     }
+
+    mbzExtUpdateSummary(ui);
+    mbzExtRenderRows(ui, readOnly);
+}
+
+function mbzExtRenderRows(ui, readOnly) {
+    if (!ui) return;
+
+    ui.rows.textContent = '';
 
     mbzExtRows.forEach(function (row, index) {
         var tr = document.createElement('tr');
+        if (row.isNew) tr.className = 'mbzExtNew';
 
         var nameCell = document.createElement('td');
         var title = document.createElement('div');
@@ -187,14 +315,15 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
 
         var label = document.createElement('div');
         label.className = 'mbzExtLabel';
-        label.textContent = row.info ? _(row.info.label) : _('MusicBrainz tag');
+        label.textContent = (row.info ? _(row.info.label) : _('MusicBrainz tag'))
+            + (row.isNew ? ' ' + _('(not saved yet)') : '');
         nameCell.appendChild(label);
 
         var valueCell = document.createElement('td');
         var input = document.createElement('input');
         input.type = 'text';
         input.className = 'mbzExtValue';
-        input.value = row.originalValue;
+        input.value = row.pendingValue !== undefined ? row.pendingValue : row.originalValue;
         input.spellcheck = false;
         input.autocomplete = 'off';
         input.disabled = readOnly;
@@ -222,25 +351,11 @@ function mbzExtOnInput(event) {
     var row = mbzExtRows[index];
     if (!row) return;
 
+    row.pendingValue = input.value;
     window.modified = true;
     window.tagModified = true;
     mbzExtRenderLinks(row);
-
-    if (mbzExtUI) {
-        var changed = false;
-        for (var i = 0; i < mbzExtRows.length; i++) {
-            if (mbzExtRows[i].input && mbzExtRows[i].input.value !== mbzExtRows[i].originalValue) {
-                changed = true;
-                break;
-            }
-        }
-
-        mbzExtUI.status.textContent = changed
-            ? (mbzExtGroup
-                ? _('Unsaved changes. Click OK to apply them to all selected tracks.')
-                : _('Unsaved changes. Click OK to save.'))
-            : '';
-    }
+    mbzExtUpdateStatus();
 }
 
 function mbzExtOnClick(event) {
@@ -360,6 +475,8 @@ function mbzExtSaveGroupAsync(track, mbz) {
             mbzExtRows.forEach(function (row) {
                 if (row.title !== entry.title) return;
                 row.originalValue = entry.deleted ? '' : entry.value;
+                row.pendingValue = row.originalValue;
+                row.isNew = false;
                 if (row.input) row.input.value = row.originalValue;
             });
         });
@@ -383,7 +500,11 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         table: qeid(main, 'mbzExtTable'),
         rows: qeid(main, 'mbzExtRows'),
         empty: qeid(main, 'mbzExtEmpty'),
-        status: qeid(main, 'mbzExtStatus')
+        status: qeid(main, 'mbzExtStatus'),
+        addBar: qeid(main, 'mbzExtAddBar'),
+        addTag: qeid(main, 'mbzExtAddTag'),
+        addValue: qeid(main, 'mbzExtAddValue'),
+        addButton: qeid(main, 'mbzExtAddButton')
     };
 
     mbzExtUI = ui;
@@ -408,6 +529,20 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);
+
+    mbzExtPopulateAddChoices(ui, mbz);
+    mbzExtShowAddBar(ui, readOnly);
+
+    mbzExtListen(dialog, ui.addButton, 'click', function () {
+        mbzExtAddPending(ui, window.mbzMbgid);
+    });
+
+    mbzExtListen(dialog, ui.addValue, 'keydown', function (event) {
+        if (!event || (event.key !== 'Enter' && event.keyCode !== 13)) return;
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
+        mbzExtAddPending(ui, window.mbzMbgid);
+    });
 
     if (dialog.isGroup) {
         mbzExtLoadGroup(ui, dialog, mbz, readOnly, token);
@@ -443,7 +578,16 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
     var edits = [];
     mbzExtRows.forEach(function (row) {
         if (!row.input) return;
+
         var value = mbzExtValueForSave(row, mbz);
+
+        if (row.isNew) {
+            // A cleared pending row is a cancelled add, not a deletion.
+            if (!value.trim()) return;
+            edits.push({ title: row.title, add: true, value: value });
+            return;
+        }
+
         if (value === row.originalValue) return;
         edits.push({ title: row.title, occurrence: row.occurrence, value: value });
     });
@@ -466,11 +610,27 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
         // Record exactly what was written, so a later save does not treat
         // canonicalized or removed values as dirty again.
         result.appliedEdits.forEach(function (edit) {
+            if (edit.added) return; // new rows are updated below
+
             mbzExtRows.forEach(function (row) {
                 if (row.title !== edit.title || row.occurrence !== edit.occurrence) return;
                 row.originalValue = edit.value;
+                row.pendingValue = edit.value;
                 if (row.input && row.input.value !== edit.value) row.input.value = edit.value;
             });
+        });
+
+        // A row added in this session is an ordinary tag on the track now.
+        mbzExtRows.forEach(function (row) {
+            if (!row.isNew) return;
+
+            var value = mbzExtValueForSave(row, mbz);
+            if (!value.trim()) return;
+
+            row.isNew = false;
+            row.originalValue = value;
+            row.pendingValue = value;
+            if (row.input) row.input.value = value;
         });
     })().catch(function (error) {
         // The properties dialog has no rejection path for saveAsync. Report the
