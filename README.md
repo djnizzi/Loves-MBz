@@ -1,5 +1,10 @@
 # Loves MBz
 
+[![Latest release](https://img.shields.io/github/v/release/djnizzi/Loves-MBz?label=release&sort=semver)](https://github.com/djnizzi/Loves-MBz/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/djnizzi/Loves-MBz/total)](https://github.com/djnizzi/Loves-MBz/releases)
+[![MediaMonkey](https://img.shields.io/badge/MediaMonkey-5.0%2B-1f6feb)](https://www.mediamonkey.com/)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](#install)
+
 MediaMonkey 5 keeps MusicBrainz identifiers in its library database but never
 shows them anywhere in the UI. **Loves MBz** exposes them.
 
