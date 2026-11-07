@@ -78,6 +78,15 @@
         .mbzExtAddButton {
             white-space: nowrap;
         }
+        .mbzExtApplyCell {
+            width: 1%;
+            text-align: center;
+            padding-right: 0;
+        }
+        .mbzExtApply {
+            margin: 0;
+            vertical-align: middle;
+        }
         .mbzExtTable tr.mbzExtNew td {
             border-top: 1px dashed rgba(128, 128, 128, 0.55);
         }
@@ -101,6 +110,7 @@
             <table class="mbzExtTable" data-id="mbzExtTable">
                 <thead>
                     <tr>
+                        <th data-id="mbzExtApplyHead" class="mbzExtApplyCell" style="display: none;"></th>
                         <th data-localize>Tag</th>
                         <th data-localize>Value</th>
                         <th data-localize>Open</th>

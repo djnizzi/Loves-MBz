@@ -231,9 +231,22 @@ function mbzExtUpdateSummary(ui) {
     if (!ui || !mbzExtRows.length) return;
 
     if (mbzExtGroup) {
-        ui.summary.textContent = mbzExtRows.length === 1
+        var partial = 0;
+        mbzExtRows.forEach(function (row) {
+            if (row.missingCount > 0) partial++;
+        });
+
+        var text = mbzExtRows.length === 1
             ? sprintf(_('1 MusicBrainz tag for all %d selected tracks.'), mbzExtGroup.trackCount)
             : sprintf(_('%d MusicBrainz tags for all %d selected tracks.'), mbzExtRows.length, mbzExtGroup.trackCount);
+
+        if (partial) {
+            text += ' ' + (partial === 1
+                ? _('1 of them is missing on some selected tracks.')
+                : sprintf(_('%d of them are missing on some selected tracks.'), partial));
+        }
+
+        ui.summary.textContent = text;
         return;
     }
 
@@ -259,6 +272,7 @@ function mbzExtHasChanges() {
             continue;
         }
 
+        if (row.applyToAll) return true;
         if (value !== row.originalValue) return true;
     }
 
@@ -295,8 +309,13 @@ function mbzExtAddTagRow(ui, mbz, title, value) {
         originalValue: '',
         pendingValue: value,
         isNew: true,
+        // A tag added in group mode is written to every selected track.
+        missingCount: 0,
+        presentCount: mbzExtGroup ? mbzExtGroup.trackCount : 1,
+        applyToAll: false,
         info: mbz.musicBrainzTagInfo(title),
         input: null,
+        applyInput: null,
         linkCell: null
     });
 
@@ -385,12 +404,11 @@ function mbzExtValueForSave(row, mbz) {
     return value;
 }
 
-function mbzExtGroupIntro(ui, readOnly, trackCount) {
+function mbzExtGroupIntro(ui, readOnly) {
     if (!ui) return;
-    ui.intro.textContent = sprintf(
-        _('Showing MusicBrainz tags that have the same value on all %d selected tracks. Per-track tags are not shown.'),
-        trackCount
-    ) + (readOnly ? '' : ' ' + _('Editing applies to all selected tracks.'));
+
+    ui.intro.textContent = _('Showing MusicBrainz tags that have the same value on every selected track that stores them. Check All tracks on a tag to write it to the selected tracks that have none.')
+        + (readOnly ? '' : ' ' + _('Editing applies to all selected tracks.'));
 }
 
 function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
@@ -408,8 +426,12 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
             title: title,
             occurrence: occurrence,
             originalValue: String(tag.value === undefined || tag.value === null ? '' : tag.value),
+            missingCount: tag.missingCount || 0,
+            presentCount: tag.presentCount || 0,
+            applyToAll: false,
             info: mbz.musicBrainzTagInfo(title),
             input: null,
+            applyInput: null,
             linkCell: null
         });
     });
@@ -447,9 +469,34 @@ function mbzExtRenderRows(ui, readOnly) {
 
     ui.rows.textContent = '';
 
+    // The All tracks column only means something for a group selection.
+    var showApply = !!mbzExtGroup;
+    if (ui.applyHead) ui.applyHead.style.display = showApply ? '' : 'none';
+
     mbzExtRows.forEach(function (row, index) {
         var tr = document.createElement('tr');
         if (row.isNew) tr.className = 'mbzExtNew';
+
+        if (showApply) {
+            var applyCell = document.createElement('td');
+            applyCell.className = 'mbzExtApplyCell';
+
+            var apply = document.createElement('input');
+            apply.type = 'checkbox';
+            apply.className = 'mbzExtApply';
+            apply.checked = !row.isNew && row.missingCount === 0;
+            apply.disabled = readOnly || row.isNew || row.missingCount === 0;
+            apply.setAttribute('data-row', String(index));
+            apply.title = row.isNew
+                ? _('A new tag is written to every selected track.')
+                : (row.missingCount > 0
+                    ? sprintf(_('Apply this value to the %d selected tracks that have no such tag.'), row.missingCount)
+                    : _('Every selected track already has this tag with this value.'));
+
+            applyCell.appendChild(apply);
+            row.applyInput = apply;
+            tr.appendChild(applyCell);
+        }
 
         var nameCell = document.createElement('td');
         var title = document.createElement('div');
@@ -460,7 +507,10 @@ function mbzExtRenderRows(ui, readOnly) {
         var label = document.createElement('div');
         label.className = 'mbzExtLabel';
         label.textContent = (row.info ? _(row.info.label) : _('MusicBrainz tag'))
-            + (row.isNew ? ' ' + _('(not saved yet)') : '');
+            + (row.isNew ? ' ' + _('(not saved yet)') : '')
+            + (!row.isNew && row.missingCount > 0 && mbzExtGroup
+                ? ' ' + sprintf(_('(missing on %d of %d tracks)'), row.missingCount, mbzExtGroup.trackCount)
+                : '');
         nameCell.appendChild(label);
 
         var valueCell = document.createElement('td');
@@ -487,6 +537,20 @@ function mbzExtRenderRows(ui, readOnly) {
     });
 
     mbzExtRenderSuggestions(ui, readOnly);
+}
+
+function mbzExtOnApplyChange(event) {
+    var input = event && event.target;
+    if (!input || input.type !== 'checkbox' || !input.classList || !input.classList.contains('mbzExtApply')) return;
+
+    var index = parseInt(input.getAttribute('data-row'), 10);
+    var row = mbzExtRows[index];
+    if (!row) return;
+
+    row.applyToAll = !!input.checked;
+    window.modified = true;
+    window.tagModified = true;
+    mbzExtUpdateStatus();
 }
 
 function mbzExtOnInput(event) {
@@ -596,7 +660,10 @@ function mbzExtSaveGroupAsync(track, mbz) {
         if (!row.input) return;
 
         var value = mbzExtValueForSave(row, mbz);
-        if (value === row.originalValue) return;
+
+        // A checked All tracks box writes the value even though this tab did
+        // not change it: that is the whole point of the box.
+        if (value === row.originalValue && !row.applyToAll) return;
 
         var entry = { title: row.title, value: value };
         if (!value.trim()) {
@@ -625,7 +692,13 @@ function mbzExtSaveGroupAsync(track, mbz) {
                 row.originalValue = entry.deleted ? '' : entry.value;
                 row.pendingValue = row.originalValue;
                 row.isNew = false;
+                row.applyToAll = false;
+                if (!entry.deleted) row.missingCount = 0;
                 if (row.input) row.input.value = row.originalValue;
+                if (row.applyInput && row.applyInput.setAttribute) {
+                    row.applyInput.checked = row.missingCount === 0;
+                    row.applyInput.disabled = row.missingCount === 0;
+                }
             });
         });
     })().catch(function (error) {
@@ -651,6 +724,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         status: qeid(main, 'mbzExtStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
         suggest: qeid(main, 'mbzExtSuggestBar'),
+        applyHead: qeid(main, 'mbzExtApplyHead'),
         addTag: qeid(main, 'mbzExtAddTag'),
         addValue: qeid(main, 'mbzExtAddValue'),
         addButton: qeid(main, 'mbzExtAddButton')
@@ -679,6 +753,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);
+    mbzExtListen(dialog, ui.rows, 'change', mbzExtOnApplyChange);
 
     mbzExtPopulateAddChoices(ui, mbz);
     mbzExtShowAddBar(ui, readOnly);

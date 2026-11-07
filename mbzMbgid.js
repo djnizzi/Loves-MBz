@@ -778,52 +778,97 @@
     }
 
     /**
-     * Returns the MusicBrainz tags that occur exactly once on every track, with
-     * the same raw tag name and value. Exact raw-name matching keeps a group
-     * patch safe: the title it targets already exists on every selected track.
-     * A mixed-format selection simply shows fewer common tags.
+     * Returns the MusicBrainz tags the group editor can show: every tag whose
+     * value is identical on each selected track that stores it. A tag that some
+     * tracks do not have at all is still returned, with missingCount telling the
+     * tab how many tracks would receive it if the user applies it.
+     *
+     * Cases that cannot be patched safely through the group track are dropped:
+     * a normalized name stored twice on one track, or the same name under
+     * different raw titles or different values across the selection.
      *
      * @param {Array<Array<{title: string, value: string}>>} tagLists
-     * @returns {Array<{title: string, value: string}>}
+     * @returns {Array<{title: string, value: string, trackCount: number,
+     *   presentCount: number, missingCount: number}>}
      */
     function commonExtendedTags(tagLists) {
-        var lists = Array.isArray(tagLists) ? tagLists : [];
+        var lists = (tagLists || []).map(function (list) {
+            return Array.isArray(list) ? list : [];
+        });
         if (!lists.length) return [];
 
-        var first = Array.isArray(lists[0]) ? lists[0] : [];
-        var common = [];
+        var order = [];
         var seen = {};
 
-        first.forEach(function (tag) {
-            if (!tag || !isMusicBrainzExtendedTag(tag.title)) return;
+        // Union of names, so a tag missing from the first selected track is
+        // still offered when the rest of the selection carries it.
+        lists.forEach(function (list) {
+            list.forEach(function (tag) {
+                if (!tag || !isMusicBrainzExtendedTag(tag.title)) return;
 
-            var name = normalizeExtendedTagName(tag.title);
-            if (seen[name]) return; // duplicate normalized name -> ambiguous
-            seen[name] = true;
+                var name = normalizeExtendedTagName(tag.title);
+                if (!name || seen[name]) return;
 
-            var title = String(tag.title || '');
-            var value = String(tag.value === undefined || tag.value === null ? '' : tag.value);
+                seen[name] = true;
+                order.push(name);
+            });
+        });
 
-            for (var i = 1; i < lists.length; i++) {
-                var list = Array.isArray(lists[i]) ? lists[i] : [];
+        var common = [];
+
+        order.forEach(function (name) {
+            var title = '';
+            var value = '';
+            var present = 0;
+            var missing = 0;
+            var ambiguous = false;
+
+            for (var i = 0; i < lists.length && !ambiguous; i++) {
                 var matches = [];
 
-                for (var j = 0; j < list.length; j++) {
-                    var candidate = list[j];
+                for (var j = 0; j < lists[i].length; j++) {
+                    var candidate = lists[i][j];
                     if (candidate && normalizeExtendedTagName(candidate.title) === name) {
                         matches.push(candidate);
                     }
                 }
 
-                if (matches.length !== 1) return;
-                if (String(matches[0].title || '') !== title) return;
+                if (matches.length > 1) {
+                    // Two entries with the same name on one track: an
+                    // occurrence based patch cannot say which one is meant.
+                    ambiguous = true;
+                    break;
+                }
 
-                var candidateValue = String(
+                if (!matches.length) {
+                    missing++;
+                    continue;
+                }
+
+                var rawTitle = String(matches[0].title || '');
+                var rawValue = String(
                     matches[0].value === undefined || matches[0].value === null ? '' : matches[0].value);
-                if (candidateValue !== value) return;
+
+                if (!present) {
+                    title = rawTitle;
+                    value = rawValue;
+                } else if (rawTitle !== title || rawValue !== value) {
+                    ambiguous = true;
+                    break;
+                }
+
+                present++;
             }
 
-            common.push({ title: title, value: value });
+            if (ambiguous || !present) return;
+
+            common.push({
+                title: title,
+                value: value,
+                trackCount: lists.length,
+                presentCount: present,
+                missingCount: missing
+            });
         });
 
         return common;

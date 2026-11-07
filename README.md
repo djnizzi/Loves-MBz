@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.2**.
+Current version: **0.3.3**.
 
 ---
 
@@ -167,13 +167,25 @@ typing. A tag that is already listed — or already exists with another value �
 is not suggested; edit its row instead. In a group selection a suggestion is
 only offered for IDs that are identical on every selected track.
 
-With several tracks selected, the tab shows only tags that occur once on every
-track with the same stored name and value — typically album-level tags such as
-the release, release-group and album-artist IDs. Editing one applies the new
-value to every selected track; clearing it removes the tag from every selected
-track, and a tag added with **Add tag** is written to every selected track.
-Per-track tags such as `MUSICBRAINZ_TRACKID` are not shown in group mode.
-Group editing also requires every selected track to be in the library.
+With several tracks selected, the tab shows tags whose value is the same on
+every selected track that stores them — typically album-level tags such as the
+release, release-group and album-artist IDs. Editing one applies the new value
+to every selected track; clearing it removes the tag from every selected track,
+and a tag added with **Add tag** is written to every selected track.
+
+A tag that only some of the selected tracks have is shown too, never hidden.
+Its **All tracks** checkbox is clear and its label counts how many selected
+tracks are missing it (`(missing on 2 of 5 tracks)`); tick the box and click
+**OK** and the value that is already there is written to those tracks. A tag
+that every selected track already has shows the box ticked and disabled,
+because there is nothing left to apply. Like the other fields in Track
+Properties, the box only queues the change — nothing is written until **OK**.
+Tracks that store the same tag name twice, or at different values, cannot be
+patched through the group, so that tag is left out.
+
+Per-track tags such as `MUSICBRAINZ_TRACKID` follow the same rule: they appear
+when the tracks agree (or only some have it). Group editing also requires every
+selected track to be in the library.
 
 In Party Mode the values are disabled but the links still work. The file format
 must support extended tags — formats such as WAV may discard them.
@@ -316,6 +328,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.3
+- **Fill missing tags across a selection** — a tag that exists on only some of
+  the selected tracks is no longer hidden. It is listed with an **All tracks**
+  checkbox, and the label says how many selected tracks lack it. Ticking the box
+  and clicking **OK** writes the value the other tracks already have to those
+  tracks. Tags every track already carries show the box ticked and disabled.
 
 ### 0.3.2
 - **Suggestions from the library** — when the database already holds a native
