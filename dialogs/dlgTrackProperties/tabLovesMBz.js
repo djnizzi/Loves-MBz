@@ -71,6 +71,35 @@ function mbzExtShowAddBar(ui, readOnly) {
     ui.addBar.style.display = (readOnly || !window.mbzMbgid) ? 'none' : '';
 }
 
+/**
+ * A native <select> is not one of MediaMonkey's skinned controls, so it keeps
+ * the browser's white control background while inheriting the skin's light
+ * text. Copy the colours the skin gives the text input next to it, so the
+ * picker looks like the rest of the dialog in any theme.
+ */
+function mbzExtApplyPickerSkin(ui) {
+    if (!ui || !ui.addTag || typeof window.getComputedStyle !== 'function') return;
+
+    var refs = [ui.addValue, ui.addBar, ui.rows, document.body];
+    var background = '';
+    var color = '';
+
+    for (var i = 0; i < refs.length; i++) {
+        if (!refs[i]) continue;
+
+        var style = window.getComputedStyle(refs[i]);
+        if (!style) continue;
+
+        if (!color && style.color) color = style.color;
+
+        var bg = style.backgroundColor;
+        if (!background && bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') background = bg;
+    }
+
+    if (background) ui.addTag.style.backgroundColor = background;
+    if (color) ui.addTag.style.color = color;
+}
+
 function mbzExtPopulateAddChoices(ui, mbz) {
     if (!ui || !ui.addTag || !mbz || typeof mbz.musicBrainzTagChoices !== 'function') return;
     if (ui.addTag.options && ui.addTag.options.length) return;
@@ -82,6 +111,8 @@ function mbzExtPopulateAddChoices(ui, mbz) {
         option.title = choice.name;
         ui.addTag.appendChild(option);
     });
+
+    mbzExtApplyPickerSkin(ui);
 }
 
 function mbzExtShortGuid(value) {
