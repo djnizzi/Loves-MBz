@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * MBz loves MM5 — MusicBrainz ID viewer and editor.
+ * Loves MBz — MusicBrainz ID viewer and editor.
  *
  * Lists the MusicBrainz IDs for the tracks that were selected when the action
  * was invoked, and copies them as a tab-separated table.
@@ -152,7 +152,7 @@ function mbzCopyText(text) {
 
 function init(params) {
     var wnd = this;
-    wnd.title = (params && params.title) ? params.title : _('MBz loves MM5');
+    wnd.title = (params && params.title) ? params.title : _('Loves MBz');
     wnd.resizeable = true;
 
     var sourceList = params && params.tracks;
@@ -488,7 +488,7 @@ function init(params) {
                 buildConfirmMessage(row, collected.changes, counts[0], counts[1]),
                 'Confirmation',
                 ['btnYes', 'btnNo'],
-                { defaultButton: 'btnNo', title: _('MBz loves MM5') },
+                { defaultButton: 'btnNo', title: _('Loves MBz') },
                 function (result) {
                     if (window._cleanUpCalled) return;
                     if (result && result.btnID === 'btnYes') {
@@ -640,7 +640,7 @@ function init(params) {
     // ---------------------------------------------------------------------
 
     if (!mbz) {
-        setSummary(_('The MusicBrainz ID module did not load. Check debug.log for lines starting with "MBz loves MM5:".'));
+        setSummary(_('The MusicBrainz ID module did not load. Check debug.log for lines starting with "Loves MBz:".'));
         hideEditor();
         return;
     }

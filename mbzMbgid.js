@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * MBz loves MM5 — MusicBrainz ID access layer.
+ * Loves MBz — MusicBrainz ID access layer.
  *
  * MediaMonkey 5 stores MusicBrainz identifiers in its SQLite database but never
  * exposes them in the UI:
@@ -48,9 +48,9 @@
 
     function log(message) {
         if (typeof ODS === 'function') {
-            ODS('MBz loves MM5: ' + message);
+            ODS('Loves MBz: ' + message);
         } else if (window.console) {
-            console.log('MBz loves MM5: ' + message);
+            console.log('Loves MBz: ' + message);
         }
     }
 

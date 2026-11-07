@@ -1,7 +1,7 @@
-# MBz loves MM5
+# Loves MBz
 
 MediaMonkey 5 keeps MusicBrainz identifiers in its library database but never
-shows them anywhere in the UI. **MBz loves MM5** exposes them.
+shows them anywhere in the UI. **Loves MBz** exposes them.
 
 Three read-only track-list columns:
 
@@ -31,12 +31,12 @@ Current version: **0.3.0**.
 ### For development
 
 MediaMonkey loads addons from a folder named after the addon id
-(`mbzLovesMM5`), so copy this folder under that name:
+(`lovesMBz`), so copy this folder under that name:
 
 | Install for | Folder |
 |---|---|
-| Current user | `%APPDATA%\MediaMonkey5\Scripts\mbzLovesMM5\` |
-| All users | `%ProgramFiles%\MediaMonkey5\Scripts\mbzLovesMM5\` |
+| Current user | `%APPDATA%\MediaMonkey5\Scripts\lovesMBz\` |
+| All users | `%ProgramFiles%\MediaMonkey5\Scripts\lovesMBz\` |
 
 Editing the dialog files only needs the dialog to be reopened; `info.json`,
 `init.js`, `actions_add.js` and `controls/trackListView_add.js` are read at
@@ -79,7 +79,7 @@ stale. Artist cells list every artist MBID for the track, separated by `; `.
 This dialog shows the native MBGID columns, not `Songs.ExtendedTags`; use
 **Track Properties → MusicBrainz** for the per-track extended tags.
 
-After MediaMonkey matches new releases/artists, use **Tools → MBz loves MM5:
+After MediaMonkey matches new releases/artists, use **Tools → Loves MBz:
 reload MusicBrainz ID cache** to rebuild the track-list columns without
 restarting MediaMonkey.
 
@@ -196,7 +196,7 @@ must support extended tags — formats such as WAV may discard them.
   Nothing in this dialog writes to tags, files or anything outside those two
   tables; the Track Properties tab is the separate path for per-track tags.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
-  `tabMbzLovesMM5` after **Custom**. `tabMbzLovesMM5.js` filters
+  `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
   from `mbzMbgid.musicBrainzUrl` and opens them with `uitools.openWeb`. On OK it
   re-reads the whole array and merges changed rows by exact tag name and
@@ -233,14 +233,14 @@ PowerShell:
 
 ```powershell
 # from this folder
-Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\MBzLovesMM5.zip -Force
-Rename-Item .\MBzLovesMM5.zip .\MBzLovesMM5.mmip
+Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
+Rename-Item .\LovesMBz.zip .\LovesMBz.mmip
 ```
 
 bash / Git Bash, if `zip` is available:
 
 ```bash
-zip -r MBzLovesMM5.mmip info.json init.js mbzMbgid.js actions_add.js controls dialogs skin
+zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialogs skin
 ```
 
 ## Troubleshooting
@@ -249,11 +249,11 @@ zip -r MBzLovesMM5.mmip info.json init.js mbzMbgid.js actions_add.js controls di
   has no MusicBrainz matches. MediaMonkey only fills these fields when a
   release/artist is matched through its own MusicBrainz lookup.
 - **IDs do not change after matching a release** — the column cache is built at
-  start-up. Run **Tools → MBz loves MM5: reload MusicBrainz ID cache**, or
+  start-up. Run **Tools → Loves MBz: reload MusicBrainz ID cache**, or
   restart MediaMonkey. The dialog always shows current values.
 - **No MusicBrainz IDs group in the column chooser** — `controls/trackListView_add.js`
   failed to load. Check `debug.log` in the MediaMonkey program folder for lines
-  starting with `MBz loves MM5:`.
+  starting with `Loves MBz:`.
 - **Sorting** — these columns are computed values, not database columns, so
   MediaMonkey's auto-sort has no field to sort on. Use **Copy table** and sort
   in a spreadsheet.
@@ -281,7 +281,7 @@ zip -r MBzLovesMM5.mmip info.json init.js mbzMbgid.js actions_add.js controls di
 - **An extended-tag edit did not stick** — the file format may not support the
   tag, or Party Mode is on. Check the value after reopening Track Properties.
 - **The MusicBrainz tab is missing** — `dialogs/dlgTrackProperties_add.js` did
-  not load; check `debug.log` for lines starting with `MBz loves MM5:`, then
+  not load; check `debug.log` for lines starting with `Loves MBz:`, then
   reopen Track Properties.
 
 ## Layout
@@ -292,17 +292,19 @@ init.js                            startup: loads the module, starts the cache
 mbzMbgid.js                        database access, ID lookup tables, writes
 actions_add.js                     Edit > Tag Tools and Tools menu actions
 controls/trackListView_add.js      the three track-list columns
-dialogs/dlgMBzLovesMM5.html        dialog markup
-dialogs/dlgMBzLovesMM5.js          dialog: view, copy, edit
+dialogs/dlgLovesMBz.html           dialog markup
+dialogs/dlgLovesMBz.js             dialog: view, copy, edit
 dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
-dialogs/dlgTrackProperties/tabMbzLovesMM5.html  tab markup
-dialogs/dlgTrackProperties/tabMbzLovesMM5.js    tab: filter, link, edit
-skin/icon/mbzLovesMM5.svg          menu icon
+dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
+dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
+skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
 
 ### 0.3.0
+- **Renamed to Loves MBz** — the addon id is now `lovesMBz` (was `mbzLovesMM5`).
+  Remove an older install folder under the old id, or MediaMonkey loads both.
 - **Group editing** — with multiple tracks selected, the Track Properties tab
   shows only MusicBrainz tags that are identical across the selection and
   applies edits or removals to all selected tracks. Per-track tags stay

@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * MBz loves MM5
+ * Loves MBz
  *
  * Startup entry point. Loads the MusicBrainz ID access layer and starts the
  * background cache that feeds the three tracklist columns.

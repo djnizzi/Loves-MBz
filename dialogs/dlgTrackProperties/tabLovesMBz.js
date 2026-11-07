@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * MBz loves MM5 — MusicBrainz extended tags tab for Track Properties.
+ * Loves MBz — MusicBrainz extended tags tab for Track Properties.
  *
  * MediaMonkey keeps per-track tags it has no field for in Songs.ExtendedTags,
  * as a JSON array of { title, value }. MusicBrainz names there depend on the
@@ -372,9 +372,9 @@ function mbzExtSaveGroupAsync(track, mbz) {
     });
 }
 
-propertiesTabs.tabMbzLovesMM5.load = function (track, dialog) {
+propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     var mbz = window.mbzMbgid;
-    var main = qid('tabMbzLovesMM5Content');
+    var main = qid('tabLovesMBzContent');
     if (!main) return;
 
     var ui = {
@@ -399,7 +399,7 @@ propertiesTabs.tabMbzLovesMM5.load = function (track, dialog) {
     ui.table.style.display = '';
 
     if (!mbz) {
-        mbzExtShowEmpty(ui, _('The MusicBrainz module did not load. Check debug.log for lines starting with "MBz loves MM5:".'));
+        mbzExtShowEmpty(ui, _('The MusicBrainz module did not load. Check debug.log for lines starting with "Loves MBz:".'));
         return;
     }
 
@@ -430,7 +430,7 @@ propertiesTabs.tabMbzLovesMM5.load = function (track, dialog) {
     });
 };
 
-propertiesTabs.tabMbzLovesMM5.saveAsync = function (track, dialog) {
+propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
     var mbz = window.mbzMbgid;
     if (!mbz || !mbzExtRows.length || window.isReadOnly) {
         return Promise.resolve();

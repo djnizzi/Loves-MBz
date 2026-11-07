@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * MBz loves MM5 — three read-only tracklist columns backed by the MusicBrainz
+ * Loves MBz — three read-only tracklist columns backed by the MusicBrainz
  * IDs MediaMonkey keeps in its database but does not show:
  *
  *   Albums.MBGID   -> MusicBrainz Release ID
@@ -16,7 +16,7 @@
 (function () {
     if (!window.uitools || !window.uitools.tracklistFieldDefs) {
         if (typeof ODS === 'function') {
-            ODS('MBz loves MM5: uitools.tracklistFieldDefs is not available');
+            ODS('Loves MBz: uitools.tracklistFieldDefs is not available');
         }
         return;
     }
@@ -36,7 +36,7 @@
                 }
             } catch (e) {
                 if (typeof ODS === 'function') {
-                    ODS('MBz loves MM5: could not load mbzMbgid.js: ' + (e && e.message ? e.message : e));
+                    ODS('Loves MBz: could not load mbzMbgid.js: ' + (e && e.message ? e.message : e));
                 }
             }
         }

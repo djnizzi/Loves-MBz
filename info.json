@@ -1,10 +1,10 @@
 {
-    "title": "MBz loves MM5",
-    "id": "mbzLovesMM5",
+    "title": "Loves MBz",
+    "id": "lovesMBz",
     "description": "Exposes the MusicBrainz IDs MediaMonkey keeps in its database but never shows: Albums.MBGID (release), Albums.MBRGGID (release group) and Artists.MBGID (artist). Adds three read-only tracklist columns, a dialog that lists, copies and can set those IDs, and a Track Properties tab that links and edits per-track MusicBrainz extended tags, including group editing of tags shared by the selected tracks.",
     "version": "0.3.0",
     "author": "NiZDesign",
     "type": "general",
-    "icon": "mbzLovesMM5.svg",
+    "icon": "lovesMBz.svg",
     "minAppVersion": "5.0.0"
 }

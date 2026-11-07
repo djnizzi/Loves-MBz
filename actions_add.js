@@ -1,25 +1,25 @@
 'use strict';
 
 /*
- * MBz loves MM5 — menu action.
+ * Loves MBz — menu action.
  *
  * Registered in Edit > Tag Tools and, because track lists share that menu
  * branch, in the track list context menu as well.
  */
 
-actions.mbzLovesMM5ShowIds = {
+actions.lovesMBzShowIds = {
     title: _('MusicBrainz IDs') + '...',
     hotkeyAble: true,
-    icon: 'mbzLovesMM5',
+    icon: 'lovesMBz',
     disabled: uitools.notMediaListSelected,
     execute: function () {
         var list = uitools.getSelectedTracklist();
         if (!list) return;
 
-        uitools.openDialog('dlgMBzLovesMM5', {
+        uitools.openDialog('dlgLovesMBz', {
             show: true,
             modal: false,
-            title: _('MBz loves MM5'),
+            title: _('Loves MBz'),
             tracks: list
         });
     }
@@ -27,8 +27,8 @@ actions.mbzLovesMM5ShowIds = {
 
 // Rebuilds the column cache without restarting MediaMonkey, e.g. after using
 // MediaMonkey's own MusicBrainz lookup on a batch of albums.
-actions.mbzLovesMM5ReloadCache = {
-    title: _('MBz loves MM5: reload MusicBrainz ID cache'),
+actions.lovesMBzReloadCache = {
+    title: _('Loves MBz: reload MusicBrainz ID cache'),
     hotkeyAble: false,
     visible: function () {
         return !!window.mbzMbgid;
@@ -54,13 +54,13 @@ actions.mbzLovesMM5ReloadCache = {
 
 // Needs to be unique so that it does not interfere with other addons.
 window._menuItems.editTags.action.submenu.push({
-    action: actions.mbzLovesMM5ShowIds,
+    action: actions.lovesMBzShowIds,
     order: 120,
     grouporder: 10
 });
 
 window._menuItems.tools.action.submenu.push({
-    action: actions.mbzLovesMM5ReloadCache,
+    action: actions.lovesMBzReloadCache,
     order: 900,
     grouporder: 90
 });
