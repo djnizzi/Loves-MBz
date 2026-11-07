@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.6**.
+Current version: **0.3.7**.
 
 ---
 
@@ -370,6 +370,16 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.7
+- **Group edits are saved** — with several tracks selected, MediaMonkey decides
+  whether anything changed from the ticked boxes beside its own fields, so an
+  edit made only in the MusicBrainz tab was dropped unless another tag was
+  edited too. The tab now has a **Save MusicBrainz tags** box that ticks itself
+  on any change; unticking it discards the tab's pending edits.
+- Tag rows no longer repeat the tag name as a description underneath; only the
+  row's state (not saved yet, missing on some tracks) is still spelled out.
+- The tab uses the dialog's font instead of a monospace one.
 
 ### 0.3.6
 - **Filling an empty library ID no longer asks** — when the album or artist row
