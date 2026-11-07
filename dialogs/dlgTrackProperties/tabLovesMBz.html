@@ -54,10 +54,21 @@
             padding: 0 10px;
             line-height: 22px;
         }
+        /* A bare <select> keeps the browser's white popup background while it
+           inherits the skin's light text, so it has to draw on the panel
+           colour itself instead of the default control colour. */
         .mbzExtAddTag {
             min-width: 14em;
             max-width: 26em;
             padding: 2px 4px;
+            color: inherit;
+            background-color: transparent;
+            border: 1px solid rgba(128, 128, 128, 0.5);
+            border-radius: 4px;
+        }
+        .mbzExtAddTag option {
+            color: initial;
+            background-color: initial;
         }
         .mbzExtAddValue {
             min-width: 12em;
