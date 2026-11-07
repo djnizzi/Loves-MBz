@@ -44,6 +44,16 @@
             padding-top: 6px;
             border-top: 1px solid rgba(128, 128, 128, 0.25);
         }
+        .mbzExtSuggest {
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+        .mbzExtChip {
+            cursor: pointer;
+            padding: 0 10px;
+            line-height: 22px;
+        }
         .mbzExtAddTag {
             min-width: 14em;
             max-width: 26em;
@@ -90,6 +100,8 @@
         </div>
 
         <label data-id="mbzExtEmpty" class="mbzExtEmpty" style="display: none;"></label>
+
+        <div class="flex row mbzExtSuggest" data-id="mbzExtSuggestBar" style="display: none;"></div>
 
         <div class="flex row mbzExtAdd" data-id="mbzExtAddBar">
             <label class="mbzExtLabel" data-localize>Add tag</label>

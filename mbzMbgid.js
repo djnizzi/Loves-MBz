@@ -307,6 +307,42 @@
     }
 
     /**
+     * Turns the native MBGID columns into extended-tag suggestions for the
+     * properties tab: the release, release-group and artist IDs the library
+     * already holds. With several tracks, only values that are identical on
+     * every track are offered, so a suggestion never writes one album's ID to
+     * another album's tracks.
+     *
+     * @param {Array<{releaseId: string, releaseGroupId: string, artistIds: string}>} natives
+     *   one entry per selected track, as returned by lookupTracksAsync
+     * @returns {Array<{title: string, value: string}>}
+     */
+    function suggestNativeExtendedTags(natives) {
+        var list = (natives || []).filter(function (entry) { return !!entry; });
+        if (!list.length) return [];
+
+        var fields = [
+            { title: 'MUSICBRAINZ_ALBUMID', key: 'releaseId' },
+            { title: 'MUSICBRAINZ_RELEASEGROUPID', key: 'releaseGroupId' },
+            { title: 'MUSICBRAINZ_ARTISTID', key: 'artistIds' }
+        ];
+        var result = [];
+
+        fields.forEach(function (field) {
+            var first = String(list[0][field.key] || '').trim();
+            if (!first) return;
+
+            for (var i = 1; i < list.length; i++) {
+                if (String(list[i][field.key] || '').trim() !== first) return;
+            }
+
+            result.push({ title: field.title, value: first });
+        });
+
+        return result;
+    }
+
+    /**
      * Queries the database directly for the given song IDs. Used by the dialog
      * so it always shows current values, even for rows cache-missed above.
      *
@@ -848,6 +884,7 @@
         normalizeExtendedTagName: normalizeExtendedTagName,
         musicBrainzTagInfo: musicBrainzTagInfo,
         musicBrainzTagChoices: musicBrainzTagChoices,
+        suggestNativeExtendedTags: suggestNativeExtendedTags,
         isMusicBrainzExtendedTag: isMusicBrainzExtendedTag,
         extendedTagGuids: extendedTagGuids,
         musicBrainzUrl: musicBrainzUrl,

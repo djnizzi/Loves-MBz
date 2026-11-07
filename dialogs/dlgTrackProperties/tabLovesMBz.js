@@ -40,6 +40,7 @@ var mbzExtRows = [];
 var mbzExtUI = null;
 var mbzExtLoadToken = 0;
 var mbzExtGroup = null;
+var mbzExtSuggestions = [];
 
 function mbzExtErrorText(error) {
     if (!error) return '';
@@ -81,6 +82,110 @@ function mbzExtPopulateAddChoices(ui, mbz) {
         option.title = choice.name;
         ui.addTag.appendChild(option);
     });
+}
+
+function mbzExtShortGuid(value) {
+    var text = String(value || '');
+    return text.length > 14 ? text.slice(0, 8) + '\u2026' : text;
+}
+
+function mbzExtTagPresent(title) {
+    var mbz = window.mbzMbgid;
+    if (!mbz) return false;
+
+    var name = mbz.normalizeExtendedTagName(title);
+
+    for (var i = 0; i < mbzExtRows.length; i++) {
+        if (mbz.normalizeExtendedTagName(mbzExtRows[i].title) === name) return true;
+    }
+
+    return false;
+}
+
+function mbzExtRenderSuggestions(ui, readOnly) {
+    if (!ui || !ui.suggest) return;
+
+    ui.suggest.textContent = '';
+
+    var mbz = window.mbzMbgid;
+    var items = (mbzExtSuggestions || []).filter(function (item) {
+        return item && item.value && !mbzExtTagPresent(item.title);
+    });
+
+    if (readOnly || !mbz || !items.length) {
+        ui.suggest.style.display = 'none';
+        return;
+    }
+
+    ui.suggest.style.display = '';
+
+    var label = document.createElement('label');
+    label.className = 'mbzExtLabel';
+    label.textContent = _('From the library:');
+    ui.suggest.appendChild(label);
+
+    items.forEach(function (item) {
+        var chip = document.createElement('div');
+        chip.className = 'button mbzExtChip';
+        chip.setAttribute('data-title', item.title);
+        chip.setAttribute('data-value', item.value);
+        chip.title = item.title + ' = ' + item.value;
+        chip.textContent = (item.info ? _(item.info.label) : item.title) + ' ' + mbzExtShortGuid(item.value);
+        ui.suggest.appendChild(chip);
+    });
+}
+
+function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
+    if (!ui || !ui.suggest || !mbz || typeof mbz.lookupTracksAsync !== 'function') return;
+
+    var ids = [];
+    (songIds || []).forEach(function (id) {
+        var value = parseInt(id, 10);
+        if (value > 0 && ids.indexOf(value) < 0) ids.push(value);
+    });
+
+    if (readOnly || !ids.length) {
+        mbzExtRenderSuggestions(ui, readOnly);
+        return;
+    }
+
+    mbz.lookupTracksAsync(ids).then(function (map) {
+        if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+
+        // One entry per track: a group suggestion is only offered when every
+        // selected track carries the same native ID.
+        var natives = ids.map(function (id) { return map.get(id); });
+
+        mbzExtSuggestions = mbz.suggestNativeExtendedTags(natives).map(function (item) {
+            return {
+                title: item.title,
+                value: item.value,
+                info: mbz.musicBrainzTagInfo(item.title)
+            };
+        });
+
+        mbzExtRenderSuggestions(ui, readOnly);
+    }, function () {
+        if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+        mbzExtSuggestions = [];
+        mbzExtRenderSuggestions(ui, readOnly);
+    });
+}
+
+function mbzExtOnSuggestClick(event) {
+    var node = event && event.target;
+
+    while (node && !(node.getAttribute && node.getAttribute('data-title'))) node = node.parentNode;
+    if (!node) return;
+
+    var title = node.getAttribute('data-title');
+    var value = node.getAttribute('data-value');
+    if (!title || !value) return;
+
+    if (event.preventDefault) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+
+    mbzExtAddTagRow(mbzExtUI, window.mbzMbgid, title, value);
 }
 
 function mbzExtNextOccurrence(title) {
@@ -139,6 +244,43 @@ function mbzExtUpdateStatus() {
         : '';
 }
 
+function mbzExtAddTagRow(ui, mbz, title, value) {
+    if (!ui || !mbz || window.isReadOnly) return false;
+    if (!title || !value) return false;
+
+    var duplicate = false;
+    mbzExtRows.forEach(function (row) {
+        if (row.title === title && String(mbzExtRowValue(row)) === value) duplicate = true;
+    });
+
+    if (duplicate) {
+        ui.status.textContent = _('That tag and value are already listed.');
+        return false;
+    }
+
+    mbzExtRows.push({
+        title: title,
+        occurrence: mbzExtNextOccurrence(title),
+        originalValue: '',
+        pendingValue: value,
+        isNew: true,
+        info: mbz.musicBrainzTagInfo(title),
+        input: null,
+        linkCell: null
+    });
+
+    ui.table.style.display = '';
+    ui.empty.style.display = 'none';
+
+    window.modified = true;
+    window.tagModified = true;
+
+    mbzExtRenderRows(ui, false);
+    mbzExtUpdateSummary(ui);
+    mbzExtUpdateStatus();
+    return true;
+}
+
 function mbzExtAddPending(ui, mbz) {
     if (!ui || !mbz || window.isReadOnly) return;
 
@@ -155,37 +297,7 @@ function mbzExtAddPending(ui, mbz) {
         return;
     }
 
-    var duplicate = false;
-    mbzExtRows.forEach(function (row) {
-        if (row.title === title && String(mbzExtRowValue(row)) === value) duplicate = true;
-    });
-
-    if (duplicate) {
-        ui.status.textContent = _('That tag and value are already listed.');
-        return;
-    }
-
-    mbzExtRows.push({
-        title: title,
-        occurrence: mbzExtNextOccurrence(title),
-        originalValue: '',
-        pendingValue: value,
-        isNew: true,
-        info: mbz.musicBrainzTagInfo(title),
-        input: null,
-        linkCell: null
-    });
-
-    ui.table.style.display = '';
-    ui.empty.style.display = 'none';
-    if (ui.addValue) ui.addValue.value = '';
-
-    window.modified = true;
-    window.tagModified = true;
-
-    mbzExtRenderRows(ui, false);
-    mbzExtUpdateSummary(ui);
-    mbzExtUpdateStatus();
+    if (mbzExtAddTagRow(ui, mbz, title, value) && ui.addValue) ui.addValue.value = '';
 }
 
 function mbzExtEntityLabel(entity) {
@@ -282,6 +394,7 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
         } else {
             mbzExtShowEmpty(ui, _('This track has no MusicBrainz extended tags. Add one below. The MusicBrainz release, release-group and artist IDs are stored on the album and artist rows, not in ExtendedTags.'));
         }
+        mbzExtRenderSuggestions(ui, readOnly);
         return;
     }
 
@@ -341,6 +454,8 @@ function mbzExtRenderRows(ui, readOnly) {
         tr.appendChild(linkCell);
         ui.rows.appendChild(tr);
     });
+
+    mbzExtRenderSuggestions(ui, readOnly);
 }
 
 function mbzExtOnInput(event) {
@@ -412,6 +527,8 @@ function mbzExtLoadGroup(ui, dialog, mbz, readOnly, token) {
         mbzExtShowEmpty(ui, _('Group editing needs every selected track to be in the library. Select only library tracks, or edit a single track.'));
         return;
     }
+
+    mbzExtLoadSuggestions(ui, mbz, selection.songIds, readOnly, token);
 
     ui.summary.textContent = sprintf(_('Reading %d selected tracks...'), selection.trackCount);
     ui.status.textContent = readOnly ? _('Read-only mode: links work, editing is disabled.') : '';
@@ -502,6 +619,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         empty: qeid(main, 'mbzExtEmpty'),
         status: qeid(main, 'mbzExtStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
+        suggest: qeid(main, 'mbzExtSuggestBar'),
         addTag: qeid(main, 'mbzExtAddTag'),
         addValue: qeid(main, 'mbzExtAddValue'),
         addButton: qeid(main, 'mbzExtAddButton')
@@ -510,6 +628,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     mbzExtUI = ui;
     mbzExtRows = [];
     mbzExtGroup = null;
+    mbzExtSuggestions = [];
     var token = ++mbzExtLoadToken;
 
     ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. The album and artist MBIDs are separate fields.');
@@ -543,6 +662,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         if (event.stopPropagation) event.stopPropagation();
         mbzExtAddPending(ui, window.mbzMbgid);
     });
+
+    mbzExtListen(dialog, ui.suggest, 'click', mbzExtOnSuggestClick);
+    mbzExtLoadSuggestions(ui, mbz, [parseInt(track.id, 10)], readOnly, token);
 
     if (dialog.isGroup) {
         mbzExtLoadGroup(ui, dialog, mbz, readOnly, token);

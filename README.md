@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.1**.
+Current version: **0.3.2**.
 
 ---
 
@@ -158,6 +158,14 @@ the bottom of the tab: pick the tag, type a value and click **Add** — the new
 row is marked *(not saved yet)* and is written when you click **OK**, under the
 canonical `MUSICBRAINZ_*` name. Clear the value of such a row before **OK** to
 discard it. Clearing a tag that already exists still removes it.
+
+When the library already knows an ID, you do not have to paste it. The
+**From the library** suggestions above the picker offer the track's
+`Albums.MBGID`, `Albums.MBRGGID` and `Artists.MBGID` as one-click tags, so a
+track matched in MediaMonkey can be given the matching extended tag without
+typing. A tag that is already listed — or already exists with another value —
+is not suggested; edit its row instead. In a group selection a suggestion is
+only offered for IDs that are identical on every selected track.
 
 With several tracks selected, the tab shows only tags that occur once on every
 track with the same stored name and value — typically album-level tags such as
@@ -308,6 +316,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.2
+- **Suggestions from the library** — when the database already holds a native
+  MusicBrainz ID for the track's album or artists, the tab offers it as a
+  **From the library** suggestion. One click adds that tag with the stored
+  value, so a matched track does not need its IDs pasted in by hand. With
+  several tracks selected, only IDs shared by all of them are offered.
 
 ### 0.3.1
 - **Add a tag** — the MusicBrainz tab no longer stops at what a track already
