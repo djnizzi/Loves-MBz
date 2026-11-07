@@ -347,7 +347,8 @@
      * so it always shows current values, even for rows cache-missed above.
      *
      * @param {number[]} songIds
-     * @returns {Promise<Map<number, {releaseId: string, releaseGroupId: string, artistIds: string}>>}
+     * @returns {Promise<Map<number, {releaseId: string, releaseGroupId: string,
+     *   artistIds: string, albumId: number, album: string}>>}
      */
     async function lookupTracksAsync(songIds) {
         var ids = [];
@@ -372,7 +373,8 @@
                 '    FROM ArtistsSongs asg' +
                 '    JOIN Artists ar ON ar.ID = asg.IDArtist' +
                 '   WHERE asg.IDSong = s.ID AND asg.PersonType = 1' +
-                "     AND ar.MBGID IS NOT NULL AND ar.MBGID <> '' AND ar.MBGID <> '0') AS ArtistMBGIDs" +
+                "     AND ar.MBGID IS NOT NULL AND ar.MBGID <> '' AND ar.MBGID <> '0') AS ArtistMBGIDs," +
+                ' al.ID AS AlbumID, al.Album AS AlbumName' +
                 ' FROM Songs s' +
                 ' LEFT JOIN Albums al ON al.ID = s.IDAlbum' +
                 ' WHERE s.ID IN (' + chunk.join(',') + ')';
@@ -386,7 +388,11 @@
                     result.set(songId, {
                         releaseId: cleanGuid(res.fields.getValue(1)),
                         releaseGroupId: cleanGuid(res.fields.getValue(2)),
-                        artistIds: joinGuids(res.fields.getValue(3))
+                        artistIds: joinGuids(res.fields.getValue(3)),
+                        // The properties tab needs the album row to name it
+                        // and to write a release ID back to the library.
+                        albumId: parseInt(res.fields.getValue(4), 10) || 0,
+                        album: String(res.fields.getValue(5) || '')
                     });
                 }
 

@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.3**.
+Current version: **0.3.4**.
 
 ---
 
@@ -126,8 +126,9 @@ also why the confirmation says so.
 `Songs.ExtendedTags` JSON and lists only entries whose names normalize to
 `MUSICBRAINZ*`. The same tag is therefore found whether the file stores it as
 `MUSICBRAINZ_TRACKID` (FLAC/Vorbis) or `MusicBrainz Track Id` (ID3 TXXX). The
-tab does not pull in `Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID`; those
-are separate fields and stay in the columns and the IDs dialog.
+tab does not list `Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID` as rows;
+those are separate fields and stay in the columns and the IDs dialog. It does
+compare them with a matching tag and flag a disagreement (see below).
 
 Each row shows the raw tag name, a short description and its current value. ID
 tags link to the matching MusicBrainz page:
@@ -150,8 +151,9 @@ status/type/country/date, disc ID) are listed without a link.
 Edit a value and click **OK** to write it back; an empty value removes that tag.
 Values made up only of valid IDs are stored in dashed lower-case form. The tab re-reads the current
 `ExtendedTags` array and merges only the rows you changed, so non-MusicBrainz
-tags and changes made in the built-in **Custom** tab survive. It never writes
-the album or artist database fields.
+tags and changes made in the built-in **Custom** tab survive. Editing a value
+never writes the album or artist database fields; only the warning strip below
+does, and only after a confirmation.
 
 A track with no MusicBrainz extended tags is not a dead end. Use **Add tag** at
 the bottom of the tab: pick the tag, type a value and click **Add** — the new
@@ -166,6 +168,31 @@ track matched in MediaMonkey can be given the matching extended tag without
 typing. A tag that is already listed — or already exists with another value —
 is not suggested; edit its row instead. In a group selection a suggestion is
 only offered for IDs that are identical on every selected track.
+
+### When the tag and the library disagree
+
+The release, release-group and artist IDs exist twice: in the file's extended
+tags and on the `Albums` or `Artists` row. When a single track's tag and its
+library row hold different values, a strip above the picker says so:
+
+```
+The library ID and the tag disagree:
+Release ID — library 3f6a1c2e…, tag 9b7e2d41…   [Use library ID] [Update library]
+```
+
+- **Use library ID** puts the library's value into the tag row, so the usual
+  **OK** saves it. The database is not touched.
+- **Update library** writes the tag's value onto the album or artist row after
+  a confirmation that names the row and how many tracks it covers. The tag
+  keeps its value. MediaMonkey's own MusicBrainz lookup can overwrite that
+  library value later, which is why it asks first.
+
+The strip is single-track only: a group selection spans albums and artists, so
+there is no single library value to compare. The artist comparison needs
+uniquely one artist row for the track — a featured or multi-artist credit has
+no unambiguous row and is left alone — and a tag holding several IDs at once is
+not compared either. In Party Mode the strip still reports the disagreement but
+shows no buttons.
 
 With several tracks selected, the tab shows tags whose value is the same on
 every selected track that stores them — typically album-level tags such as the
@@ -328,6 +355,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.4
+- **Tag vs. library warning** — a single track whose release, release-group or
+  artist extended tag differs from the ID on its `Albums` or `Artists` row now
+  gets a warning strip. **Use library ID** copies the stored ID into the tag;
+  **Update library** writes the tag's ID back to the album or artist row after
+  a confirmation that says how many tracks that row covers.
 
 ### 0.3.3
 - **Fill missing tags across a selection** — a tag that exists on only some of

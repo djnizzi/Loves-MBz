@@ -100,6 +100,26 @@
             color: #d9534f;
             white-space: normal;
         }
+        .mbzExtDiverge {
+            gap: 4px;
+            padding: 6px 8px;
+            border: 1px solid rgba(217, 161, 59, 0.65);
+            border-radius: 4px;
+            background-color: rgba(217, 161, 59, 0.12);
+            white-space: normal;
+        }
+        .mbzExtDivergeItem {
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .mbzExtDivergeText {
+            flex: 1;
+            min-width: 14em;
+        }
+        .mbzExtDiverge .button {
+            white-space: nowrap;
+        }
     </style>
 
     <div class="flex column stretchWidth stretchHeight" style="gap: 6px;">
@@ -121,6 +141,8 @@
         </div>
 
         <label data-id="mbzExtEmpty" class="mbzExtEmpty" style="display: none;"></label>
+
+        <div class="flex column mbzExtDiverge" data-id="mbzExtDivergeBar" style="display: none;"></div>
 
         <div class="flex row mbzExtSuggest" data-id="mbzExtSuggestBar" style="display: none;"></div>
 

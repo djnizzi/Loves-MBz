@@ -41,6 +41,8 @@ var mbzExtUI = null;
 var mbzExtLoadToken = 0;
 var mbzExtGroup = null;
 var mbzExtSuggestions = [];
+var mbzExtNative = null;
+var mbzExtArtists = [];
 
 function mbzExtErrorText(error) {
     if (!error) return '';
@@ -166,6 +168,289 @@ function mbzExtRenderSuggestions(ui, readOnly) {
     });
 }
 
+/*
+ * MediaMonkey keeps the release, release-group and artist IDs on Albums and
+ * Artists rows, not in ExtendedTags, so a tag and the library can disagree.
+ * The strip drawn here names that disagreement and lets the user copy either
+ * value over the other, so the two cannot drift apart unnoticed.
+ */
+var MBZ_EXT_NATIVE_FIELDS = [
+    { key: 'release', title: 'MUSICBRAINZ_ALBUMID', label: _('Release ID'), column: 'MBGID', nativeKey: 'releaseId' },
+    { key: 'releaseGroup', title: 'MUSICBRAINZ_RELEASEGROUPID', label: _('Release group ID'), column: 'MBRGGID', nativeKey: 'releaseGroupId' },
+    { key: 'artist', title: 'MUSICBRAINZ_ARTISTID', label: _('Artist ID') }
+];
+
+function mbzExtPromise(promise) {
+    if (typeof window.localPromise === 'function') return window.localPromise(promise);
+    return Promise.resolve(promise);
+}
+
+function mbzExtTrackCount(count) {
+    return count === 1 ? _('1 track') : sprintf(_('%d tracks'), count);
+}
+
+/** The one row holding this tag, or null when it occurs twice (ambiguous). */
+function mbzExtRowForTag(title) {
+    var mbz = window.mbzMbgid;
+    if (!mbz) return null;
+
+    var name = mbz.normalizeExtendedTagName(title);
+    var found = null;
+
+    for (var i = 0; i < mbzExtRows.length; i++) {
+        if (mbz.normalizeExtendedTagName(mbzExtRows[i].title) !== name) continue;
+        if (found) return null;
+        found = mbzExtRows[i];
+    }
+
+    return found;
+}
+
+/** A single valid MBID, or '' for empty, invalid or semicolon lists. */
+function mbzExtSingleGuid(value) {
+    var mbz = window.mbzMbgid;
+    if (!mbz || typeof mbz.extendedTagGuids !== 'function') return '';
+
+    var parsed = mbz.extendedTagGuids(value);
+    if (parsed.invalid.length || parsed.ids.length !== 1) return '';
+    return parsed.ids[0];
+}
+
+/**
+ * Tags whose stored value contradicts the value MediaMonkey keeps in its own
+ * library columns. Only single-track editing has a library row to compare with:
+ * a group selection spans albums and artists, so it is left out.
+ *
+ * @returns {Array<Object>}
+ */
+function mbzExtConflicts() {
+    if (!mbzExtNative || mbzExtGroup) return [];
+
+    var conflicts = [];
+
+    MBZ_EXT_NATIVE_FIELDS.forEach(function (field) {
+        var row = mbzExtRowForTag(field.title);
+        if (!row) return;
+
+        var tagValue = mbzExtSingleGuid(mbzExtRowValue(row));
+        if (!tagValue) return;
+
+        var isArtist = field.key === 'artist';
+        var artist = isArtist ? mbzExtArtists[0] : null;
+
+        // An artist ID belongs to exactly one Artists row; a featured or
+        // multi-artist credit has no safe target, so stay silent.
+        if (isArtist && mbzExtArtists.length !== 1) return;
+
+        var nativeValue = isArtist
+            ? String(artist.mbgid || '')
+            : String(mbzExtNative[field.nativeKey] || '');
+
+        if (nativeValue === tagValue) return;
+
+        conflicts.push({
+            key: field.key,
+            label: field.label,
+            column: field.column,
+            tagValue: tagValue,
+            nativeValue: nativeValue,
+            row: row,
+            albumId: isArtist ? 0 : (mbzExtNative.albumId || 0),
+            album: isArtist ? '' : String(mbzExtNative.album || ''),
+            artistId: isArtist ? artist.id : 0,
+            artistName: isArtist ? String(artist.name || '') : ''
+        });
+    });
+
+    return conflicts;
+}
+
+function mbzExtRenderDivergence(ui, readOnly) {
+    if (!ui || !ui.diverge) return;
+
+    ui.diverge.textContent = '';
+
+    var conflicts = mbzExtConflicts();
+
+    if (!conflicts.length) {
+        ui.diverge.style.display = 'none';
+        return;
+    }
+
+    ui.diverge.style.display = '';
+
+    var head = document.createElement('label');
+    head.className = 'mbzExtLabel';
+    head.textContent = _('The library ID and the tag disagree:');
+    ui.diverge.appendChild(head);
+
+    conflicts.forEach(function (conflict) {
+        var item = document.createElement('div');
+        item.className = 'flex row mbzExtDivergeItem';
+
+        var text = document.createElement('label');
+        text.className = 'mbzExtDivergeText';
+        text.textContent = sprintf(_('%s \u2014 library %s, tag %s'),
+            conflict.label,
+            conflict.nativeValue ? mbzExtShortGuid(conflict.nativeValue) : _('(empty)'),
+            mbzExtShortGuid(conflict.tagValue));
+        text.title = conflict.label + ': ' + (conflict.nativeValue || '(empty)') +
+            ' / ' + conflict.tagValue;
+        item.appendChild(text);
+
+        var canWrite = (conflict.key === 'artist' ? conflict.artistId : conflict.albumId) > 0;
+
+        if (!readOnly && canWrite) {
+            if (conflict.nativeValue) {
+                var useNative = document.createElement('div');
+                useNative.className = 'button';
+                useNative.setAttribute('data-diverge', 'tag');
+                useNative.setAttribute('data-key', conflict.key);
+                useNative.textContent = _('Use library ID');
+                useNative.title = _('Put the library ID into the tag. Click OK to save the tag.');
+                item.appendChild(useNative);
+            }
+
+            var useTag = document.createElement('div');
+            useTag.className = 'button';
+            useTag.setAttribute('data-diverge', 'library');
+            useTag.setAttribute('data-key', conflict.key);
+            useTag.textContent = _('Update library');
+            useTag.title = _('Write the ID stored in the tag into the album or artist row.');
+            item.appendChild(useTag);
+        }
+
+        ui.diverge.appendChild(item);
+    });
+}
+
+function mbzExtOnDivergeClick(event) {
+    var node = event && event.target;
+    while (node && !(node.getAttribute && node.getAttribute('data-diverge'))) node = node.parentNode;
+    if (!node) return;
+
+    if (event.preventDefault) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+
+    if (window.isReadOnly || !window.mbzMbgid) return;
+
+    var action = node.getAttribute('data-diverge');
+    var key = node.getAttribute('data-key');
+    var conflict = null;
+
+    mbzExtConflicts().forEach(function (item) {
+        if (item.key === key) conflict = item;
+    });
+
+    if (!conflict) return;
+
+    if (action === 'tag') mbzExtUseNativeId(conflict);
+    else mbzExtConfirmLibraryUpdate(conflict);
+}
+
+/** Library -> tag: fill the row in, so the normal save writes it. */
+function mbzExtUseNativeId(conflict) {
+    var row = conflict && conflict.row;
+    if (!row || !row.input) return;
+
+    row.input.value = conflict.nativeValue;
+    row.pendingValue = conflict.nativeValue;
+
+    window.modified = true;
+    window.tagModified = true;
+
+    mbzExtRenderLinks(row);
+    mbzExtUpdateStatus();
+    mbzExtRenderDivergence(mbzExtUI, false);
+}
+
+/** Tag -> library: an UPDATE on the album or artist row, never on the track. */
+function mbzExtConfirmLibraryUpdate(conflict) {
+    var mbz = window.mbzMbgid;
+    if (!mbz || !conflict) return;
+
+    var isArtist = conflict.key === 'artist';
+    var targetId = isArtist ? conflict.artistId : conflict.albumId;
+
+    if (!(targetId > 0)) {
+        if (mbzExtUI) {
+            mbzExtUI.status.textContent = isArtist
+                ? _('This track has no artist row in the library to update.')
+                : _('This track has no album in the library to update.');
+        }
+        return;
+    }
+
+    var countPromise = isArtist
+        ? mbz.countArtistTracksAsync(targetId)
+        : mbz.countAlbumTracksAsync(targetId);
+
+    mbzExtPromise(countPromise).then(function (count) {
+        if (window._cleanUpCalled) return;
+
+        var scope = isArtist
+            ? sprintf(_('artist "%s" (%s)'), conflict.artistName || ('#' + targetId), mbzExtTrackCount(count))
+            : sprintf(_('album "%s" (%s)'), conflict.album || ('#' + targetId), mbzExtTrackCount(count));
+
+        var message = sprintf(_('Write the tag\'s %s into the library?'), conflict.label)
+            + '<br><br>' + sprintf(_('%s will be set to <b>%s</b> for your whole %s.'),
+                conflict.label, conflict.tagValue, scope)
+            + '<br>' + _('The tag keeps its value. MediaMonkey\'s own MusicBrainz lookup can overwrite this library value the next time it re-matches.');
+
+        if (typeof messageDlg !== 'function') return;
+
+        messageDlg(message, 'Confirmation', ['btnYes', 'btnNo'],
+            { defaultButton: 'btnNo', title: _('Loves MBz') },
+            function (result) {
+                if (!result || result.btnID !== 'btnYes' || window._cleanUpCalled) return;
+                mbzExtWriteLibrary(conflict, mbz);
+            });
+    }, function (error) {
+        if (window._cleanUpCalled) return;
+        if (mbzExtUI) {
+            mbzExtUI.status.textContent = sprintf(
+                _('Could not check how many tracks the library change covers: %s'), mbzExtErrorText(error));
+        }
+    });
+}
+
+function mbzExtWriteLibrary(conflict, mbz) {
+    if (mbzExtUI) mbzExtUI.status.textContent = _('Updating the library...');
+
+    var work = (conflict.key === 'artist')
+        ? mbz.setArtistGuidAsync(conflict.artistId, conflict.tagValue)
+        : mbz.setAlbumGuidAsync(conflict.albumId, conflict.column, conflict.tagValue);
+
+    mbzExtPromise(work).then(function () {
+        if (window._cleanUpCalled) return;
+
+        if (mbzExtNative) {
+            if (conflict.key === 'artist') {
+                mbzExtArtists.forEach(function (artist) {
+                    if (artist.id === conflict.artistId) artist.mbgid = conflict.tagValue;
+                });
+            } else if (conflict.column === 'MBGID') {
+                mbzExtNative.releaseId = conflict.tagValue;
+            } else {
+                mbzExtNative.releaseGroupId = conflict.tagValue;
+            }
+        }
+
+        if (mbzExtUI) {
+            mbzExtUI.status.textContent = sprintf(
+                _('The library %s is now %s.'), conflict.label, conflict.tagValue);
+        }
+
+        mbzExtRenderDivergence(mbzExtUI, window.isReadOnly);
+    }, function (error) {
+        if (window._cleanUpCalled) return;
+        if (mbzExtUI) {
+            mbzExtUI.status.textContent = sprintf(
+                _('Could not update the library: %s'), mbzExtErrorText(error));
+        }
+    });
+}
+
 function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
     if (!ui || !ui.suggest || !mbz || typeof mbz.lookupTracksAsync !== 'function') return;
 
@@ -175,11 +460,13 @@ function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
         if (value > 0 && ids.indexOf(value) < 0) ids.push(value);
     });
 
-    if (readOnly || !ids.length) {
-        mbzExtRenderSuggestions(ui, readOnly);
+    if (!ids.length) {
+        mbzExtRenderDivergence(ui, readOnly);
         return;
     }
 
+    // Read even in read-only mode: the divergence strip is information, and
+    // only its buttons are suppressed.
     mbz.lookupTracksAsync(ids).then(function (map) {
         if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
 
@@ -195,11 +482,28 @@ function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
             };
         });
 
+        // The strip compares one track's tag with its album and artist rows,
+        // so a group selection has no single library value to compare.
+        if (ids.length === 1) {
+            var entry = map.get(ids[0]);
+            mbzExtNative = entry ? {
+                releaseId: String(entry.releaseId || ''),
+                releaseGroupId: String(entry.releaseGroupId || ''),
+                albumId: parseInt(entry.albumId, 10) || 0,
+                album: String(entry.album || '')
+            } : null;
+        } else {
+            mbzExtNative = null;
+        }
+
         mbzExtRenderSuggestions(ui, readOnly);
+        mbzExtRenderDivergence(ui, readOnly);
     }, function () {
         if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
         mbzExtSuggestions = [];
+        mbzExtNative = null;
         mbzExtRenderSuggestions(ui, readOnly);
+        mbzExtRenderDivergence(ui, readOnly);
     });
 }
 
@@ -328,6 +632,7 @@ function mbzExtAddTagRow(ui, mbz, title, value) {
     mbzExtRenderRows(ui, false);
     mbzExtUpdateSummary(ui);
     mbzExtUpdateStatus();
+    mbzExtRenderDivergence(ui, false);
     return true;
 }
 
@@ -448,6 +753,7 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
             mbzExtShowEmpty(ui, _('This track has no MusicBrainz extended tags. Add one below. The MusicBrainz release, release-group and artist IDs are stored on the album and artist rows, not in ExtendedTags.'));
         }
         mbzExtRenderSuggestions(ui, readOnly);
+        mbzExtRenderDivergence(ui, readOnly);
         return;
     }
 
@@ -462,6 +768,10 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
 
     mbzExtUpdateSummary(ui);
     mbzExtRenderRows(ui, readOnly);
+
+    // The library lookup usually finishes before the tags are rendered, so the
+    // strip has to be computed again now that the rows exist.
+    mbzExtRenderDivergence(ui, readOnly);
 }
 
 function mbzExtRenderRows(ui, readOnly) {
@@ -566,6 +876,7 @@ function mbzExtOnInput(event) {
     window.tagModified = true;
     mbzExtRenderLinks(row);
     mbzExtUpdateStatus();
+    mbzExtRenderDivergence(mbzExtUI, false);
 }
 
 function mbzExtOnClick(event) {
@@ -609,6 +920,8 @@ function mbzExtCollectGroupSelection(dialog) {
 function mbzExtLoadGroup(ui, dialog, mbz, readOnly, token) {
     var selection = mbzExtCollectGroupSelection(dialog);
     mbzExtGroup = { trackCount: selection.songIds.length };
+    mbzExtNative = null;
+    mbzExtArtists = [];
     mbzExtGroupIntro(ui, readOnly, selection.trackCount);
 
     if (!selection.trackCount) {
@@ -724,6 +1037,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         status: qeid(main, 'mbzExtStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
         suggest: qeid(main, 'mbzExtSuggestBar'),
+        diverge: qeid(main, 'mbzExtDivergeBar'),
         applyHead: qeid(main, 'mbzExtApplyHead'),
         addTag: qeid(main, 'mbzExtAddTag'),
         addValue: qeid(main, 'mbzExtAddValue'),
@@ -734,6 +1048,8 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     mbzExtRows = [];
     mbzExtGroup = null;
     mbzExtSuggestions = [];
+    mbzExtNative = null;
+    mbzExtArtists = [];
     var token = ++mbzExtLoadToken;
 
     ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. The album and artist MBIDs are separate fields.');
@@ -754,6 +1070,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);
     mbzExtListen(dialog, ui.rows, 'change', mbzExtOnApplyChange);
+    mbzExtListen(dialog, ui.diverge, 'click', mbzExtOnDivergeClick);
+
+    if (ui.diverge) ui.diverge.style.display = 'none';
 
     mbzExtPopulateAddChoices(ui, mbz);
     mbzExtShowAddBar(ui, readOnly);
@@ -775,6 +1094,19 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     if (dialog.isGroup) {
         mbzExtLoadGroup(ui, dialog, mbz, readOnly, token);
         return;
+    }
+
+    // One artist row is the only case where the artist ID has an unambiguous
+    // destination; the strip stays quiet for multi-artist credits.
+    if (typeof mbz.getTrackArtistsAsync === 'function') {
+        dialog.localPromise(mbz.getTrackArtistsAsync(parseInt(track.id, 10))).then(function (artists) {
+            if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+            mbzExtArtists = artists || [];
+            mbzExtRenderDivergence(ui, readOnly);
+        }, function () {
+            if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+            mbzExtArtists = [];
+        });
     }
 
     dialog.localPromise(track.getExtendedTagsAsync()).then(function (text) {
@@ -847,6 +1179,8 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
                 if (row.input && row.input.value !== edit.value) row.input.value = edit.value;
             });
         });
+
+        mbzExtRenderDivergence(mbzExtUI, false);
 
         // A row added in this session is an ordinary tag on the track now.
         mbzExtRows.forEach(function (row) {
