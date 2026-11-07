@@ -22,6 +22,10 @@
  * validated UPDATE of one ID on one album or artist row. Album and artist IDs
  * belong to those entities, not to individual tracks, so a write always affects
  * every track of that album or every track by that artist.
+ *
+ * Finally, it normalizes the per-track MusicBrainz extended tags and merges
+ * edits to them. Those tags live in Songs.ExtendedTags as a JSON array and use
+ * different names depending on the file format.
  */
 
 (function () {
@@ -360,6 +364,46 @@
     }
 
     /**
+     * Reads Songs.ExtendedTags for the given song IDs. Group editing needs
+     * every track's own array to find the tags that are identical across the
+     * selection; the group track only exposes a common patch.
+     *
+     * @param {number[]} songIds
+     * @returns {Promise<Map<number, string>>}
+     */
+    async function lookupExtendedTagsAsync(songIds) {
+        var ids = [];
+        var seen = {};
+        var result = new Map();
+
+        for (var i = 0; i < (songIds || []).length; i++) {
+            var id = parseInt(songIds[i], 10);
+            if (id > 0 && !seen[id]) {
+                seen[id] = true;
+                ids.push(id);
+            }
+        }
+
+        for (var start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+            var chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
+            var res = await app.db.getQueryResultAsync(
+                'SELECT ID, ExtendedTags FROM Songs WHERE ID IN (' + chunk.join(',') + ')');
+
+            while (!res.eof) {
+                var songId = parseInt(res.fields.getValue(0), 10);
+                if (songId > 0) {
+                    result.set(songId, String(res.fields.getValue(1) || ''));
+                }
+                res.next();
+            }
+
+            if (start + LOOKUP_CHUNK_SIZE < ids.length) await yieldToUI();
+        }
+
+        return result;
+    }
+
+    /**
      * Artists of one track, with their current MBIDs. The dialog needs the
      * artist rows (not just the joined string) because an artist ID always
      * belongs to exactly one Artists row.
@@ -478,14 +522,281 @@
         return guid;
     }
 
+    /**
+     * Extended tags are stored as JSON in Songs.ExtendedTags. Their names come
+     * from the file tag that produced them, so the same MusicBrainz tag can be
+     * "MUSICBRAINZ_ALBUMID" (Vorbis), "MusicBrainz Album Id" (ID3 TXXX) or
+     * something else. Comparing names therefore ignores case, spaces,
+     * underscores and hyphens.
+     */
+    function normalizeExtendedTagName(title) {
+        return String(title === undefined || title === null ? '' : title)
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    }
+
+    var MUSICBRAINZ_ENTITIES = {
+        MUSICBRAINZALBUMID: { entity: 'release', label: 'Release ID' },
+        MUSICBRAINZRELEASEGROUPID: { entity: 'release-group', label: 'Release group ID' },
+        MUSICBRAINZARTISTID: { entity: 'artist', label: 'Artist ID' },
+        MUSICBRAINZALBUMARTISTID: { entity: 'artist', label: 'Album artist ID' },
+        MUSICBRAINZTRACKID: { entity: 'recording', label: 'Recording ID' },
+        MUSICBRAINZRELEASETRACKID: { entity: 'track', label: 'Release track ID' },
+        MUSICBRAINZWORKID: { entity: 'work', label: 'Work ID' },
+        MUSICBRAINZLABELID: { entity: 'label', label: 'Label ID' },
+        MUSICBRAINZORIGINALALBUMID: { entity: 'release', label: 'Original release ID' },
+        MUSICBRAINZORIGINALARTISTID: { entity: 'artist', label: 'Original artist ID' },
+        MUSICBRAINZCOMPOSERID: { entity: 'artist', label: 'Composer ID' },
+        MUSICBRAINZLYRICISTID: { entity: 'artist', label: 'Lyricist ID' },
+        MUSICBRAINZPRODUCERID: { entity: 'artist', label: 'Producer ID' },
+        MUSICBRAINZENGINEERID: { entity: 'artist', label: 'Engineer ID' },
+        MUSICBRAINZMIXERID: { entity: 'artist', label: 'Mixer ID' },
+        MUSICBRAINZARRANGERID: { entity: 'artist', label: 'Arranger ID' },
+        MUSICBRAINZREMIXERID: { entity: 'artist', label: 'Remixer ID' },
+        MUSICBRAINZDJMIXERID: { entity: 'artist', label: 'DJ-mixer ID' },
+        MUSICBRAINZCONDUCTORID: { entity: 'artist', label: 'Conductor ID' },
+        MUSICBRAINZPERFORMERID: { entity: 'artist', label: 'Performer ID' },
+        MUSICBRAINZALBUMSTATUS: { entity: '', label: 'Album status' },
+        MUSICBRAINZRELEASESTATUS: { entity: '', label: 'Release status' },
+        MUSICBRAINZALBUMTYPE: { entity: '', label: 'Album type' },
+        MUSICBRAINZRELEASETYPE: { entity: '', label: 'Release type' },
+        MUSICBRAINZALBUMCOUNTRY: { entity: '', label: 'Album country' },
+        MUSICBRAINZRELEASECOUNTRY: { entity: '', label: 'Release country' },
+        MUSICBRAINZALBUMRELEASEDATE: { entity: '', label: 'Album release date' },
+        MUSICBRAINZRELEASEDATE: { entity: '', label: 'Release date' },
+        MUSICBRAINZDISCID: { entity: '', label: 'Disc ID' },
+        MUSICBRAINZTRMID: { entity: '', label: 'TRM ID' }
+    };
+
+    function musicBrainzTagInfo(title) {
+        return MUSICBRAINZ_ENTITIES[normalizeExtendedTagName(title)] || null;
+    }
+
+    function isMusicBrainzExtendedTag(title) {
+        return normalizeExtendedTagName(title).indexOf('MUSICBRAINZ') === 0;
+    }
+
+    /**
+     * Splits an extended-tag value into canonical MBIDs. Picard can write
+     * several IDs into one value, separated by ';', ',' or whitespace.
+     *
+     * @param {*} value
+     * @returns {{ids: string[], invalid: string[]}}
+     */
+    function extendedTagGuids(value) {
+        var parts = String(value === undefined || value === null ? '' : value)
+            .split(/[\s;,]+/);
+        var ids = [];
+        var invalid = [];
+        var seen = {};
+
+        for (var i = 0; i < parts.length; i++) {
+            if (!parts[i]) continue;
+            var guid = normalizeGuid(parts[i]);
+            if (guid === null) {
+                invalid.push(parts[i]);
+            } else if (guid && !seen[guid]) {
+                seen[guid] = true;
+                ids.push(guid);
+            }
+        }
+
+        return { ids: ids, invalid: invalid };
+    }
+
+    function musicBrainzUrl(entity, guid) {
+        var id = normalizeGuid(guid);
+        if (!entity || !id) return '';
+        return 'https://musicbrainz.org/' + entity + '/' + encodeURIComponent(id);
+    }
+
+    /**
+     * Parses Songs.ExtendedTags. Returns [] when there are none, null when the
+     * value cannot be read or is the '-' marker MediaMonkey uses for differing
+     * values in a group edit.
+     */
+    function parseExtendedTags(text) {
+        var value = String(text === undefined || text === null ? '' : text).trim();
+        if (!value) return [];
+        if (value === '-') return null;
+
+        try {
+            var parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch (e) {
+            log('could not parse ExtendedTags: ' + (e && e.message ? e.message : e));
+            return null;
+        }
+    }
+
+    /**
+     * Applies edits from the properties tab to a freshly read ExtendedTags
+     * array. Edits are matched by exact title plus occurrence, so duplicate
+     * titles (usually artist IDs) are handled without relying on array indexes
+     * that another tab may have shifted.
+     *
+     * @param {Array<{title: string, value: string}>} tags
+     * @param {Array<{title: string, occurrence: number, value: string}>} edits
+     * @returns {{tags: Array, applied: number, appliedEdits: Array}}
+     */
+    function applyExtendedTagEdits(tags, edits) {
+        var source = Array.isArray(tags) ? tags : [];
+        var positions = {};
+        var remove = {};
+        var result = source.slice();
+        var appliedEdits = [];
+
+        source.forEach(function (tag, index) {
+            var title = String(tag && tag.title !== undefined ? tag.title : '');
+            if (!positions[title]) positions[title] = [];
+            positions[title].push(index);
+        });
+
+        (edits || []).forEach(function (edit) {
+            var title = String(edit && edit.title !== undefined ? edit.title : '');
+            var occurrence = parseInt(edit && edit.occurrence, 10);
+            if (!title || !(occurrence >= 0)) return;
+
+            var indexes = positions[title];
+            var index = indexes ? indexes[occurrence] : undefined;
+            if (index === undefined) return;
+
+            var value = String(edit.value === undefined || edit.value === null ? '' : edit.value);
+            var current = source[index] && typeof source[index] === 'object' ? source[index] : {};
+            var currentValue = String(current.value === undefined || current.value === null ? '' : current.value);
+
+            if (!value.trim()) {
+                remove[index] = true;
+                appliedEdits.push({ title: title, occurrence: occurrence, value: '' });
+                return;
+            }
+
+            if (currentValue === value) return;
+
+            result[index] = Object.assign({}, current, { value: value });
+            appliedEdits.push({ title: title, occurrence: occurrence, value: value });
+        });
+
+        return {
+            tags: result.filter(function (tag, index) { return !remove[index]; }),
+            applied: appliedEdits.length,
+            appliedEdits: appliedEdits
+        };
+    }
+
+    /**
+     * Returns the MusicBrainz tags that occur exactly once on every track, with
+     * the same raw tag name and value. Exact raw-name matching keeps a group
+     * patch safe: the title it targets already exists on every selected track.
+     * A mixed-format selection simply shows fewer common tags.
+     *
+     * @param {Array<Array<{title: string, value: string}>>} tagLists
+     * @returns {Array<{title: string, value: string}>}
+     */
+    function commonExtendedTags(tagLists) {
+        var lists = Array.isArray(tagLists) ? tagLists : [];
+        if (!lists.length) return [];
+
+        var first = Array.isArray(lists[0]) ? lists[0] : [];
+        var common = [];
+        var seen = {};
+
+        first.forEach(function (tag) {
+            if (!tag || !isMusicBrainzExtendedTag(tag.title)) return;
+
+            var name = normalizeExtendedTagName(tag.title);
+            if (seen[name]) return; // duplicate normalized name -> ambiguous
+            seen[name] = true;
+
+            var title = String(tag.title || '');
+            var value = String(tag.value === undefined || tag.value === null ? '' : tag.value);
+
+            for (var i = 1; i < lists.length; i++) {
+                var list = Array.isArray(lists[i]) ? lists[i] : [];
+                var matches = [];
+
+                for (var j = 0; j < list.length; j++) {
+                    var candidate = list[j];
+                    if (candidate && normalizeExtendedTagName(candidate.title) === name) {
+                        matches.push(candidate);
+                    }
+                }
+
+                if (matches.length !== 1) return;
+                if (String(matches[0].title || '') !== title) return;
+
+                var candidateValue = String(
+                    matches[0].value === undefined || matches[0].value === null ? '' : matches[0].value);
+                if (candidateValue !== value) return;
+            }
+
+            common.push({ title: title, value: value });
+        });
+
+        return common;
+    }
+
+    /**
+     * Merges changed tags into MediaMonkey's group-edit patch. The group track's
+     * ExtendedTags is a patch, not a full replacement: an entry with
+     * deleted:true removes the tag from every selected track. Preserve a patch
+     * already queued by the built-in Custom tab.
+     *
+     * @param {*} currentText
+     * @param {Array<{title: string, value: string, deleted?: boolean}>} patch
+     * @returns {Array}
+     */
+    function mergeExtendedTagPatch(currentText, patch) {
+        var current = parseExtendedTags(currentText);
+        var result = Array.isArray(current) ? current.slice() : [];
+
+        (patch || []).forEach(function (entry) {
+            var title = String(entry && entry.title !== undefined ? entry.title : '');
+            if (!title) return;
+
+            var index = -1;
+            for (var i = 0; i < result.length; i++) {
+                if (result[i] && String(result[i].title || '') === title) {
+                    index = i;
+                    break;
+                }
+            }
+
+            var merged = (index >= 0 && result[index] && typeof result[index] === 'object')
+                ? Object.assign({}, result[index])
+                : {};
+
+            merged.title = title;
+            merged.value = String(entry.value === undefined || entry.value === null ? '' : entry.value);
+
+            if (entry.deleted) merged.deleted = true;
+            else delete merged.deleted;
+
+            if (index >= 0) result[index] = merged;
+            else result.push(merged);
+        });
+
+        return result;
+    }
+
     window.mbzMbgid = {
         startCacheLoad: startCacheLoad,
         reload: reload,
         lookupTracksAsync: lookupTracksAsync,
+        lookupExtendedTagsAsync: lookupExtendedTagsAsync,
         getTrackArtistsAsync: getTrackArtistsAsync,
         countAlbumTracksAsync: countAlbumTracksAsync,
         countArtistTracksAsync: countArtistTracksAsync,
         normalizeGuid: normalizeGuid,
+        normalizeExtendedTagName: normalizeExtendedTagName,
+        musicBrainzTagInfo: musicBrainzTagInfo,
+        isMusicBrainzExtendedTag: isMusicBrainzExtendedTag,
+        extendedTagGuids: extendedTagGuids,
+        musicBrainzUrl: musicBrainzUrl,
+        parseExtendedTags: parseExtendedTags,
+        applyExtendedTagEdits: applyExtendedTagEdits,
+        commonExtendedTags: commonExtendedTags,
+        mergeExtendedTagPatch: mergeExtendedTagPatch,
         setAlbumGuidAsync: setAlbumGuidAsync,
         setArtistGuidAsync: setArtistGuidAsync,
         releaseIdForAlbum: releaseIdForAlbum,

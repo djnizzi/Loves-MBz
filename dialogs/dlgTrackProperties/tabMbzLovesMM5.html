@@ -1,0 +1,73 @@
+<div class="innerDlg" data-id="tabMbzLovesMM5Content">
+    <style>
+        .mbzExtIntro,
+        .mbzExtEmpty {
+            opacity: 0.75;
+            white-space: normal;
+        }
+        .mbzExtTable {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .mbzExtTable th {
+            text-align: left;
+            font-weight: normal;
+            opacity: 0.7;
+            padding: 2px 6px;
+        }
+        .mbzExtTable td {
+            padding: 4px 6px;
+            vertical-align: top;
+            border-top: 1px solid rgba(128, 128, 128, 0.25);
+        }
+        .mbzExtTitle {
+            font-family: monospace;
+            white-space: nowrap;
+        }
+        .mbzExtLabel {
+            opacity: 0.6;
+            font-size: 0.9em;
+        }
+        .mbzExtValue {
+            width: 100%;
+            min-width: 16em;
+            box-sizing: border-box;
+            padding: 2px 5px;
+            font-family: monospace;
+        }
+        .mbzExtValue.mbzExtInvalid {
+            outline: 1px solid #d9534f;
+        }
+        .mbzExtLinks {
+            white-space: nowrap;
+        }
+        .mbzExtLinks a {
+            margin-right: 10px;
+        }
+        .mbzExtWarning {
+            color: #d9534f;
+            white-space: normal;
+        }
+    </style>
+
+    <div class="flex column stretchWidth stretchHeight" style="gap: 6px;">
+        <label data-id="mbzExtIntro" class="mbzExtIntro"></label>
+        <label data-id="mbzExtSummary"></label>
+
+        <div class="scrollable fill">
+            <table class="mbzExtTable" data-id="mbzExtTable">
+                <thead>
+                    <tr>
+                        <th data-localize>Tag</th>
+                        <th data-localize>Value</th>
+                        <th data-localize>Open</th>
+                    </tr>
+                </thead>
+                <tbody data-id="mbzExtRows"></tbody>
+            </table>
+        </div>
+
+        <label data-id="mbzExtEmpty" class="mbzExtEmpty" style="display: none;"></label>
+        <label data-id="mbzExtStatus"></label>
+    </div>
+</div>

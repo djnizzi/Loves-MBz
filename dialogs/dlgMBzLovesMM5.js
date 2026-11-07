@@ -37,6 +37,49 @@ function mbzDisplayArtist(track) {
     return artist;
 }
 
+function mbzTrackEntry(track) {
+    var songId = track ? parseInt(track.id, 10) : 0;
+    var albumId = track ? parseInt(track.idalbum, 10) : 0;
+
+    if (!(songId > 0)) songId = 0;
+    if (!(albumId > 0)) albumId = 0;
+
+    return {
+        songId: songId,
+        albumId: albumId,
+        title: track ? String(track.title || '') : '',
+        album: track ? String(track.album || '') : '',
+        artist: mbzDisplayArtist(track)
+    };
+}
+
+/**
+ * Copies the fields the dialog needs while holding a read lock. MediaMonkey
+ * 2024 throws "Read lock not acquired!" when a SharedList item, or a shared
+ * Track property, is read outside one. The returned entries are plain objects,
+ * so render() never has to touch a shared track again.
+ */
+function mbzCollectTracks(sourceList, limit) {
+    var result = { total: 0, entries: [], songIds: [] };
+    if (!sourceList) return result;
+
+    function collect() {
+        result.total = sourceList.count || 0;
+        var count = Math.min(result.total, limit > 0 ? limit : result.total);
+
+        for (var i = 0; i < count; i++) {
+            var entry = mbzTrackEntry(sourceList.getValue(i));
+            result.entries.push(entry);
+            result.songIds.push(entry.songId);
+        }
+    }
+
+    if (typeof sourceList.locked === 'function') sourceList.locked(collect);
+    else collect();
+
+    return result;
+}
+
 function mbzCell(text, className) {
     var td = document.createElement('td');
     td.textContent = text;
@@ -184,15 +227,15 @@ function init(params) {
         var withGroup = 0;
         var withArtist = 0;
 
-        result.tracks.forEach(function (track, index) {
-            var trackId = track ? track.id : 0;
+        result.entries.forEach(function (entry, index) {
+            var trackId = entry.songId;
             var ids = result.ids.get(trackId) || { releaseId: '', releaseGroupId: '', artistIds: '' };
             var row = {
                 songId: trackId,
-                albumId: (track && track.idalbum !== undefined) ? parseInt(track.idalbum, 10) : 0,
-                title: track ? track.title : '',
-                album: track ? track.album : '',
-                artist: mbzDisplayArtist(track),
+                albumId: entry.albumId,
+                title: entry.title,
+                album: entry.album,
+                artist: entry.artist,
                 releaseId: ids.releaseId,
                 releaseGroupId: ids.releaseGroupId,
                 artistIds: ids.artistIds,
@@ -215,7 +258,7 @@ function init(params) {
             UI.rows.appendChild(tr);
         });
 
-        if (!result.tracks.length) {
+        if (!result.entries.length) {
             setSummary(_('No tracks are selected. Select tracks in a track list and run the action again.'));
             hideEditor();
             return;
@@ -521,27 +564,17 @@ function init(params) {
 
     async function readRows() {
         if (!sourceList) {
-            return { total: 0, tracks: [], ids: new Map() };
+            return { total: 0, entries: [], ids: new Map() };
         }
 
         if (sourceList.whenLoaded) {
             await sourceList.whenLoaded();
         }
-        if (window._cleanUpCalled) return { total: 0, tracks: [], ids: new Map() };
+        if (window._cleanUpCalled) return { total: 0, entries: [], ids: new Map() };
 
-        var total = sourceList.count || 0;
-        var limit = Math.min(total, MBZ_MAX_ROWS);
-        var tracks = [];
-        var ids = [];
-
-        for (var i = 0; i < limit; i++) {
-            var track = sourceList.getValue(i);
-            tracks.push(track);
-            ids.push(track ? track.id : 0);
-        }
-
-        var values = await mbz.lookupTracksAsync(ids);
-        return { total: total, tracks: tracks, ids: values };
+        var collected = mbzCollectTracks(sourceList, MBZ_MAX_ROWS);
+        var values = await mbz.lookupTracksAsync(collected.songIds);
+        return { total: collected.total, entries: collected.entries, ids: values };
     }
 
     function load(selectSongId, statusAfterLoad) {

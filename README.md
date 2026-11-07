@@ -13,9 +13,11 @@ Three read-only track-list columns:
 
 Plus an **Edit → Tag Tools → MusicBrainz IDs…** dialog that lists the IDs for
 the selected tracks, copies them as a tab-separated table, and can set them on
-the album or artist behind the selected track.
+the album or artist behind the selected track. A **MusicBrainz** tab in
+**Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
+MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.2.0**.
+Current version: **0.3.0**.
 
 ---
 
@@ -74,6 +76,8 @@ as empty.
 
 The dialog queries `Albums` and `Artists` directly every time, so it is never
 stale. Artist cells list every artist MBID for the track, separated by `; `.
+This dialog shows the native MBGID columns, not `Songs.ExtendedTags`; use
+**Track Properties → MusicBrainz** for the per-track extended tags.
 
 After MediaMonkey matches new releases/artists, use **Tools → MBz loves MM5:
 reload MusicBrainz ID cache** to rebuild the track-list columns without
@@ -111,10 +115,53 @@ Any other input is rejected before a query runs. An empty field clears the ID.
 The editor is hidden when MediaMonkey is in Party Mode, where it refuses edits
 elsewhere too; the table and **Copy table** keep working.
 
-Edits do not touch your files or tags, and they do not run a MusicBrainz
+Edits here do not touch your files or tags, and they do not run a MusicBrainz
 lookup — you are supplying the identifier yourself. MediaMonkey's own lookup
 can overwrite it the next time it re-matches that release or artist, which is
 also why the confirmation says so.
+
+### MusicBrainz extended tags in Track Properties
+
+**Track Properties → MusicBrainz** reads the selected track's
+`Songs.ExtendedTags` JSON and lists only entries whose names normalize to
+`MUSICBRAINZ*`. The same tag is therefore found whether the file stores it as
+`MUSICBRAINZ_TRACKID` (FLAC/Vorbis) or `MusicBrainz Track Id` (ID3 TXXX). The
+tab does not pull in `Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID`; those
+are separate fields and stay in the columns and the IDs dialog.
+
+Each row shows the raw tag name, a short description and its current value. ID
+tags link to the matching MusicBrainz page:
+
+| Extended tag | Opens |
+|---|---|
+| `MUSICBRAINZ_ALBUMID` | release |
+| `MUSICBRAINZ_RELEASEGROUPID` | release group |
+| `MUSICBRAINZ_ARTISTID`, `MUSICBRAINZ_ALBUMARTISTID`, performer IDs | artist |
+| `MUSICBRAINZ_TRACKID` | recording |
+| `MUSICBRAINZ_RELEASETRACKID` | track |
+| `MUSICBRAINZ_WORKID` | work |
+| `MUSICBRAINZ_LABELID` | label |
+
+A value containing several IDs (`;`, `,` or whitespace separated) gets one link
+per ID. On ID tags, values that are not UUIDs are kept, marked **Not a valid
+MusicBrainz ID**, and not linked. Non-ID MusicBrainz tags (album
+status/type/country/date, disc ID) are listed without a link.
+
+Edit a value and click **OK** to write it back; an empty value removes that tag.
+Values made up only of valid IDs are stored in dashed lower-case form. The tab re-reads the current
+`ExtendedTags` array and merges only the rows you changed, so non-MusicBrainz
+tags and changes made in the built-in **Custom** tab survive. It never writes
+the album or artist database fields.
+
+With several tracks selected, the tab shows only tags that occur once on every
+track with the same stored name and value — typically album-level tags such as
+the release, release-group and album-artist IDs. Editing one applies the new
+value to every selected track; clearing it removes the tag from every selected
+track. Per-track tags such as `MUSICBRAINZ_TRACKID` are not shown in group mode.
+Group editing also requires every selected track to be in the library.
+
+In Party Mode the values are disabled but the links still work. The file format
+must support extended tags — formats such as WAV may discard them.
 
 ## How it works
 
@@ -146,7 +193,17 @@ also why the confirmation says so.
   `app.db.clearCache()` and `uitools.refreshView()` so MediaMonkey does not keep
   serving old values. An album write updates the in-memory tables directly; an
   artist write rebuilds them, because the artist column is keyed by song.
-  Nothing writes to tags, files or anything outside those two tables.
+  Nothing in this dialog writes to tags, files or anything outside those two
+  tables; the Track Properties tab is the separate path for per-track tags.
+- **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
+  `tabMbzLovesMM5` after **Custom**. `tabMbzLovesMM5.js` filters
+  `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
+  from `mbzMbgid.musicBrainzUrl` and opens them with `uitools.openWeb`. On OK it
+  re-reads the whole array and merges changed rows by exact tag name and
+  occurrence, so duplicate artist IDs and the built-in Custom tab are safe. In
+  group mode it reads each selected song's row, shows only tags with one
+  identical stored name and value across the selection, and sends a
+  deletion-aware patch through the group track.
 - **Lifecycle** — the dialog uses `window.localPromise` / `window.localListen`,
   long loops check `window._cleanUpCalled`, and the cache is only built in the
   main window (`init.js`). Settings are not stored.
@@ -155,15 +212,17 @@ also why the confirmation says so.
 
 - **Album Artist MBGID** — the album artist is a separate relation
   (`ArtistsAlbums`); the artist column is the track's Artist field.
-- **Per-track recording MBID** — this version exposes the album and artist
-  identifiers; it does not assume a recording ID column on `Songs`, so there is
-  no per-track ID to set.
+- **Per-track MBIDs in the database** — MediaMonkey has no recording or work
+  MBID column on `Songs`; the Track Properties tab edits the per-track values
+  in `Songs.ExtendedTags`, not the album/artist rows.
 - **Per-track album overrides** — a release ID belongs to the `Albums` row. Two
   tracks of the same album cannot have different release IDs, and the dialog
   makes that explicit rather than pretending otherwise.
 - **Batch editing** — one row at a time, with one confirmation per row, so a
   mistyped ID cannot spread across a multi-select.
-- **Works, labels, relationships** — not stored in the database.
+- **Works, labels, relationships as database columns** — not stored there.
+  Their IDs can appear in `Songs.ExtendedTags` and are shown by the Track
+  Properties tab.
 
 ## Building an `.mmip`
 
@@ -213,6 +272,17 @@ zip -r MBzLovesMM5.mmip info.json init.js mbzMbgid.js actions_add.js controls di
 - **Only one artist lost its ID** — a track can credit several artists and each
   has its own `Artists` row. Choose the artist in the dropdown before saving or
   clearing; the dropdown appears whenever a row has more than one artist.
+- **The MusicBrainz tab is empty** — the track has no MusicBrainz entries in
+  `Songs.ExtendedTags`; the native album/artist MBIDs are not stored there. Use
+  the IDs dialog or the columns for those.
+- **A MusicBrainz tag has no link** — its value is not a UUID (the tab marks it)
+  or the tag has no entity page (album status/type/country/date, disc ID). Fix
+  the value from a MusicBrainz page to get a link.
+- **An extended-tag edit did not stick** — the file format may not support the
+  tag, or Party Mode is on. Check the value after reopening Track Properties.
+- **The MusicBrainz tab is missing** — `dialogs/dlgTrackProperties_add.js` did
+  not load; check `debug.log` for lines starting with `MBz loves MM5:`, then
+  reopen Track Properties.
 
 ## Layout
 
@@ -224,12 +294,28 @@ actions_add.js                     Edit > Tag Tools and Tools menu actions
 controls/trackListView_add.js      the three track-list columns
 dialogs/dlgMBzLovesMM5.html        dialog markup
 dialogs/dlgMBzLovesMM5.js          dialog: view, copy, edit
+dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
+dialogs/dlgTrackProperties/tabMbzLovesMM5.html  tab markup
+dialogs/dlgTrackProperties/tabMbzLovesMM5.js    tab: filter, link, edit
 skin/icon/mbzLovesMM5.svg          menu icon
 ```
 
 ## Changelog
 
+### 0.3.0
+- **Group editing** — with multiple tracks selected, the Track Properties tab
+  shows only MusicBrainz tags that are identical across the selection and
+  applies edits or removals to all selected tracks. Per-track tags stay
+  untouched.
+
 ### 0.2.0
+- **Read-lock fix** — the IDs dialog now copies the selected tracks inside a
+  `SharedList.locked()` callback, fixing "Read lock not acquired!" on MediaMonkey
+  2024 when the selection is opened.
+- **Track Properties → MusicBrainz** — a new tab lists only the MusicBrainz
+  extended tags that exist in `Songs.ExtendedTags`, normalizes tag names across
+  file formats, links IDs to musicbrainz.org and edits values in place. It
+  re-reads the array on save and merges changes, so other extended tags survive.
 - **Set ID** — select a row in the dialog and edit its release, release group
   or artist ID. Values are validated as UUIDs, the confirmation names the album
   or artist and the number of tracks it covers, and the write clears
