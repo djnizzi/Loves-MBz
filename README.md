@@ -25,7 +25,8 @@ Current version: **0.3.7**.
 
 ### From an `.mmip`
 
-1. Build one (see [Building an `.mmip`](#building-an-mmip)) or use a release.
+1. Download `LovesMBz.mmip` from the [latest release](https://github.com/djnizzi/Loves-MBz/releases/latest),
+   or build one (see [Building an `.mmip`](#building-an-mmip)).
 2. In MediaMonkey: **Tools → Addons → Add**, pick the `.mmip`, restart.
 
 ### For development
