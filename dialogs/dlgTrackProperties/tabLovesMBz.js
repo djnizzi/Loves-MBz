@@ -43,6 +43,10 @@ var mbzExtGroup = null;
 var mbzExtSuggestions = [];
 var mbzExtNative = null;
 var mbzExtArtists = [];
+var mbzExtGroupNative = null;
+var mbzExtGroupIds = [];
+var mbzExtGroupLookup = null;
+var mbzExtGroupArtists = null;
 
 function mbzExtErrorText(error) {
     if (!error) return '';
@@ -216,15 +220,100 @@ function mbzExtSingleGuid(value) {
     return parsed.ids[0];
 }
 
+function mbzExtDistinctValues(list) {
+    var seen = {};
+    var values = [];
+
+    (list || []).forEach(function (value) {
+        var text = String(value === undefined || value === null ? '' : value);
+        if (seen[text]) return;
+        seen[text] = true;
+        values.push(text);
+    });
+
+    return values;
+}
+
 /**
- * Tags whose stored value contradicts the value MediaMonkey keeps in its own
- * library columns. Only single-track editing has a library row to compare with:
- * a group selection spans albums and artists, so it is left out.
+ * What the library knows about a whole selection: the album rows its tracks
+ * belong to, the distinct values those rows hold, and the artist row when every
+ * track has exactly one. A field can only be compared when every track has a
+ * row and the rows agree, because otherwise the selection has no single library
+ * value.
  *
- * @returns {Array<Object>}
+ * @param {number[]} ids
+ * @param {Map} map  lookupTracksAsync result
+ * @param {Map|null} artistsMap  lookupTrackArtistsAsync result, once loaded
+ * @returns {Object|null} null when a track has no album row
  */
-function mbzExtConflicts() {
-    if (!mbzExtNative || mbzExtGroup) return [];
+function mbzExtGroupNativeFrom(ids, map, artistsMap) {
+    var native = {
+        trackCount: ids.length,
+        albumIds: [],
+        albumNames: {},
+        releaseIds: [],
+        releaseGroupIds: [],
+        artistIds: [],
+        artistGuids: [],
+        artistNames: {},
+        artistsLoaded: !!artistsMap
+    };
+
+    var releaseValues = [];
+    var groupValues = [];
+
+    for (var i = 0; i < ids.length; i++) {
+        var entry = map && map.get(ids[i]);
+        if (!entry || !(entry.albumId > 0)) return null;
+
+        if (native.albumIds.indexOf(entry.albumId) < 0) {
+            native.albumIds.push(entry.albumId);
+            native.albumNames[entry.albumId] = String(entry.album || '');
+        }
+
+        releaseValues.push(entry.releaseId);
+        groupValues.push(entry.releaseGroupId);
+    }
+
+    native.releaseIds = mbzExtDistinctValues(releaseValues);
+    native.releaseGroupIds = mbzExtDistinctValues(groupValues);
+
+    if (artistsMap) {
+        var artistIds = [];
+        var artistGuids = [];
+        var artistNames = {};
+        var usable = true;
+
+        for (var j = 0; j < ids.length; j++) {
+            var artists = artistsMap.get(ids[j]);
+
+            // A featured or multi-artist credit has no single Artists row a
+            // tag ID could belong to.
+            if (!artists || artists.length !== 1) {
+                usable = false;
+                break;
+            }
+
+            var artist = artists[0];
+            if (artistIds.indexOf(artist.id) < 0) {
+                artistIds.push(artist.id);
+                artistGuids.push(String(artist.mbgid || ''));
+                artistNames[artist.id] = String(artist.name || '');
+            }
+        }
+
+        if (usable) {
+            native.artistIds = artistIds;
+            native.artistGuids = artistGuids;
+            native.artistNames = artistNames;
+        }
+    }
+
+    return native;
+}
+
+function mbzExtSingleConflicts() {
+    if (!mbzExtNative) return [];
 
     var conflicts = [];
 
@@ -255,14 +344,64 @@ function mbzExtConflicts() {
             tagValue: tagValue,
             nativeValue: nativeValue,
             row: row,
-            albumId: isArtist ? 0 : (mbzExtNative.albumId || 0),
-            album: isArtist ? '' : String(mbzExtNative.album || ''),
-            artistId: isArtist ? artist.id : 0,
+            albumIds: isArtist ? [] : (mbzExtNative.albumId > 0 ? [mbzExtNative.albumId] : []),
+            artistIds: isArtist ? [artist.id] : [],
+            albumName: isArtist ? '' : String(mbzExtNative.album || ''),
             artistName: isArtist ? String(artist.name || '') : ''
         });
     });
 
     return conflicts;
+}
+
+function mbzExtGroupConflicts() {
+    var native = mbzExtGroupNative;
+    if (!native) return [];
+
+    var conflicts = [];
+
+    MBZ_EXT_NATIVE_FIELDS.forEach(function (field) {
+        var row = mbzExtRowForTag(field.title);
+        if (!row) return;
+
+        var tagValue = mbzExtSingleGuid(mbzExtRowValue(row));
+        if (!tagValue) return;
+
+        var isArtist = field.key === 'artist';
+        var values = isArtist ? native.artistGuids : native[field.nativeKey + 's'];
+
+        // The albums or artists of the selection have to agree on a value;
+        // otherwise there is nothing to compare the shared tag with.
+        if (!values || values.length !== 1) return;
+
+        var nativeValue = String(values[0] || '');
+        if (nativeValue === tagValue) return;
+
+        conflicts.push({
+            key: field.key,
+            label: field.label,
+            column: field.column,
+            tagValue: tagValue,
+            nativeValue: nativeValue,
+            row: row,
+            albumIds: isArtist ? [] : native.albumIds.slice(),
+            artistIds: isArtist ? native.artistIds.slice() : [],
+            albumName: isArtist ? '' : String(native.albumNames[native.albumIds[0]] || ''),
+            artistName: isArtist ? String(native.artistNames[native.artistIds[0]] || '') : ''
+        });
+    });
+
+    return conflicts;
+}
+
+/**
+ * Tags whose stored value contradicts the value MediaMonkey keeps in its own
+ * library columns. A group selection compares the shared tag with the library
+ * rows of its tracks; the library write is only offered when those rows resolve
+ * to one album or one artist.
+ */
+function mbzExtConflicts() {
+    return mbzExtGroup ? mbzExtGroupConflicts() : mbzExtSingleConflicts();
 }
 
 function mbzExtRenderDivergence(ui, readOnly) {
@@ -298,19 +437,24 @@ function mbzExtRenderDivergence(ui, readOnly) {
             ' / ' + conflict.tagValue;
         item.appendChild(text);
 
-        var canWrite = (conflict.key === 'artist' ? conflict.artistId : conflict.albumId) > 0;
+        var targetCount = (conflict.albumIds || []).length + (conflict.artistIds || []).length;
+        var canWrite = targetCount === 1;
+
+        // Copying the library value into the tag needs no library target, only
+        // a value to copy; writing the tag back needs exactly one row.
+        if (!readOnly && conflict.nativeValue) {
+            var useNative = document.createElement('div');
+            useNative.className = 'button';
+            useNative.setAttribute('data-diverge', 'tag');
+            useNative.setAttribute('data-key', conflict.key);
+            useNative.textContent = _('Use library ID');
+            useNative.title = mbzExtGroup
+                ? _('Put the library ID into the tag for every selected track. Click OK to save the tags.')
+                : _('Put the library ID into the tag. Click OK to save the tag.');
+            item.appendChild(useNative);
+        }
 
         if (!readOnly && canWrite) {
-            if (conflict.nativeValue) {
-                var useNative = document.createElement('div');
-                useNative.className = 'button';
-                useNative.setAttribute('data-diverge', 'tag');
-                useNative.setAttribute('data-key', conflict.key);
-                useNative.textContent = _('Use library ID');
-                useNative.title = _('Put the library ID into the tag. Click OK to save the tag.');
-                item.appendChild(useNative);
-            }
-
             var useTag = document.createElement('div');
             useTag.className = 'button';
             useTag.setAttribute('data-diverge', 'library');
@@ -318,6 +462,15 @@ function mbzExtRenderDivergence(ui, readOnly) {
             useTag.textContent = _('Update library');
             useTag.title = _('Write the ID stored in the tag into the album or artist row.');
             item.appendChild(useTag);
+        }
+
+        // The selection touches several albums or artists: writing one tag ID
+        // to all of them is not what "update the library" should mean.
+        if (!readOnly && targetCount > 1) {
+            var note = document.createElement('label');
+            note.className = 'mbzExtLabel';
+            note.textContent = _('Select tracks from one album or artist to update the library.');
+            item.appendChild(note);
         }
 
         ui.diverge.appendChild(item);
@@ -369,8 +522,8 @@ function mbzExtConfirmLibraryUpdate(conflict) {
     var mbz = window.mbzMbgid;
     if (!mbz || !conflict) return;
 
-    var isArtist = conflict.key === 'artist';
-    var targetId = isArtist ? conflict.artistId : conflict.albumId;
+    var isArtist = (conflict.artistIds || []).length > 0;
+    var targetId = isArtist ? conflict.artistIds[0] : (conflict.albumIds || [])[0];
 
     if (!(targetId > 0)) {
         if (mbzExtUI) {
@@ -390,7 +543,7 @@ function mbzExtConfirmLibraryUpdate(conflict) {
 
         var scope = isArtist
             ? sprintf(_('artist "%s" (%s)'), conflict.artistName || ('#' + targetId), mbzExtTrackCount(count))
-            : sprintf(_('album "%s" (%s)'), conflict.album || ('#' + targetId), mbzExtTrackCount(count));
+            : sprintf(_('album "%s" (%s)'), conflict.albumName || ('#' + targetId), mbzExtTrackCount(count));
 
         var message = sprintf(_('Write the tag\'s %s into the library?'), conflict.label)
             + '<br><br>' + sprintf(_('%s will be set to <b>%s</b> for your whole %s.'),
@@ -417,9 +570,10 @@ function mbzExtConfirmLibraryUpdate(conflict) {
 function mbzExtWriteLibrary(conflict, mbz) {
     if (mbzExtUI) mbzExtUI.status.textContent = _('Updating the library...');
 
-    var work = (conflict.key === 'artist')
-        ? mbz.setArtistGuidAsync(conflict.artistId, conflict.tagValue)
-        : mbz.setAlbumGuidAsync(conflict.albumId, conflict.column, conflict.tagValue);
+    var isArtist = (conflict.artistIds || []).length > 0;
+    var work = isArtist
+        ? mbz.setArtistGuidAsync(conflict.artistIds[0], conflict.tagValue)
+        : mbz.setAlbumGuidAsync((conflict.albumIds || [])[0], conflict.column, conflict.tagValue);
 
     mbzExtPromise(work).then(function () {
         if (window._cleanUpCalled) return;
@@ -427,13 +581,19 @@ function mbzExtWriteLibrary(conflict, mbz) {
         if (mbzExtNative) {
             if (conflict.key === 'artist') {
                 mbzExtArtists.forEach(function (artist) {
-                    if (artist.id === conflict.artistId) artist.mbgid = conflict.tagValue;
+                    if (artist.id === conflict.artistIds[0]) artist.mbgid = conflict.tagValue;
                 });
             } else if (conflict.column === 'MBGID') {
                 mbzExtNative.releaseId = conflict.tagValue;
             } else {
                 mbzExtNative.releaseGroupId = conflict.tagValue;
             }
+        }
+
+        if (mbzExtGroupNative) {
+            if (conflict.key === 'artist') mbzExtGroupNative.artistGuids = [conflict.tagValue];
+            else if (conflict.column === 'MBGID') mbzExtGroupNative.releaseIds = [conflict.tagValue];
+            else mbzExtGroupNative.releaseGroupIds = [conflict.tagValue];
         }
 
         if (mbzExtUI) {
@@ -482,8 +642,6 @@ function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
             };
         });
 
-        // The strip compares one track's tag with its album and artist rows,
-        // so a group selection has no single library value to compare.
         if (ids.length === 1) {
             var entry = map.get(ids[0]);
             mbzExtNative = entry ? {
@@ -492,8 +650,12 @@ function mbzExtLoadSuggestions(ui, mbz, songIds, readOnly, token) {
                 albumId: parseInt(entry.albumId, 10) || 0,
                 album: String(entry.album || '')
             } : null;
+            mbzExtGroupNative = null;
         } else {
             mbzExtNative = null;
+            mbzExtGroupIds = ids.slice();
+            mbzExtGroupLookup = map;
+            mbzExtGroupNative = mbzExtGroupNativeFrom(ids, map, mbzExtGroupArtists);
         }
 
         mbzExtRenderSuggestions(ui, readOnly);
@@ -922,6 +1084,9 @@ function mbzExtLoadGroup(ui, dialog, mbz, readOnly, token) {
     mbzExtGroup = { trackCount: selection.songIds.length };
     mbzExtNative = null;
     mbzExtArtists = [];
+    mbzExtGroupNative = null;
+    mbzExtGroupIds = [];
+    mbzExtGroupLookup = null;
     mbzExtGroupIntro(ui, readOnly, selection.trackCount);
 
     if (!selection.trackCount) {
@@ -937,6 +1102,24 @@ function mbzExtLoadGroup(ui, dialog, mbz, readOnly, token) {
     }
 
     mbzExtLoadSuggestions(ui, mbz, selection.songIds, readOnly, token);
+
+    // One query for the whole selection: the strip needs to know whether the
+    // tracks resolve to a single Artists row before offering a library write.
+    if (typeof mbz.lookupTrackArtistsAsync === 'function') {
+        dialog.localPromise(mbz.lookupTrackArtistsAsync(selection.songIds)).then(function (artists) {
+            if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+
+            mbzExtGroupArtists = artists || null;
+            if (mbzExtGroupLookup) {
+                mbzExtGroupNative = mbzExtGroupNativeFrom(
+                    mbzExtGroupIds, mbzExtGroupLookup, mbzExtGroupArtists);
+            }
+            mbzExtRenderDivergence(ui, readOnly);
+        }, function () {
+            if (window._cleanUpCalled || token !== mbzExtLoadToken) return;
+            mbzExtGroupArtists = null;
+        });
+    }
 
     ui.summary.textContent = sprintf(_('Reading %d selected tracks...'), selection.trackCount);
     ui.status.textContent = readOnly ? _('Read-only mode: links work, editing is disabled.') : '';
@@ -1014,6 +1197,8 @@ function mbzExtSaveGroupAsync(track, mbz) {
                 }
             });
         });
+
+        mbzExtRenderDivergence(mbzExtUI, false);
     })().catch(function (error) {
         if (typeof messageDlg === 'function') {
             messageDlg(
@@ -1050,6 +1235,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     mbzExtSuggestions = [];
     mbzExtNative = null;
     mbzExtArtists = [];
+    mbzExtGroupNative = null;
+    mbzExtGroupIds = [];
+    mbzExtGroupLookup = null;
     var token = ++mbzExtLoadToken;
 
     ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. The album and artist MBIDs are separate fields.');

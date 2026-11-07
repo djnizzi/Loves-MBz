@@ -484,6 +484,63 @@
         return artists;
     }
 
+    /**
+     * Artist rows for several tracks at once. A group selection needs to know
+     * whether its tracks resolve to a single artist before a tag ID can be
+     * written to one Artists row, and one query per track would stall the tab.
+     *
+     * @param {number[]} songIds
+     * @returns {Promise<Map<number, Array<{id: number, name: string, mbgid: string}>>>}
+     */
+    async function lookupTrackArtistsAsync(songIds) {
+        var ids = [];
+        var seen = {};
+        var result = new Map();
+
+        for (var i = 0; i < (songIds || []).length; i++) {
+            var id = parseInt(songIds[i], 10);
+            if (id > 0 && !seen[id]) {
+                seen[id] = true;
+                ids.push(id);
+            }
+        }
+
+        for (var start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+            var chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
+            var res = await app.db.getQueryResultAsync(
+                'SELECT asg.IDSong, ar.ID, ar.Artist, ar.MBGID' +
+                ' FROM ArtistsSongs asg' +
+                ' JOIN Artists ar ON ar.ID = asg.IDArtist' +
+                ' WHERE asg.IDSong IN (' + chunk.join(',') + ') AND asg.PersonType = 1' +
+                ' ORDER BY asg.IDSong, ar.ID');
+
+            while (!res.eof) {
+                var songId = parseInt(res.fields.getValue(0), 10);
+                var artistId = parseInt(res.fields.getValue(1), 10);
+
+                if (songId > 0 && artistId > 0) {
+                    var list = result.get(songId);
+                    if (!list) {
+                        list = [];
+                        result.set(songId, list);
+                    }
+
+                    list.push({
+                        id: artistId,
+                        name: String(res.fields.getValue(2) || ''),
+                        mbgid: cleanGuid(res.fields.getValue(3))
+                    });
+                }
+
+                res.next();
+            }
+
+            if (start + LOOKUP_CHUNK_SIZE < ids.length) await yieldToUI();
+        }
+
+        return result;
+    }
+
     async function countAlbumTracksAsync(albumId) {
         var id = parseInt(albumId, 10);
         if (!(id > 0)) return 0;
@@ -929,6 +986,7 @@
         lookupTracksAsync: lookupTracksAsync,
         lookupExtendedTagsAsync: lookupExtendedTagsAsync,
         getTrackArtistsAsync: getTrackArtistsAsync,
+        lookupTrackArtistsAsync: lookupTrackArtistsAsync,
         countAlbumTracksAsync: countAlbumTracksAsync,
         countArtistTracksAsync: countArtistTracksAsync,
         normalizeGuid: normalizeGuid,

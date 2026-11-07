@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.4**.
+Current version: **0.3.5**.
 
 ---
 
@@ -187,12 +187,19 @@ Release ID — library 3f6a1c2e…, tag 9b7e2d41…   [Use library ID] [Update l
   keeps its value. MediaMonkey's own MusicBrainz lookup can overwrite that
   library value later, which is why it asks first.
 
-The strip is single-track only: a group selection spans albums and artists, so
-there is no single library value to compare. The artist comparison needs
-uniquely one artist row for the track — a featured or multi-artist credit has
-no unambiguous row and is left alone — and a tag holding several IDs at once is
-not compared either. In Party Mode the strip still reports the disagreement but
-shows no buttons.
+The strip works for a selection as well. The tag side is the value the selected
+tracks share; the library side is what their own album and artist rows hold, and
+it is compared only when those rows agree — a selection spread over albums with
+different IDs has no single library value to compare, so it stays quiet.
+**Use library ID** fills the group row, so **OK** writes it to every selected
+track. **Update library** is offered only when the selection resolves to one
+album or one artist; when it would touch several rows the strip says so instead
+of copying one release ID onto unrelated albums.
+
+The artist comparison needs exactly one artist row per selected track — a
+featured or multi-artist credit has no unambiguous row and is left alone — and a
+tag holding several IDs at once is not compared either. In Party Mode the strip
+still reports the disagreement but shows no buttons.
 
 With several tracks selected, the tab shows tags whose value is the same on
 every selected track that stores them — typically album-level tags such as the
@@ -355,6 +362,14 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.5
+- **Tag vs. library warning for selections** — the strip now also works with
+  several tracks selected, comparing the shared tag with the album and artist
+  rows of those tracks as long as the rows agree. **Use library ID** applies to
+  every selected track; **Update library** appears only when the selection
+  resolves to a single album or artist, so one tag ID is never written across
+  unrelated albums.
 
 ### 0.3.4
 - **Tag vs. library warning** — a single track whose release, release-group or
