@@ -534,6 +534,13 @@ function mbzExtConfirmLibraryUpdate(conflict) {
         return;
     }
 
+    // Filling an empty library field overwrites nothing, so it does not need
+    // the dialog the replace case uses.
+    if (!conflict.nativeValue) {
+        mbzExtWriteLibrary(conflict, mbz);
+        return;
+    }
+
     var countPromise = isArtist
         ? mbz.countArtistTracksAsync(targetId)
         : mbz.countAlbumTracksAsync(targetId);

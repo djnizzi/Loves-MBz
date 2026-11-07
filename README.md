@@ -17,7 +17,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.5**.
+Current version: **0.3.6**.
 
 ---
 
@@ -153,7 +153,8 @@ Values made up only of valid IDs are stored in dashed lower-case form. The tab r
 `ExtendedTags` array and merges only the rows you changed, so non-MusicBrainz
 tags and changes made in the built-in **Custom** tab survive. Editing a value
 never writes the album or artist database fields; only the warning strip below
-does, and only after a confirmation.
+does, and only after a confirmation — except when it fills an empty library
+field, which overwrites nothing and happens immediately.
 
 A track with no MusicBrainz extended tags is not a dead end. Use **Add tag** at
 the bottom of the tab: pick the tag, type a value and click **Add** — the new
@@ -182,10 +183,11 @@ Release ID — library 3f6a1c2e…, tag 9b7e2d41…   [Use library ID] [Update l
 
 - **Use library ID** puts the library's value into the tag row, so the usual
   **OK** saves it. The database is not touched.
-- **Update library** writes the tag's value onto the album or artist row after
-  a confirmation that names the row and how many tracks it covers. The tag
-  keeps its value. MediaMonkey's own MusicBrainz lookup can overwrite that
-  library value later, which is why it asks first.
+- **Update library** writes the tag's value onto the album or artist row. When
+  that field already holds a different ID it asks first, naming the row and how
+  many tracks it covers; filling an empty field overwrites nothing, so it
+  writes straight away. The tag keeps its value. MediaMonkey's own MusicBrainz
+  lookup can overwrite that library value later.
 
 The strip works for a selection as well. The tag side is the value the selected
 tracks share; the library side is what their own album and artist rows hold, and
@@ -362,6 +364,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.6
+- **Filling an empty library ID no longer asks** — when the album or artist row
+  has no MusicBrainz ID yet, **Update library** writes the tag's value straight
+  away, because there is nothing to overwrite. The confirmation stays for
+  replacing an ID that is already there.
+- Shortened the add-on description.
 
 ### 0.3.5
 - **Tag vs. library warning for selections** — the strip now also works with
