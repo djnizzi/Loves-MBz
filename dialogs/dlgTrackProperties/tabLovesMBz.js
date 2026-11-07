@@ -48,6 +48,22 @@ var mbzExtGroupIds = [];
 var mbzExtGroupLookup = null;
 var mbzExtGroupArtists = null;
 
+/**
+ * A group edit rebuilds window.modified/window.tagModified from the checked
+ * [data-control-class="Checkbox"] controls when OK is pressed, discarding the
+ * flags an input handler set. Ticking the tab's own box keeps our patch in the
+ * save and marks the files for a tag write; the box only exists in group mode.
+ */
+function mbzExtMarkChanged() {
+    window.modified = true;
+    window.tagModified = true;
+
+    var check = mbzExtUI && mbzExtUI.applyCheck;
+    if (mbzExtGroup && check && check.controlClass && !window.isReadOnly) {
+        check.controlClass.checked = true;
+    }
+}
+
 function mbzExtErrorText(error) {
     if (!error) return '';
     return error.message ? error.message : String(error);
@@ -509,8 +525,7 @@ function mbzExtUseNativeId(conflict) {
     row.input.value = conflict.nativeValue;
     row.pendingValue = conflict.nativeValue;
 
-    window.modified = true;
-    window.tagModified = true;
+    mbzExtMarkChanged();
 
     mbzExtRenderLinks(row);
     mbzExtUpdateStatus();
@@ -795,8 +810,7 @@ function mbzExtAddTagRow(ui, mbz, title, value) {
     ui.table.style.display = '';
     ui.empty.style.display = 'none';
 
-    window.modified = true;
-    window.tagModified = true;
+    mbzExtMarkChanged();
 
     mbzExtRenderRows(ui, false);
     mbzExtUpdateSummary(ui);
@@ -983,14 +997,20 @@ function mbzExtRenderRows(ui, readOnly) {
         title.textContent = row.title;
         nameCell.appendChild(title);
 
-        var label = document.createElement('div');
-        label.className = 'mbzExtLabel';
-        label.textContent = (row.info ? _(row.info.label) : _('MusicBrainz tag'))
-            + (row.isNew ? ' ' + _('(not saved yet)') : '')
-            + (!row.isNew && row.missingCount > 0 && mbzExtGroup
-                ? ' ' + sprintf(_('(missing on %d of %d tracks)'), row.missingCount, mbzExtGroup.trackCount)
-                : '');
-        nameCell.appendChild(label);
+        // The raw tag name is self-explanatory, so only the state of a row is
+        // spelled out under it; a plain row is a single line.
+        var notes = [];
+        if (row.isNew) notes.push(_('(not saved yet)'));
+        if (!row.isNew && row.missingCount > 0 && mbzExtGroup) {
+            notes.push(sprintf(_('(missing on %d of %d tracks)'), row.missingCount, mbzExtGroup.trackCount));
+        }
+
+        if (notes.length) {
+            var label = document.createElement('div');
+            label.className = 'mbzExtLabel';
+            label.textContent = notes.join(' ');
+            nameCell.appendChild(label);
+        }
 
         var valueCell = document.createElement('td');
         var input = document.createElement('input');
@@ -1027,8 +1047,7 @@ function mbzExtOnApplyChange(event) {
     if (!row) return;
 
     row.applyToAll = !!input.checked;
-    window.modified = true;
-    window.tagModified = true;
+    mbzExtMarkChanged();
     mbzExtUpdateStatus();
 }
 
@@ -1041,8 +1060,7 @@ function mbzExtOnInput(event) {
     if (!row) return;
 
     row.pendingValue = input.value;
-    window.modified = true;
-    window.tagModified = true;
+    mbzExtMarkChanged();
     mbzExtRenderLinks(row);
     mbzExtUpdateStatus();
     mbzExtRenderDivergence(mbzExtUI, false);
@@ -1156,6 +1174,11 @@ function mbzExtLoadGroup(ui, dialog, mbz, readOnly, token) {
 }
 
 function mbzExtSaveGroupAsync(track, mbz) {
+    // The box is unticked only when the user cleared it, which discards the
+    // tab's pending changes even if another field triggered the save.
+    var check = mbzExtUI && mbzExtUI.applyCheck;
+    if (check && check.controlClass && !check.controlClass.checked) return Promise.resolve();
+
     var patch = [];
     var hasDeleted = false;
 
@@ -1233,7 +1256,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         applyHead: qeid(main, 'mbzExtApplyHead'),
         addTag: qeid(main, 'mbzExtAddTag'),
         addValue: qeid(main, 'mbzExtAddValue'),
-        addButton: qeid(main, 'mbzExtAddButton')
+        addButton: qeid(main, 'mbzExtAddButton'),
+        applyBar: qeid(main, 'mbzExtApplyBar'),
+        applyCheck: qeid(main, 'chb_mbzExtTags')
     };
 
     mbzExtUI = ui;
@@ -1261,6 +1286,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
     var readOnly = !!window.isReadOnly;
     if (readOnly) ui.status.textContent = _('Read-only mode: links work, editing is disabled.');
+    if (ui.applyBar) ui.applyBar.style.display = (dialog.isGroup && !readOnly) ? '' : 'none';
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);

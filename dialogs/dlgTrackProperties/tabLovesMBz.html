@@ -21,7 +21,6 @@
             border-top: 1px solid rgba(128, 128, 128, 0.25);
         }
         .mbzExtTitle {
-            font-family: monospace;
             white-space: nowrap;
         }
         .mbzExtLabel {
@@ -33,7 +32,6 @@
             min-width: 16em;
             box-sizing: border-box;
             padding: 2px 5px;
-            font-family: monospace;
         }
         .mbzExtValue.mbzExtInvalid {
             outline: 1px solid #d9534f;
@@ -73,7 +71,6 @@
         .mbzExtAddValue {
             min-width: 12em;
             padding: 2px 5px;
-            font-family: monospace;
         }
         .mbzExtAddButton {
             white-space: nowrap;
@@ -125,6 +122,13 @@
     <div class="flex column stretchWidth stretchHeight" style="gap: 6px;">
         <label data-id="mbzExtIntro" class="mbzExtIntro"></label>
         <label data-id="mbzExtSummary"></label>
+
+        <!-- Shown only for a multi-track selection: MediaMonkey rebuilds the
+             dialog's modified/tagModified flags from checked Checkbox controls
+             on OK, so this is what keeps the tab's changes in the save. -->
+        <div class="flex row" data-id="mbzExtApplyBar" style="display: none; align-items: center; gap: 6px;">
+            <div data-id="chb_mbzExtTags" data-control-class="Checkbox">Save MusicBrainz tags</div>
+        </div>
 
         <div class="scrollable fill">
             <table class="mbzExtTable" data-id="mbzExtTable">

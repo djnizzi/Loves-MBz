@@ -130,8 +130,8 @@ tab does not list `Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID` as rows;
 those are separate fields and stay in the columns and the IDs dialog. It does
 compare them with a matching tag and flag a disagreement (see below).
 
-Each row shows the raw tag name, a short description and its current value. ID
-tags link to the matching MusicBrainz page:
+Each row shows the raw tag name and its current value. ID tags link to the
+matching MusicBrainz page:
 
 | Extended tag | Opens |
 |---|---|
@@ -208,6 +208,12 @@ every selected track that stores them — typically album-level tags such as the
 release, release-group and album-artist IDs. Editing one applies the new value
 to every selected track; clearing it removes the tag from every selected track,
 and a tag added with **Add tag** is written to every selected track.
+
+The **Save MusicBrainz tags** box above the list ticks itself as soon as you
+edit a row. A group edit decides whether anything changed from the ticked
+boxes — the ones beside each standard field — so this box is what makes **OK**
+write the tab's tags to the files; without it the dialog would close without
+saving. Untick it to discard the tab's pending changes.
 
 A tag that only some of the selected tracks have is shown too, never hidden.
 Its **All tracks** checkbox is clear and its label counts how many selected
