@@ -7,10 +7,10 @@ account; **Agent** work is repo and documentation.
 
 ### Owner
 
-- [x] **New icon.** `skin/icon/lovesMBz.svg` redrawn (24×24, used as the menu
-      and add-on icon) and `loves-mbz.png` added, with the `.ai` source beside it.
-      The PNG is not packaged in the `.mmip` yet; switching `info.json`'s `icon`
-      to it is a one-line change if the bitmap is preferred.
+- [x] **New icon.** `loves-mbz.png` (115×128, with the `.ai` source beside it)
+      is the add-on icon in `info.json` and is packaged in the `.mmip`;
+      `skin/icon/lovesMBz.svg` is the 24×24 menu icon and draws with the skin's
+      colour so it follows light and dark themes.
 - [ ] **README cover.** A wide banner for the top of `README.md`, plus the square
       image for the addons listing. Suggested path `docs/cover.png`; the README
       gets the image tag once the file exists.

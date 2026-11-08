@@ -316,7 +316,7 @@ Rename-Item .\LovesMBz.zip .\LovesMBz.mmip
 bash / Git Bash, if `zip` is available:
 
 ```bash
-zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialogs skin
+zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialogs skin loves-mbz.png
 ```
 
 ## Troubleshooting
@@ -374,6 +374,7 @@ dialogs/dlgLovesMBz.js             dialog: view, copy, edit
 dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
 dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
 dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
+loves-mbz.png                      add-on icon (info.json)
 skin/icon/lovesMBz.svg             menu icon
 ```
 
