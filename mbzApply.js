@@ -23,8 +23,10 @@
     var NATIVE_FIELDS = [
         { key: 'albumArtist', label: _('Album artist'), scope: 'album', native: 'albumArtist' },
         { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date' },
+        { key: 'year', label: _('Year'), scope: 'album', native: 'year', kind: 'year' },
         { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate', kind: 'date' },
-        { key: 'publisher', label: _('Label'), scope: 'album', native: 'publisher' },
+        { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
+        { key: 'publisher', label: _('Labels'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
         { key: 'isrc', label: _('ISRC'), scope: 'track', native: 'isrc' }
@@ -42,7 +44,8 @@
         { key: 'catalognumber', label: _('Catalogue number'), scope: 'album', tag: 'CATALOGNUMBER' },
         { key: 'script', label: _('Script'), scope: 'album', tag: 'SCRIPT' },
         { key: 'discogs', label: _('Discogs URL'), scope: 'album', tag: 'discogs_url' },
-        { key: 'originalyear', label: _('Original year'), scope: 'album', tag: 'originalyear' },
+        { key: 'originaldate', label: _('Original date (tag)'), scope: 'album', tag: 'originaldate' },
+        { key: 'originalyear', label: _('Original year (tag)'), scope: 'album', tag: 'originalyear' },
         { key: 'recordingid', label: _('MusicBrainz recording ID'), scope: 'track', tag: 'MUSICBRAINZ_TRACKID' },
         { key: 'releasetrackid', label: _('MusicBrainz release track ID'), scope: 'track', tag: 'MUSICBRAINZ_RELEASETRACKID' },
         { key: 'artistid', label: _('MusicBrainz artist ID'), scope: 'track', tag: 'MUSICBRAINZ_ARTISTID' },
@@ -74,7 +77,9 @@
         (credit || []).forEach(function (item) {
             if (!item) return;
             result += text(item.name || (item.artist && item.artist.name));
-            result += text(item.joinphrase);
+            result += item.joinphrase === undefined || item.joinphrase === null
+                ? ''
+                : String(item.joinphrase);
         });
 
         return result.trim();
@@ -91,15 +96,17 @@
         return ids;
     }
 
-    function firstLabel(release) {
+    /** Every label on the release, in order, without duplicates. */
+    function labelText(release) {
         var info = (release && release['label-info']) || [];
+        var names = [];
 
-        for (var i = 0; i < info.length; i++) {
-            var name = text(info[i] && info[i].label && info[i].label.name);
-            if (name) return name;
-        }
+        info.forEach(function (item) {
+            var name = text(item && item.label && item.label.name);
+            if (name && names.indexOf(name) === -1) names.push(name);
+        });
 
-        return '';
+        return names.join('; ');
     }
 
     function catalogNumbers(release) {
@@ -168,7 +175,8 @@
             CATALOGNUMBER: catalogNumbers(release),
             SCRIPT: releaseScript(release),
             discogs_url: discogsUrls(release).join(', '),
-            originalyear: yearOf(origDate || date)
+            originaldate: origDate,
+            originalyear: yearOf(origDate)
         };
 
         var tracks = [];
@@ -186,8 +194,10 @@
                     values: {
                         albumArtist: albumArtist,
                         date: date,
+                        year: yearOf(date),
                         origDate: origDate,
-                        publisher: firstLabel(release),
+                        origYear: yearOf(origDate),
+                        publisher: labelText(release),
                         title: text(item.title || recording.title),
                         artist: creditText(trackCredit),
                         isrc: text((recording.isrcs || [])[0])
@@ -451,7 +461,8 @@
             releaseTitle: text(release && release.title),
             native: {},
             tags: [],
-            labels: []
+            labels: [],
+            fields: []
         };
 
         if (!item) return result;
@@ -473,8 +484,18 @@
 
             if (normalizeText(value) === normalizeText(current)) return;
 
-            result.native[def.native] = def.kind === 'date' ? mmDateFromIso(value) : value;
+            result.native[def.native] = def.kind === 'date'
+                ? mmDateFromIso(value)
+                : def.kind === 'year' ? parseInt(value, 10) : value;
             result.labels.push(def.label + ': ' + value);
+            result.fields.push({
+                key: def.key,
+                label: def.label,
+                kind: 'native',
+                native: def.native,
+                value: value,
+                display: value
+            });
         });
 
         TAG_FIELDS.forEach(function (def) {
@@ -484,9 +505,51 @@
 
             result.tags.push({ title: def.tag, value: value });
             result.labels.push(def.label + ': ' + value);
+            result.fields.push({
+                key: def.key,
+                label: def.label,
+                kind: 'tag',
+                tag: def.tag,
+                value: value,
+                display: value
+            });
         });
 
         return result;
+    }
+
+    /**
+     * Narrows a pending fill to the fields the user ticked. A key that is not
+     * present on a track is simply ignored for that track.
+     */
+    function filterPending(pending, keys) {
+        if (!pending || !Array.isArray(pending.fields) || !Array.isArray(keys)) return pending;
+
+        var wanted = {};
+        keys.forEach(function (key) { wanted[key] = true; });
+
+        var selected = pending.fields.filter(function (field) {
+            return !!wanted[field.key];
+        });
+        var native = {};
+        var tags = [];
+
+        selected.forEach(function (field) {
+            if (field.kind === 'native') {
+                native[field.native] = pending.native[field.native];
+            } else if (field.kind === 'tag') {
+                tags.push({ title: field.tag, value: field.value });
+            }
+        });
+
+        return {
+            matched: pending.matched,
+            releaseTitle: pending.releaseTitle,
+            native: native,
+            tags: tags,
+            labels: selected.map(function (field) { return field.label + ': ' + field.display; }),
+            fields: selected
+        };
     }
 
     /** Stages native fields on the track; Track Properties commits them on OK. */
@@ -557,7 +620,9 @@
                         var value = field.scope === 'track' ? field.values[i] : field.value;
                         if (!value) return;
 
-                        track[field.native] = field.kind === 'date' ? mmDateFromIso(value) : value;
+                        track[field.native] = field.kind === 'date'
+                            ? mmDateFromIso(value)
+                            : field.kind === 'year' ? parseInt(value, 10) : value;
                         touched = true;
                     });
 
@@ -609,6 +674,7 @@
         describeRelease: describeRelease,
         buildPlanAsync: buildPlanAsync,
         buildPendingAsync: buildPendingAsync,
+        filterPending: filterPending,
         applyPendingAsync: applyPendingAsync,
         applyNative: applyNative,
         applyAsync: applyAsync,

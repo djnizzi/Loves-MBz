@@ -119,8 +119,8 @@ written before that click.
 | Written to | Fields |
 |---|---|
 | Native track tags | title, artist, ISRC |
-| Native album-level tags | album artist, date, original date, label (`publisher`) |
-| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originalyear`, `discogs_url` |
+| Native album-level tags | album artist, date, year, original date, original year, all labels joined into `publisher` |
+| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `originalyear`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS` |
 
 Library tracks are matched to the release by disc and track number, never by
@@ -231,12 +231,17 @@ field, which overwrites nothing and happens immediately.
 
 **Fill from MusicBrainz** above the list stages the release behind the album's
 `Albums.MBGID` onto the dialog's track: native fields (album artist, date,
-original date, label, title, artist, ISRC) and the extended tags, including
-`discogs_url`. It shows what will change and asks first; values that already
-match are skipped, and the track is matched to the release by disc and track
-number. Nothing is saved until you click **OK** in Track Properties, which is
-what commits the staged values. The button is hidden for group selections and
-in Party Mode, and an album without a release ID is reported without a request.
+year, original date, original year, every label joined into `publisher`, title,
+artist, ISRC) and the extended tags, including `originaldate`, `originalyear`
+and `discogs_url`. It lists every differing field with a checkbox; **Apply
+selected** stages only those fields. Values that already match are skipped,
+and the track is matched to the release by disc and track number. Nothing is
+saved until you click **OK** in Track Properties, which is what commits the
+staged values. With several tracks selected the same checkboxes filter the
+fill, but those tracks are saved immediately after a confirmation, because
+group Track Properties cannot commit native fields from a tab; Cancel will not
+undo that write. An album without a release ID is reported without a request,
+and the button is hidden only in Party Mode.
 
 The dialog's built-in fields are not rewritten, so the Year box can keep showing
 the old value until the dialog is reopened; the staged date is what OK saves.
@@ -374,17 +379,19 @@ must support extended tags — formats such as WAV may discard them.
   tables; the Track Properties tab is the separate path for per-track tags.
 - **Fill from MusicBrainz** — the tab's button asks `mbzFetch` for the album's
   release, then `mbzApply.buildPendingAsync` returns the values that differ for
-  this disc/track. `applyPendingAsync` stages them without committing: native
-  fields are assigned (dates converted to `YYYYMMDD`) and the extended tags are
-  merged with `mergeTags` through `setExtendedTagsAsync`. The dialog's OK button
-  saves, and `mbzExtMarkChanged` marks the dialog dirty so the staged tags are
-  included.
+  this disc/track as a field list. `filterPending` narrows that list to the
+  ticked fields; `applyPendingAsync` stages them without committing: native
+  fields are assigned (dates converted to `YYYYMMDD`, years to numbers) and the
+  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`. The
+  dialog's OK button saves, and `mbzExtMarkChanged` marks the dialog dirty so
+  the staged tags are included.
 - **Filling a selection** — with several tracks selected, the Fill button reads
-  each selected track's album, matches every file by disc and track, and
-  commits the changed tracks immediately, because group Track Properties cannot
-  commit native fields staged by a tab. The confirmation warns that Cancel will
-  not undo those writes; albums without a release ID and unmatched files are
-  reported and skipped.
+  each selected track's album, matches every file by disc and track, and after
+  the checkbox selection and a confirmation commits the changed tracks
+  immediately, because group Track Properties cannot commit native fields
+  staged by a tab. The confirmation warns that Cancel will not undo those
+  writes; albums without a release ID and unmatched files are reported and
+  skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links

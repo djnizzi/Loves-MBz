@@ -74,15 +74,19 @@ never by title.
       track number against its own album's release, and the changed tracks are
       committed immediately because group Track Properties cannot commit native
       fields staged by a tab. The confirmation says Cancel cannot undo it.
+- [x] Per-field checkboxes in Fill: only the ticked fields are staged for one
+      track or saved for a multi-track selection.
 - [x] Native tags for what the lookup returns: title, artist, album artist,
-      date, original date, publisher (label), ISRC.
+      date, year, original date, original year, every label joined into
+      publisher, ISRC.
 - [ ] Relational native tags with real columns — genre, composer, lyricist,
       conductor, copyright, language — need extra includes (artist/work
       relations, genres) and are not fetched yet. Producer and remix credits
       have no native column; see **Nice to have**.
 - [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
-      `originalyear`, album type/status/country, `CATALOGNUMBER`, and
+      `originaldate`, `originalyear`, album type/status/country,
+      `CATALOGNUMBER`, and
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
@@ -100,8 +104,6 @@ never by title.
 
 ## Nice to have
 
-- Per-field selection in **Fill from MusicBrainz** — choose which staged values
-  are applied, instead of taking everything that differs.
 - Composer, lyricist, conductor and other relational credits, fetched from
   artist/work relations and genres; these have native columns to write to.
 - Producer and remix credits — MediaMonkey has no native columns for either, so

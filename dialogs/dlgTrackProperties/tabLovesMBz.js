@@ -50,6 +50,7 @@ var mbzExtGroupIds = [];
 var mbzExtFileSeparator = '; ';
 var mbzExtGroupLookup = null;
 var mbzExtGroupArtists = null;
+var mbzExtFillPlanState = null;
 
 /**
  * A group edit rebuilds window.modified/window.tagModified from the checked
@@ -1524,6 +1525,189 @@ async function mbzExtCommitGroupFillAsync(work) {
     return { written: written, failed: failed };
 }
 
+function mbzExtFillAggregateFields(work) {
+    var byKey = {};
+    var order = [];
+
+    work.forEach(function (item) {
+        (item.pending.fields || []).forEach(function (field) {
+            var entry = byKey[field.key];
+
+            if (!entry) {
+                entry = byKey[field.key] = {
+                    key: field.key,
+                    label: field.label,
+                    kind: field.kind,
+                    values: []
+                };
+                order.push(entry);
+            }
+
+            if (entry.values.indexOf(field.display) === -1) entry.values.push(field.display);
+        });
+    });
+
+    order.forEach(function (entry) {
+        entry.display = entry.values.slice(0, 3).join(' / ') +
+            (entry.values.length > 3 ? ' \u2026' : '');
+    });
+
+    return order;
+}
+
+function mbzExtShowFillPlan(ui, state) {
+    if (!ui || !ui.fillPlan || !ui.fillFields) return;
+
+    mbzExtFillPlanState = state;
+    ui.fillPlan.style.display = '';
+    ui.fillPlanTitle.textContent = state.title || '';
+    ui.fillPlanStatus.textContent = '';
+    ui.fillFields.textContent = '';
+
+    (state.fields || []).forEach(function (field, index) {
+        var row = document.createElement('label');
+        row.className = 'flex row mbzExtFillField';
+
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = true;
+        input.setAttribute('data-fill-index', String(index));
+
+        var name = document.createElement('span');
+        name.textContent = field.label;
+
+        var value = document.createElement('span');
+        value.className = 'mbzExtFillFieldValue';
+        value.textContent = field.display || field.value || '';
+
+        row.appendChild(input);
+        row.appendChild(name);
+        row.appendChild(value);
+        ui.fillFields.appendChild(row);
+    });
+}
+
+function mbzExtHideFillPlan(ui) {
+    mbzExtFillPlanState = null;
+    if (!ui || !ui.fillPlan) return;
+
+    ui.fillPlan.style.display = 'none';
+    if (ui.fillFields) ui.fillFields.textContent = '';
+    if (ui.fillPlanTitle) ui.fillPlanTitle.textContent = '';
+    if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = '';
+}
+
+function mbzExtFillSelectedKeys(ui) {
+    var keys = [];
+    var state = mbzExtFillPlanState;
+    if (!ui || !ui.fillFields || !state) return keys;
+
+    var inputs = ui.fillFields.querySelectorAll('input[data-fill-index]');
+    for (var i = 0; i < inputs.length; i++) {
+        if (!inputs[i].checked) continue;
+
+        var index = parseInt(inputs[i].getAttribute('data-fill-index'), 10);
+        if (state.fields[index]) keys.push(state.fields[index].key);
+    }
+
+    return keys;
+}
+
+function mbzExtApplyFillPlan(ui, dialog) {
+    var state = mbzExtFillPlanState;
+    var apply = window.mbzApply;
+    if (!ui || !state || !apply) return;
+
+    var keys = mbzExtFillSelectedKeys(ui);
+    if (!keys.length) {
+        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Tick at least one field.');
+        return;
+    }
+
+    if (state.mode === 'single') {
+        var pending = apply.filterPending(state.pending, keys);
+        if (!pending || !pending.fields.length) {
+            if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Nothing selected.');
+            return;
+        }
+
+        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Staging...');
+
+        dialog.localPromise(apply.applyPendingAsync(state.track, pending)).then(function (written) {
+            if (window._cleanUpCalled) return;
+
+            mbzExtMarkChanged();
+            mbzExtHideFillPlan(ui);
+
+            if (ui.fillStatus) {
+                ui.fillStatus.textContent = sprintf(_('Staged %d field(s). Click OK to save.'), written);
+            }
+
+            return state.track.getExtendedTagsAsync().then(function (text) {
+                var tags = window.mbzMbgid.parseExtendedTags(text);
+                if (tags) mbzExtRender(ui, tags, false, window.mbzMbgid);
+            });
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+            if (ui.fillPlanStatus) {
+                ui.fillPlanStatus.textContent = sprintf(_('Could not stage the release: %s'), mbzExtErrorText(error));
+            }
+        });
+        return;
+    }
+
+    var work = [];
+    state.work.forEach(function (item) {
+        var filtered = apply.filterPending(item.pending, keys);
+        if (filtered && filtered.fields.length) work.push({ track: item.track, pending: filtered });
+    });
+
+    if (!work.length) {
+        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Nothing selected applies to these tracks.');
+        return;
+    }
+
+    var fields = 0;
+    work.forEach(function (item) { fields += item.pending.labels.length; });
+
+    messageDlg(
+        sprintf(_('Overwrite %d field(s) on %d selected track(s)?\n\nThese tracks are saved immediately; Cancel in Track Properties will not undo it.'), fields, work.length),
+        _('MusicBrainz'),
+        ['btnYes', 'btnNo'],
+        { defaultButton: 'btnNo' },
+        function (choice) {
+            if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
+
+            if (ui.fillButton) ui.fillButton.classList.add('mbzExtBusy');
+            if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Saving tracks...');
+
+            dialog.localPromise(mbzExtCommitGroupFillAsync(work)).then(function (result) {
+                if (window._cleanUpCalled) return;
+
+                mbzExtHideFillPlan(ui);
+
+                var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
+                    mbzExtGroupFillSkipText(state.counts);
+
+                if (result.failed.length) {
+                    text += ' ' + sprintf(_('%d track(s) failed: %s'),
+                        result.failed.length, result.failed[0].error);
+                }
+
+                if (ui.fillStatus) ui.fillStatus.textContent = text;
+            }, function (error) {
+                if (window._cleanUpCalled) return;
+                if (ui.fillPlanStatus) {
+                    ui.fillPlanStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
+                }
+            }).then(function () {
+                if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+            }, function () {
+                if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+            });
+        });
+}
+
 /**
  * Fills every selected track from the release behind its album and saves the
  * changed tracks immediately. Group Track Properties cannot commit native
@@ -1568,39 +1752,16 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
             return;
         }
 
-        var fields = 0;
-        plan.work.forEach(function (item) { fields += item.pending.labels.length; });
-
-        messageDlg(
-            sprintf(_('Fill %d field(s) on %d selected track(s)?\n\nThese tracks are written and saved immediately; Cancel in Track Properties will not undo it.'), fields, plan.work.length),
-            _('MusicBrainz'),
-            ['btnYes', 'btnNo'],
-            { defaultButton: 'btnNo' },
-            function (choice) {
-                if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
-
-                ui.fillButton.classList.add('mbzExtBusy');
-                if (ui.fillStatus) ui.fillStatus.textContent = _('Saving tracks...');
-
-                dialog.localPromise(mbzExtCommitGroupFillAsync(plan.work)).then(function (result) {
-                    if (window._cleanUpCalled) return;
-
-                    var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
-                        mbzExtGroupFillSkipText(plan.counts);
-
-                    if (result.failed.length) {
-                        text += ' ' + sprintf(_('%d track(s) failed: %s'),
-                            result.failed.length, result.failed[0].error);
-                    }
-
-                    if (ui.fillStatus) ui.fillStatus.textContent = text;
-                }, function (error) {
-                    if (window._cleanUpCalled) return;
-                    if (ui.fillStatus) {
-                        ui.fillStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
-                    }
-                }).then(finish, finish);
-            });
+        mbzExtShowFillPlan(ui, {
+            mode: 'group',
+            work: plan.work,
+            counts: plan.counts,
+            fields: mbzExtFillAggregateFields(plan.work),
+            title: sprintf(_('Choose what to overwrite on %d selected track(s). Applying saves them immediately.'), plan.work.length)
+        });
+        if (ui.fillStatus) {
+            ui.fillStatus.textContent = _('Choose the fields, then click Apply selected. Cancel in Track Properties will not undo the save.');
+        }
     }, function (error) {
         if (!window._cleanUpCalled && ui.fillStatus) {
             ui.fillStatus.textContent = sprintf(_('Could not read the release: %s'), mbzExtErrorText(error));
@@ -1671,38 +1832,16 @@ function mbzExtFillFromRelease(ui, track, dialog) {
                 return;
             }
 
-            var lines = pending.labels.slice(0, 10).join('\n');
-            if (pending.labels.length > 10) lines += '\n\u2026';
-
-            messageDlg(
-                sprintf(_('Fill %d field(s) on this track from "%s"?\n\n%s\n\nNothing is saved until you click OK.'),
-                    pending.labels.length, pending.releaseTitle || '', lines),
-                _('MusicBrainz'),
-                ['btnYes', 'btnNo'],
-                { defaultButton: 'btnNo' },
-                function (choice) {
-                    if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
-
-                    dialog.localPromise(apply.applyPendingAsync(track, pending)).then(function (written) {
-                        if (window._cleanUpCalled) return;
-
-                        mbzExtMarkChanged();
-
-                        if (ui.fillStatus) {
-                            ui.fillStatus.textContent = sprintf(_('Staged %d field(s). Click OK to save.'), written);
-                        }
-
-                        return track.getExtendedTagsAsync().then(function (text) {
-                            var tags = mbz.parseExtendedTags(text);
-                            if (tags) mbzExtRender(ui, tags, false, mbz);
-                        });
-                    }, function (error) {
-                        if (window._cleanUpCalled) return;
-                        if (ui.fillStatus) {
-                            ui.fillStatus.textContent = sprintf(_('Could not stage the release: %s'), mbzExtErrorText(error));
-                        }
-                    });
-                });
+            mbzExtShowFillPlan(ui, {
+                mode: 'single',
+                track: track,
+                pending: pending,
+                fields: pending.fields,
+                title: sprintf(_('Choose what to overwrite on this track from "%s". Nothing is saved until OK.'), pending.releaseTitle || '')
+            });
+            if (ui.fillStatus) {
+                ui.fillStatus.textContent = _('Choose the fields, then click Apply selected.');
+            }
         });
     }, function (error) {
         if (!window._cleanUpCalled && ui.fillStatus) {
@@ -1726,6 +1865,12 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         fillBar: qeid(main, 'mbzExtFillBar'),
         fillButton: qeid(main, 'mbzExtFillButton'),
         fillStatus: qeid(main, 'mbzExtFillStatus'),
+        fillPlan: qeid(main, 'mbzExtFillPlan'),
+        fillPlanTitle: qeid(main, 'mbzExtFillPlanTitle'),
+        fillFields: qeid(main, 'mbzExtFillFields'),
+        fillApply: qeid(main, 'mbzExtFillApply'),
+        fillCancel: qeid(main, 'mbzExtFillCancel'),
+        fillPlanStatus: qeid(main, 'mbzExtFillPlanStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
         suggest: qeid(main, 'mbzExtSuggestBar'),
         diverge: qeid(main, 'mbzExtDivergeBar'),
@@ -1738,6 +1883,8 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     };
 
     mbzExtUI = ui;
+    mbzExtFillPlanState = null;
+    mbzExtHideFillPlan(ui);
     mbzExtRows = [];
     mbzExtGroup = null;
     mbzExtSuggestions = [];
@@ -1770,6 +1917,12 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     if (ui.fillStatus) ui.fillStatus.textContent = '';
     mbzExtListen(dialog, ui.fillButton, 'click', function () {
         mbzExtFillFromRelease(ui, track, dialog);
+    });
+    mbzExtListen(dialog, ui.fillApply, 'click', function () {
+        mbzExtApplyFillPlan(ui, dialog);
+    });
+    mbzExtListen(dialog, ui.fillCancel, 'click', function () {
+        mbzExtHideFillPlan(ui);
     });
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);

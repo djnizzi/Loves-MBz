@@ -17,6 +17,15 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Multi-track fill** — selecting several files and pressing **Fill from
   MusicBrainz** fills each matching disc/track and saves those tracks
   immediately; the confirmation says so because Cancel cannot undo it.
+- **Per-field selection** — Fill now lists every differing field with a
+  checkbox. Apply selected stages only the ticked fields for one track, or
+  saves only those fields for a multi-track selection.
+- **Credits and labels** — artist join phrases keep their spaces, so “Isaiah
+  Rashad feat. Dominic Fike” no longer collapses to one word, and every label
+  on the release is joined into `publisher` instead of only the first.
+- **Years and original date** — Fill writes the native year and original year
+  alongside date and original date, and adds Picard's `originaldate` tag next
+  to `originalyear`.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the

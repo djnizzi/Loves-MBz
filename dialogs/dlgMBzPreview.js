@@ -28,7 +28,9 @@ function mbzPreviewCredit(release) {
         var item = credit[i];
         if (!item) continue;
         text += mbzPreviewText(item.name || (item.artist && item.artist.name));
-        text += mbzPreviewText(item.joinphrase);
+        text += item.joinphrase === undefined || item.joinphrase === null
+            ? ''
+            : String(item.joinphrase);
     }
 
     return text;
