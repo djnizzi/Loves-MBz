@@ -101,7 +101,7 @@ function mbzSelectionLinks() {
  */
 actions.lovesMBzLinks = {
     title: _('MusicBrainz links'),
-    icon: 'musicBrainz',
+    icon: 'lovesMBz',
     submenu: function () {
         var links = mbzSelectionLinks();
 
@@ -139,7 +139,7 @@ actions.lovesMBzLinks = {
 actions.lovesMBzPreview = {
     title: _('Preview MusicBrainz metadata') + '...',
     hotkeyAble: true,
-    icon: 'musicBrainz',
+    icon: 'lovesMBz',
     disabled: uitools.notMediaListSelected,
     execute: function () {
         var ids = mbzSelectedIds();

@@ -23,6 +23,11 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Disc/track matching** — files with no disc tag are matched to the first
   disc, a single-disc release matches by track number alone, and releases whose
   track positions are not plain numbers (vinyl A1/B1) use the medium position.
+  Preview writes the missing native Disc # from the matched medium; a Disc #
+  that is already set is left alone.
+- **Edit-tag menu icons** — all Loves MBz entries use the same theme-coloured
+  `lovesMBz.svg` as MusicBrainz IDs, instead of the artwork that was unclear at
+  24×24.
 - **Per-field selection** — Fill now lists every differing field with a
   checkbox. Apply selected stages only the ticked fields for one track, or
   saves only those fields for a multi-track selection.

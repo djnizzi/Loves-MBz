@@ -28,6 +28,7 @@
         { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
         { key: 'publisher', label: _('Labels'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
+        { key: 'discNumber', label: _('Disc #'), scope: 'track', native: 'discNumber', kind: 'int' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
         { key: 'isrc', label: _('ISRC'), scope: 'track', native: 'isrc' }
     ];
@@ -216,6 +217,7 @@
                         origYear: yearOf(origDate),
                         publisher: labelText(release),
                         title: text(item.title || recording.title),
+                        discNumber: disc ? String(disc) : '',
                         artist: creditNames(trackCredit),
                         isrc: text((recording.isrcs || [])[0])
                     },
@@ -291,7 +293,15 @@
     function currentValue(def, match) {
         if (def.native) {
             var raw = text(match.track[def.native]);
-            return def.kind === 'date' ? isoFromMmDate(raw) : raw;
+
+            if (def.kind === 'date') return isoFromMmDate(raw);
+
+            if (def.kind === 'int') {
+                var number = parseInt(raw, 10);
+                return number > 0 ? String(number) : '';
+            }
+
+            return raw;
         }
 
         return tagValue(match.tags, def.tag);
@@ -369,6 +379,13 @@
 
         described.tracks.forEach(function (item) {
             var track = byKey[item.disc + ':' + item.track];
+
+            // A library Disc# of null/0 means the first disc. Match it to the
+            // first release medium so preview can offer the missing Disc#.
+            if (!track && item.disc === described.firstDisc) {
+                track = byKey['0:' + item.track];
+            }
+
             if (!track) return;
 
             matches.push({
@@ -526,13 +543,15 @@
 
             var current = def.kind === 'date'
                 ? isoFromMmDate(track[def.native])
-                : text(track[def.native]);
+                : def.kind === 'int'
+                    ? (leadingInt(track[def.native]) ? String(leadingInt(track[def.native])) : '')
+                    : text(track[def.native]);
 
             if (normalizeText(value) === normalizeText(current)) return;
 
             result.native[def.native] = def.kind === 'date'
                 ? mmDateFromIso(value)
-                : def.kind === 'year' ? parseInt(value, 10) : value;
+                : (def.kind === 'year' || def.kind === 'int') ? parseInt(value, 10) : value;
             result.labels.push(def.label + ': ' + value);
             result.fields.push({
                 key: def.key,
@@ -670,7 +689,7 @@
 
                         track[field.native] = field.kind === 'date'
                             ? mmDateFromIso(value)
-                            : field.kind === 'year' ? parseInt(value, 10) : value;
+                            : (field.kind === 'year' || field.kind === 'int') ? parseInt(value, 10) : value;
                         touched = true;
                     });
 
