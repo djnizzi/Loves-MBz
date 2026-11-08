@@ -49,7 +49,9 @@ version, so `info.json` says `0.4.0` and the package is named
   release before showing the new one. The album tracklist is read under a read
   lock, so the preview no longer fails with "Read lock not acquired!"; release
   details, fields and tracks share one scrolling content pane, so long releases
-  scroll instead of overlapping the controls. Field rows use MediaMonkey's own
+  scroll instead of overlapping the controls. The release details are arranged
+  as two label/value pairs per row, and the dialog opens at 1200×960 so more of
+  the release fits without resizing. Field rows use MediaMonkey's own
   checkboxes and can be selected again. The native Date field is always offered,
   separately from Original date, so the release date can be written to
   MediaMonkey's own date.

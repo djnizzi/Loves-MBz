@@ -18,7 +18,8 @@
             white-space: nowrap;
             vertical-align: top;
         }
-        .mbzMetaTable td { padding: 2px 0; user-select: text; }
+        .mbzMetaTable td { padding: 2px 24px 2px 0; user-select: text; }
+        .mbzMetaTable td:last-child { padding-right: 0; }
         .mbzScroll { overflow: auto; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; }
         .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
         .mbzTable th {
@@ -44,7 +45,7 @@
     </style>
 </head>
 
-<body data-posSaveName="dlgMBzPreview" data-defaultSize="1020,760">
+<body data-posSaveName="dlgMBzPreview" data-defaultSize="1200,960">
     <div class="flex column fill padding mbzPreviewRoot" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>

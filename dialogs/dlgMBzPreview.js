@@ -111,6 +111,7 @@ function init(params) {
     var apply = window.mbzApply;
     var currentPlan = null;
     var lastResult = null;
+    var metaPairs = [];
 
     var canEdit = true;
     try {
@@ -156,6 +157,7 @@ function init(params) {
 
     /** A reused dialog must not keep the previous release's rows or sections. */
     function resetView() {
+        metaPairs = [];
         if (UI.metaRows) UI.metaRows.textContent = '';
         if (UI.fieldRows) UI.fieldRows.textContent = '';
         if (UI.trackRows) UI.trackRows.textContent = '';
@@ -172,17 +174,29 @@ function init(params) {
 
     function addMeta(label, value) {
         if (!value) return;
+        metaPairs.push({ label: label, value: value });
+    }
 
-        var row = document.createElement('tr');
+    function appendMetaPair(row, pair) {
         var th = document.createElement('th');
-        th.textContent = label;
+        th.textContent = pair.label;
+        row.appendChild(th);
 
         var td = document.createElement('td');
-        td.textContent = value;
-
-        row.appendChild(th);
+        td.textContent = pair.value;
         row.appendChild(td);
-        UI.metaRows.appendChild(row);
+    }
+
+    function renderMeta() {
+        if (!UI.metaRows) return;
+
+        UI.metaRows.textContent = '';
+        for (var i = 0; i < metaPairs.length; i += 2) {
+            var row = document.createElement('tr');
+            appendMetaPair(row, metaPairs[i]);
+            if (metaPairs[i + 1]) appendMetaPair(row, metaPairs[i + 1]);
+            UI.metaRows.appendChild(row);
+        }
     }
 
     function addTrack(medium, track) {
@@ -235,6 +249,7 @@ function init(params) {
         addMeta(_('Script'), mbzPreviewScript(release));
         addMeta(_('Release ID'), result.releaseId);
         addMeta(_('Tracks'), trackTotal ? String(trackTotal) : '');
+        renderMeta();
 
         for (var m = 0; m < media.length; m++) {
             var tracks = media[m].tracks || [];
