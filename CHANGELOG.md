@@ -20,9 +20,12 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Per-field selection** — Fill now lists every differing field with a
   checkbox. Apply selected stages only the ticked fields for one track, or
   saves only those fields for a multi-track selection.
-- **Credits and labels** — artist join phrases keep their spaces, so “Isaiah
-  Rashad feat. Dominic Fike” no longer collapses to one word, and every label
-  on the release is joined into `publisher` instead of only the first.
+- **Credits and labels** — every label on the release is joined into
+  `publisher` instead of only the first.
+- **Multi-value artist fields** — MediaMonkey's native Artist and Album Artist
+  now receive `Isaiah Rashad; SZA` rather than the joined phrase. The joined
+  credit is kept in the `ARTISTS` and `ALBUMARTISTS` extended tags for
+  pipelines that need it.
 - **Years and original date** — Fill writes the native year and original year
   alongside date and original date, and adds Picard's `originaldate` tag next
   to `originalyear`.

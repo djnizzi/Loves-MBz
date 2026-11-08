@@ -119,7 +119,7 @@ written before that click.
 | Written to | Fields |
 |---|---|
 | Native track tags | title, artist, ISRC |
-| Native album-level tags | album artist, date, year, original date, original year, all labels joined into `publisher` |
+| Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
 | Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `originalyear`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS` |
 
@@ -230,10 +230,11 @@ does, and only after a confirmation — except when it fills an empty library
 field, which overwrites nothing and happens immediately.
 
 **Fill from MusicBrainz** above the list stages the release behind the album's
-`Albums.MBGID` onto the dialog's track: native fields (album artist, date,
-year, original date, original year, every label joined into `publisher`, title,
-artist, ISRC) and the extended tags, including `originaldate`, `originalyear`
-and `discogs_url`. It lists every differing field with a checkbox; **Apply
+`Albums.MBGID` onto the dialog's track: native fields (`; `-separated album
+artist and artist, date, year, original date, original year, every label joined
+into `publisher`, title, ISRC) and the extended tags, including the joined
+credit in `ARTISTS`/`ALBUMARTISTS`, `originaldate`, `originalyear` and
+`discogs_url`. It lists every differing field with a checkbox; **Apply
 selected** stages only those fields. Values that already match are skipped,
 and the track is matched to the release by disc and track number. Nothing is
 saved until you click **OK** in Track Properties, which is what commits the
@@ -382,9 +383,10 @@ must support extended tags — formats such as WAV may discard them.
   this disc/track as a field list. `filterPending` narrows that list to the
   ticked fields; `applyPendingAsync` stages them without committing: native
   fields are assigned (dates converted to `YYYYMMDD`, years to numbers) and the
-  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`. The
-  dialog's OK button saves, and `mbzExtMarkChanged` marks the dialog dirty so
-  the staged tags are included.
+  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`.
+  Native artist fields use `; `-separated names; the joined MusicBrainz credit
+  stays in `ARTISTS`/`ALBUMARTISTS`. The dialog's OK button saves, and
+  `mbzExtMarkChanged` marks the dialog dirty so the staged tags are included.
 - **Filling a selection** — with several tracks selected, the Fill button reads
   each selected track's album, matches every file by disc and track, and after
   the checkbox selection and a confirmation commits the changed tracks

@@ -76,9 +76,9 @@ never by title.
       fields staged by a tab. The confirmation says Cancel cannot undo it.
 - [x] Per-field checkboxes in Fill: only the ticked fields are staged for one
       track or saved for a multi-track selection.
-- [x] Native tags for what the lookup returns: title, artist, album artist,
-      date, year, original date, original year, every label joined into
-      publisher, ISRC.
+- [x] Native tags for what the lookup returns: title, artist and album artist
+      as `; `-separated names, date, year, original date, original year, every
+      label joined into publisher, ISRC.
 - [ ] Relational native tags with real columns — genre, composer, lyricist,
       conductor, copyright, language — need extra includes (artist/work
       relations, genres) and are not fetched yet. Producer and remix credits

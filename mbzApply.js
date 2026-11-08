@@ -36,7 +36,7 @@
         { key: 'albumid', label: _('MusicBrainz release ID'), scope: 'album', tag: 'MUSICBRAINZ_ALBUMID' },
         { key: 'releasegroupid', label: _('MusicBrainz release group ID'), scope: 'album', tag: 'MUSICBRAINZ_RELEASEGROUPID' },
         { key: 'albumartistid', label: _('MusicBrainz album artist ID'), scope: 'album', tag: 'MUSICBRAINZ_ALBUMARTISTID' },
-        { key: 'albumartists', label: _('Album artists'), scope: 'album', tag: 'ALBUMARTISTS' },
+        { key: 'albumartists', label: _('Album artist credit'), scope: 'album', tag: 'ALBUMARTISTS' },
         { key: 'barcode', label: _('Barcode'), scope: 'album', tag: 'BARCODE' },
         { key: 'status', label: _('Release status'), scope: 'album', tag: 'RELEASESTATUS' },
         { key: 'type', label: _('Release type'), scope: 'album', tag: 'RELEASETYPE' },
@@ -69,6 +69,21 @@
     function leadingInt(value) {
         var match = /^\s*(\d+)/.exec(text(value));
         return match ? parseInt(match[1], 10) : 0;
+    }
+
+    /**
+     * Names without join phrases, in MediaMonkey's multi-value form:
+     * "Isaiah Rashad; SZA". The joined credit stays in ARTISTS/ALBUMARTISTS.
+     */
+    function creditNames(credit) {
+        var names = [];
+
+        (credit || []).forEach(function (item) {
+            var name = text(item && (item.name || (item.artist && item.artist.name)));
+            if (name && names.indexOf(name) === -1) names.push(name);
+        });
+
+        return names.join('; ');
     }
 
     function creditText(credit) {
@@ -158,7 +173,8 @@
 
         var group = release['release-group'] || {};
         var credit = release['artist-credit'] || [];
-        var albumArtist = creditText(credit);
+        var albumArtist = creditNames(credit);
+        var albumArtistCredit = creditText(credit);
         var albumArtistIds = creditIds(credit).join('; ');
         var date = text(release.date);
         var origDate = text(group['first-release-date']);
@@ -167,7 +183,7 @@
             MUSICBRAINZ_ALBUMID: text(release.id),
             MUSICBRAINZ_RELEASEGROUPID: text(group.id),
             MUSICBRAINZ_ALBUMARTISTID: albumArtistIds,
-            ALBUMARTISTS: albumArtist,
+            ALBUMARTISTS: albumArtistCredit,
             BARCODE: text(release.barcode),
             RELEASESTATUS: text(release.status),
             RELEASETYPE: releaseType(release),
@@ -199,7 +215,7 @@
                         origYear: yearOf(origDate),
                         publisher: labelText(release),
                         title: text(item.title || recording.title),
-                        artist: creditText(trackCredit),
+                        artist: creditNames(trackCredit),
                         isrc: text((recording.isrcs || [])[0])
                     },
                     albumTags: albumTags,
