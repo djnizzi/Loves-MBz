@@ -196,8 +196,9 @@
         };
 
         var tracks = [];
+        var media = release.media || [];
 
-        (release.media || []).forEach(function (medium) {
+        media.forEach(function (medium) {
             var disc = leadingInt(medium.position);
 
             (medium.tracks || []).forEach(function (item) {
@@ -206,7 +207,7 @@
 
                 tracks.push({
                     disc: disc,
-                    track: leadingInt(item.number),
+                    track: leadingInt(item.number) || leadingInt(item.position),
                     values: {
                         albumArtist: albumArtist,
                         date: date,
@@ -229,7 +230,12 @@
             });
         });
 
-        return { albumTags: albumTags, tracks: tracks };
+        return {
+            albumTags: albumTags,
+            tracks: tracks,
+            mediaCount: media.length,
+            firstDisc: leadingInt(media[0] && media[0].position) || 1
+        };
     }
 
     function parseTags(value) {
@@ -463,14 +469,24 @@
         var described = describeRelease(release);
         var disc = leadingInt(track.discNumber);
         var number = leadingInt(track.trackNumber);
-        var item = null;
 
-        for (var i = 0; i < described.tracks.length; i++) {
-            if (described.tracks[i].disc === disc && described.tracks[i].track === number) {
-                item = described.tracks[i];
-                break;
+        function findTrack(wantedDisc, wantedNumber) {
+            for (var i = 0; i < described.tracks.length; i++) {
+                if (described.tracks[i].disc === wantedDisc &&
+                    described.tracks[i].track === wantedNumber) {
+                    return described.tracks[i];
+                }
             }
+
+            return null;
         }
+
+        var item = findTrack(disc, number);
+
+        // A file with no disc tag means the first disc. A single-medium
+        // release cannot disagree about the disc, so match the number alone.
+        if (!item && !disc) item = findTrack(described.firstDisc, number);
+        if (!item && described.mediaCount === 1) item = findTrack(described.firstDisc, number);
 
         var result = {
             matched: !!item,

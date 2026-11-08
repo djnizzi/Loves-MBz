@@ -239,9 +239,10 @@ selected** stages only those fields. Values that already match are skipped,
 and the track is matched to the release by disc and track number. Nothing is
 saved until you click **OK** in Track Properties, which is what commits the
 staged values. With several tracks selected the same checkboxes filter the
-fill, but those tracks are saved immediately after a confirmation, because
-group Track Properties cannot commit native fields from a tab; Cancel will not
-undo that write. An album without a release ID is reported without a request,
+fill, but those tracks are saved immediately when **Apply selected** is
+clicked, because group Track Properties cannot commit native fields from a
+tab; the checkbox list is the confirmation, and Cancel will not undo that
+write. An album without a release ID is reported without a request,
 and the button is hidden only in Party Mode.
 
 The dialog's built-in fields are not rewritten, so the Year box can keep showing
@@ -389,11 +390,10 @@ must support extended tags — formats such as WAV may discard them.
   `mbzExtMarkChanged` marks the dialog dirty so the staged tags are included.
 - **Filling a selection** — with several tracks selected, the Fill button reads
   each selected track's album, matches every file by disc and track, and after
-  the checkbox selection and a confirmation commits the changed tracks
-  immediately, because group Track Properties cannot commit native fields
-  staged by a tab. The confirmation warns that Cancel will not undo those
-  writes; albums without a release ID and unmatched files are reported and
-  skipped.
+  the checkbox selection commits the changed tracks immediately, because group
+  Track Properties cannot commit native fields staged by a tab. The checkbox
+  list is the confirmation; Cancel will not undo those writes. Albums without a
+  release ID and unmatched files are reported and skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links

@@ -1667,52 +1667,40 @@ function mbzExtApplyFillPlan(ui, dialog) {
         return;
     }
 
-    var fields = 0;
-    work.forEach(function (item) { fields += item.pending.labels.length; });
+    if (ui.fillButton) ui.fillButton.classList.add('mbzExtBusy');
+    if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Saving tracks...');
 
-    messageDlg(
-        sprintf(_('Overwrite %d field(s) on %d selected track(s)?\n\nThese tracks are saved immediately; Cancel in Track Properties will not undo it.'), fields, work.length),
-        _('MusicBrainz'),
-        ['btnYes', 'btnNo'],
-        { defaultButton: 'btnNo' },
-        function (choice) {
-            if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
+    dialog.localPromise(mbzExtCommitGroupFillAsync(work)).then(function (result) {
+        if (window._cleanUpCalled) return;
 
-            if (ui.fillButton) ui.fillButton.classList.add('mbzExtBusy');
-            if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Saving tracks...');
+        mbzExtHideFillPlan(ui);
 
-            dialog.localPromise(mbzExtCommitGroupFillAsync(work)).then(function (result) {
-                if (window._cleanUpCalled) return;
+        var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
+            mbzExtGroupFillSkipText(state.counts);
 
-                mbzExtHideFillPlan(ui);
+        if (result.failed.length) {
+            text += ' ' + sprintf(_('%d track(s) failed: %s'),
+                result.failed.length, result.failed[0].error);
+        }
 
-                var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
-                    mbzExtGroupFillSkipText(state.counts);
-
-                if (result.failed.length) {
-                    text += ' ' + sprintf(_('%d track(s) failed: %s'),
-                        result.failed.length, result.failed[0].error);
-                }
-
-                if (ui.fillStatus) ui.fillStatus.textContent = text;
-            }, function (error) {
-                if (window._cleanUpCalled) return;
-                if (ui.fillPlanStatus) {
-                    ui.fillPlanStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
-                }
-            }).then(function () {
-                if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
-            }, function () {
-                if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
-            });
-        });
+        if (ui.fillStatus) ui.fillStatus.textContent = text;
+    }, function (error) {
+        if (window._cleanUpCalled) return;
+        if (ui.fillPlanStatus) {
+            ui.fillPlanStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
+        }
+    }).then(function () {
+        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+    }, function () {
+        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+    });
 }
 
 /**
  * Fills every selected track from the release behind its album and saves the
  * changed tracks immediately. Group Track Properties cannot commit native
  * fields staged by a tab, so this path cannot leave the work to OK; the
- * confirmation says so.
+ * checkbox list is the confirmation.
  */
 function mbzExtFillGroupFromRelease(ui, dialog) {
     var fetch = window.mbzFetch;

@@ -73,7 +73,8 @@ never by title.
 - [x] Fill a multi-track selection: every selected file is matched by disc and
       track number against its own album's release, and the changed tracks are
       committed immediately because group Track Properties cannot commit native
-      fields staged by a tab. The confirmation says Cancel cannot undo it.
+      fields staged by a tab. The checkbox list is the confirmation; Cancel
+      cannot undo it.
 - [x] Per-field checkboxes in Fill: only the ticked fields are staged for one
       track or saved for a multi-track selection.
 - [x] Native tags for what the lookup returns: title, artist and album artist

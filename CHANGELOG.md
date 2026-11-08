@@ -16,7 +16,11 @@ version, so `info.json` says `0.4.0` and the package is named
   request now includes MusicBrainz's own error text instead of just the status.
 - **Multi-track fill** — selecting several files and pressing **Fill from
   MusicBrainz** fills each matching disc/track and saves those tracks
-  immediately; the confirmation says so because Cancel cannot undo it.
+  immediately when **Apply selected** is clicked; the checkbox list is the
+  confirmation, and Cancel cannot undo it.
+- **Disc/track matching** — files with no disc tag are matched to the first
+  disc, a single-disc release matches by track number alone, and releases whose
+  track positions are not plain numbers (vinyl A1/B1) use the medium position.
 - **Per-field selection** — Fill now lists every differing field with a
   checkbox. Apply selected stages only the ticked fields for one track, or
   saves only those fields for a multi-track selection.
