@@ -425,6 +425,110 @@
     }
 
     /**
+     * The values the Track Properties dialog should stage for one track, before
+     * anything is saved. Matched by disc and track number like the album plan;
+     * values that already match are left out.
+     *
+     * @returns {Promise<{matched: boolean, releaseTitle: string,
+     *   native: Object, tags: Array<{title: string, value: string}>,
+     *   labels: string[]}>}
+     */
+    async function buildPendingAsync(track, release) {
+        var described = describeRelease(release);
+        var disc = leadingInt(track.discNumber);
+        var number = leadingInt(track.trackNumber);
+        var item = null;
+
+        for (var i = 0; i < described.tracks.length; i++) {
+            if (described.tracks[i].disc === disc && described.tracks[i].track === number) {
+                item = described.tracks[i];
+                break;
+            }
+        }
+
+        var result = {
+            matched: !!item,
+            releaseTitle: text(release && release.title),
+            native: {},
+            tags: [],
+            labels: []
+        };
+
+        if (!item) return result;
+
+        var tags = [];
+        try {
+            tags = parseTags(await track.getExtendedTagsAsync()) || [];
+        } catch (e) {
+            tags = [];
+        }
+
+        NATIVE_FIELDS.forEach(function (def) {
+            var value = text(item.values[def.key]);
+            if (!value) return;
+
+            var current = def.kind === 'date'
+                ? isoFromMmDate(track[def.native])
+                : text(track[def.native]);
+
+            if (normalizeText(value) === normalizeText(current)) return;
+
+            result.native[def.native] = def.kind === 'date' ? mmDateFromIso(value) : value;
+            result.labels.push(def.label + ': ' + value);
+        });
+
+        TAG_FIELDS.forEach(function (def) {
+            var value = text(def.scope === 'album' ? item.albumTags[def.tag] : item.trackTags[def.tag]);
+            if (!value) return;
+            if (normalizeText(value) === normalizeText(tagValue(tags, def.tag))) return;
+
+            result.tags.push({ title: def.tag, value: value });
+            result.labels.push(def.label + ': ' + value);
+        });
+
+        return result;
+    }
+
+    /** Stages native fields on the track; Track Properties commits them on OK. */
+    function applyNative(track, pending) {
+        var props = Object.keys((pending && pending.native) || {});
+        if (!props.length) return 0;
+
+        if (track.beginUpdate) track.beginUpdate();
+        props.forEach(function (prop) {
+            track[prop] = pending.native[prop];
+        });
+        if (track.endUpdate) track.endUpdate();
+
+        return props.length;
+    }
+
+    /**
+     * Stages a track's values on the dialog's track without committing: native
+     * properties plus a merge into its extended tags. The Track Properties OK
+     * button performs the save.
+     */
+    async function applyPendingAsync(track, pending) {
+        if (!pending || !pending.matched) return 0;
+
+        var writes = pending.tags || [];
+        var written = 0;
+
+        if (writes.length) {
+            var tags = parseTags(await track.getExtendedTagsAsync());
+            if (!Array.isArray(tags)) {
+                throw new Error(_('The extended tags of this track could not be read as JSON.'));
+            }
+
+            await track.setExtendedTagsAsync(JSON.stringify(mergeTags(tags, writes)));
+            written += writes.length;
+        }
+
+        written += applyNative(track, pending);
+        return written;
+    }
+
+    /**
      * Writes the ticked fields to every matched track.
      *
      * @returns {Promise<{tracks: number, failed: Array<{title: string, error: string}>}>}
@@ -504,6 +608,9 @@
     window.mbzApply = {
         describeRelease: describeRelease,
         buildPlanAsync: buildPlanAsync,
+        buildPendingAsync: buildPendingAsync,
+        applyPendingAsync: applyPendingAsync,
+        applyNative: applyNative,
         applyAsync: applyAsync,
         mergeTags: mergeTags,
         parseTags: parseTags

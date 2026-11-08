@@ -25,6 +25,8 @@
  */
 
 localRequirejs('mbzMbgid');
+localRequirejs('mbzFetch');
+localRequirejs('mbzApply');
 
 var MBZ_EXT_ENTITY_LABELS = {
     release: _('release'),
@@ -1416,6 +1418,104 @@ function mbzExtSaveGroupAsync(track, mbz) {
     });
 }
 
+/**
+ * Fills the open dialog's track from the release behind its album ID. The
+ * fetched values are staged on the track: native fields are assigned and the
+ * extended tags are merged into its current array, but nothing is committed.
+ * The dialog's own OK button performs the save.
+ *
+ * Matching is by disc and track number, and values that already match are left
+ * out. An album without Albums.MBGID is reported without a request.
+ */
+function mbzExtFillFromRelease(ui, track, dialog) {
+    var fetch = window.mbzFetch;
+    var apply = window.mbzApply;
+    var mbz = window.mbzMbgid;
+
+    if (!ui || !ui.fillButton) return;
+
+    if (!fetch || !apply || !mbz) {
+        if (ui.fillStatus) {
+            ui.fillStatus.textContent = _('The MusicBrainz modules did not load. Check debug.log for lines starting with "Loves MBz:".');
+        }
+        return;
+    }
+
+    if (ui.fillButton.classList.contains('mbzExtBusy')) return;
+    ui.fillButton.classList.add('mbzExtBusy');
+    if (ui.fillStatus) ui.fillStatus.textContent = _('Reading the release...');
+
+    function finish() {
+        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+    }
+
+    var albumId = parseInt(track.idalbum, 10);
+
+    dialog.localPromise(fetch.previewAsync(albumId)).then(function (result) {
+        if (window._cleanUpCalled) return;
+
+        if (result.skipped) {
+            if (ui.fillStatus) {
+                ui.fillStatus.textContent = result.reason === 'no-album'
+                    ? _('This track has no album, so there is nothing to look up.')
+                    : _('This album has no MusicBrainz release ID. Nothing was requested.');
+            }
+            return;
+        }
+
+        return apply.buildPendingAsync(track, result.release).then(function (pending) {
+            if (window._cleanUpCalled) return;
+
+            if (!pending.matched) {
+                if (ui.fillStatus) ui.fillStatus.textContent = _('This track has no matching disc and track number in the release.');
+                return;
+            }
+
+            if (!pending.labels.length) {
+                if (ui.fillStatus) ui.fillStatus.textContent = _('MusicBrainz already matches this track.');
+                return;
+            }
+
+            var lines = pending.labels.slice(0, 10).join('\n');
+            if (pending.labels.length > 10) lines += '\n\u2026';
+
+            messageDlg(
+                sprintf(_('Fill %d field(s) on this track from "%s"?\n\n%s\n\nNothing is saved until you click OK.'),
+                    pending.labels.length, pending.releaseTitle || '', lines),
+                _('MusicBrainz'),
+                ['btnYes', 'btnNo'],
+                { defaultButton: 'btnNo' },
+                function (choice) {
+                    if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
+
+                    dialog.localPromise(apply.applyPendingAsync(track, pending)).then(function (written) {
+                        if (window._cleanUpCalled) return;
+
+                        mbzExtMarkChanged();
+
+                        if (ui.fillStatus) {
+                            ui.fillStatus.textContent = sprintf(_('Staged %d field(s). Click OK to save.'), written);
+                        }
+
+                        return track.getExtendedTagsAsync().then(function (text) {
+                            var tags = mbz.parseExtendedTags(text);
+                            if (tags) mbzExtRender(ui, tags, false, mbz);
+                        });
+                    }, function (error) {
+                        if (window._cleanUpCalled) return;
+                        if (ui.fillStatus) {
+                            ui.fillStatus.textContent = sprintf(_('Could not stage the release: %s'), mbzExtErrorText(error));
+                        }
+                    });
+                });
+        });
+    }, function (error) {
+        if (!window._cleanUpCalled && ui.fillStatus) {
+            ui.fillStatus.textContent = sprintf(_('Could not read the release: %s'), mbzExtErrorText(error));
+        }
+    }).then(finish, finish);
+}
+
 propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     var mbz = window.mbzMbgid;
     var main = qid('tabLovesMBzContent');
@@ -1428,6 +1528,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         rows: qeid(main, 'mbzExtRows'),
         empty: qeid(main, 'mbzExtEmpty'),
         status: qeid(main, 'mbzExtStatus'),
+        fillBar: qeid(main, 'mbzExtFillBar'),
+        fillButton: qeid(main, 'mbzExtFillButton'),
+        fillStatus: qeid(main, 'mbzExtFillStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
         suggest: qeid(main, 'mbzExtSuggestBar'),
         diverge: qeid(main, 'mbzExtDivergeBar'),
@@ -1467,6 +1570,12 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     var readOnly = !!window.isReadOnly;
     if (readOnly) ui.status.textContent = _('Read-only mode: links work, editing is disabled.');
     if (ui.applyBar) ui.applyBar.style.display = (dialog.isGroup && !readOnly) ? '' : 'none';
+
+    if (ui.fillBar) ui.fillBar.style.display = (dialog.isGroup || readOnly) ? 'none' : '';
+    if (ui.fillStatus) ui.fillStatus.textContent = '';
+    mbzExtListen(dialog, ui.fillButton, 'click', function () {
+        mbzExtFillFromRelease(ui, track, dialog);
+    });
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);

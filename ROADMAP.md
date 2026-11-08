@@ -64,6 +64,9 @@ never by title.
       being queried.
 - [x] Write step: current value against fetched value per field, one checkbox
       per field, nothing written until **Apply**.
+- [x] Fill from MusicBrainz in the Track Properties tab: stages the release's
+      native fields and extended tags on the open track, with OK as the save
+      gate. The dialog's own inputs are not rewritten.
 - [x] Native tags for what the lookup returns: title, artist, album artist,
       date, original date, publisher (label), ISRC.
 - [ ] Relational native tags — genre, composer, lyricist, conductor, producer,

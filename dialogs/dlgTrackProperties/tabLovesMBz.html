@@ -36,6 +36,10 @@
         .mbzExtValue.mbzExtInvalid {
             outline: 1px solid #d9534f;
         }
+        .mbzExtBusy {
+            opacity: 0.5;
+            pointer-events: none;
+        }
         .mbzExtAdd {
             align-items: center;
             gap: 6px;
@@ -122,6 +126,11 @@
     <div class="flex column stretchWidth stretchHeight" style="gap: 6px;">
         <label data-id="mbzExtIntro" class="mbzExtIntro"></label>
         <label data-id="mbzExtSummary"></label>
+
+        <div class="flex row" data-id="mbzExtFillBar" style="align-items: center; gap: 6px;">
+            <div class="button" data-id="mbzExtFillButton" data-localize>Fill from MusicBrainz</div>
+            <label data-id="mbzExtFillStatus" class="mbzExtIntro fill"></label>
+        </div>
 
         <!-- Shown only for a multi-track selection: MediaMonkey rebuilds the
              dialog's modified/tagModified flags from checked Checkbox controls

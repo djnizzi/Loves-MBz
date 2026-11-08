@@ -229,6 +229,18 @@ never writes the album or artist database fields; only the warning strip below
 does, and only after a confirmation — except when it fills an empty library
 field, which overwrites nothing and happens immediately.
 
+**Fill from MusicBrainz** above the list stages the release behind the album's
+`Albums.MBGID` onto the dialog's track: native fields (album artist, date,
+original date, label, title, artist, ISRC) and the extended tags, including
+`discogs_url`. It shows what will change and asks first; values that already
+match are skipped, and the track is matched to the release by disc and track
+number. Nothing is saved until you click **OK** in Track Properties, which is
+what commits the staged values. The button is hidden for group selections and
+in Party Mode, and an album without a release ID is reported without a request.
+
+The dialog's built-in fields are not rewritten, so the Year box can keep showing
+the old value until the dialog is reopened; the staged date is what OK saves.
+
 A track with no MusicBrainz extended tags is not a dead end. Use **Add tag** at
 the bottom of the tab: pick the tag, type a value and click **Add** — the new
 row is marked *(not saved yet)* and is written when you click **OK**, under the
@@ -360,6 +372,13 @@ must support extended tags — formats such as WAV may discard them.
   artist write rebuilds them, because the artist column is keyed by song.
   Nothing in this dialog writes to tags, files or anything outside those two
   tables; the Track Properties tab is the separate path for per-track tags.
+- **Fill from MusicBrainz** — the tab's button asks `mbzFetch` for the album's
+  release, then `mbzApply.buildPendingAsync` returns the values that differ for
+  this disc/track. `applyPendingAsync` stages them without committing: native
+  fields are assigned (dates converted to `YYYYMMDD`) and the extended tags are
+  merged with `mergeTags` through `setExtendedTagsAsync`. The dialog's OK button
+  saves, and `mbzExtMarkChanged` marks the dialog dirty so the staged tags are
+  included.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
