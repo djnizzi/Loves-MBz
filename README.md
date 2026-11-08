@@ -153,12 +153,13 @@ matching MusicBrainz page:
 | `MUSICBRAINZ_WORKID` | work |
 | `MUSICBRAINZ_LABELID` | label |
 
-A value containing several IDs (`;`, `,`, `/` or whitespace separated) gets one
-link per ID, each labelled with the start of its own ID. This matters for MP3:
-ID3v2.3 has no repeated text frames, so MediaMonkey writes several artist IDs
-into one value joined with `/` (`8d1a1d1e…/9b7e2d41…`), and the tab lists a link
-for each one. Editing such a value keeps `/` as its separator instead of
-rewriting it to `;`, which other players would read as a single malformed ID.
+A value containing several IDs (`;`, `,`, `/` or whitespace separated) is shown
+as one row per ID, each editable and each with its own link. This matters for
+MP3: ID3v2.3 has no repeated text frames, so MediaMonkey writes several artist
+IDs into one value joined with `/` (`8d1a1d1e…/9b7e2d41…`). Clearing one row
+drops that artist and keeps the rest; on **OK** the rows are merged back into the
+single stored value, using the `/` separator the file already had instead of
+rewriting it to `;`, which other players would read as one malformed ID.
 On ID tags, values that are not UUIDs are kept, marked **Not a valid MusicBrainz
 ID**, and not linked. Non-ID MusicBrainz tags (album
 status/type/country/date, disc ID) are listed without a link.

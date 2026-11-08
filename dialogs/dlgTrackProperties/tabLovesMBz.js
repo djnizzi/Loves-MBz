@@ -743,8 +743,46 @@ function mbzExtUpdateSummary(ui) {
         : sprintf(_('%d MusicBrainz extended tags.'), mbzExtRows.length);
 }
 
+/**
+ * A stored ID tag can hold several IDs in one value — 'id1/id2' is how an
+ * ID3v2.3 file keeps several artists. Those are shown as one editable row per
+ * ID and merged back into the single stored value when the tab is saved.
+ */
+function mbzExtSplitValue(mbz, title, value) {
+    if (!mbz || typeof mbz.extendedTagGuids !== 'function') return null;
+
+    var info = mbz.musicBrainzTagInfo(title);
+    if (!info || !info.entity) return null;
+
+    var parsed = mbz.extendedTagGuids(value);
+    if (parsed.invalid.length || parsed.ids.length < 2) return null;
+
+    return {
+        ids: parsed.ids,
+        separator: typeof mbz.extendedTagSeparator === 'function'
+            ? mbz.extendedTagSeparator(value)
+            : '; '
+    };
+}
+
 function mbzExtRowValue(row) {
     if (!row) return '';
+
+    // The split rows are the live source; a cleared row simply drops its ID
+    // from the value that the remaining rows join back into.
+    if (row.parts && row.parts.length) {
+        var values = [];
+
+        row.parts.forEach(function (part) {
+            var text = String(part.input
+                ? part.input.value
+                : (part.value === undefined ? '' : part.value));
+            if (text.trim()) values.push(text.trim());
+        });
+
+        return values.join(row.partsSeparator || '; ');
+    }
+
     if (row.input) return row.input.value;
     return row.pendingValue !== undefined ? row.pendingValue : row.originalValue;
 }
@@ -842,32 +880,32 @@ function mbzExtEntityLabel(entity) {
     return MBZ_EXT_ENTITY_LABELS[entity] || entity;
 }
 
-function mbzExtRenderLinks(row) {
+function mbzExtRenderLinkCell(input, linkCell, info) {
     var mbz = window.mbzMbgid;
-    if (!mbz || !row || !row.linkCell || !row.input) return;
+    if (!mbz || !linkCell || !input) return;
 
-    var isIdTag = !!(row.info && row.info.entity);
-    var parsed = isIdTag ? mbz.extendedTagGuids(row.input.value) : { ids: [], invalid: [] };
+    var isIdTag = !!(info && info.entity);
+    var parsed = isIdTag ? mbz.extendedTagGuids(input.value) : { ids: [], invalid: [] };
     var invalid = parsed.invalid.length > 0;
 
-    if (row.input.classList) {
-        if (invalid) row.input.classList.add('mbzExtInvalid');
-        else row.input.classList.remove('mbzExtInvalid');
+    if (input.classList) {
+        if (invalid) input.classList.add('mbzExtInvalid');
+        else input.classList.remove('mbzExtInvalid');
     }
 
-    row.linkCell.textContent = '';
+    linkCell.textContent = '';
 
     if (isIdTag) {
-        // One artist ID per line: a value such as 'id1/id2' (ID3v2.3 stores
-        // several artists that way) would otherwise draw identical links the
-        // user cannot tell apart.
+        // One link per ID: a value such as 'id1/id2' (ID3v2.3 stores several
+        // artists that way) would otherwise draw identical links the user
+        // cannot tell apart.
         var many = parsed.ids.length > 1;
 
         parsed.ids.forEach(function (guid, index) {
-            var url = mbz.musicBrainzUrl(row.info.entity, guid);
+            var url = mbz.musicBrainzUrl(info.entity, guid);
             if (!url) return;
 
-            if (many && index > 0) row.linkCell.appendChild(document.createElement('br'));
+            if (many && index > 0) linkCell.appendChild(document.createElement('br'));
 
             var link = document.createElement('a');
             link.href = '#';
@@ -876,18 +914,23 @@ function mbzExtRenderLinks(row) {
             link.title = url;
             link.textContent = many
                 ? mbzExtShortGuid(guid) + ' \u2197'
-                : mbzExtEntityLabel(row.info.entity) + ' \u2197';
-            row.linkCell.appendChild(link);
+                : mbzExtEntityLabel(info.entity) + ' \u2197';
+            linkCell.appendChild(link);
         });
     }
 
-    if (invalid && row.input.value.trim()) {
+    if (invalid && input.value.trim()) {
         var warning = document.createElement('span');
         warning.className = 'mbzExtWarning';
         warning.textContent = _('Not a valid MusicBrainz ID');
         warning.title = parsed.invalid.join(', ');
-        row.linkCell.appendChild(warning);
+        linkCell.appendChild(warning);
     }
+}
+
+function mbzExtRenderLinks(row) {
+    if (!row) return;
+    mbzExtRenderLinkCell(row.input, row.linkCell, row.info);
 }
 
 function mbzExtValueForSave(row, mbz) {
@@ -978,6 +1021,8 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
 function mbzExtRenderRows(ui, readOnly) {
     if (!ui) return;
 
+    var mbz = window.mbzMbgid;
+
     ui.rows.textContent = '';
 
     // The All tracks column only means something for a group selection.
@@ -985,72 +1030,104 @@ function mbzExtRenderRows(ui, readOnly) {
     if (ui.applyHead) ui.applyHead.style.display = showApply ? '' : 'none';
 
     mbzExtRows.forEach(function (row, index) {
-        var tr = document.createElement('tr');
-        if (row.isNew) tr.className = 'mbzExtNew';
+        var sourceValue = row.pendingValue !== undefined ? row.pendingValue : row.originalValue;
+        var split = mbzExtSplitValue(mbz, row.title, sourceValue);
+        var partCount = split ? split.ids.length : 1;
 
-        if (showApply) {
-            var applyCell = document.createElement('td');
-            applyCell.className = 'mbzExtApplyCell';
+        // Reset the per-render handles first: a row that is no longer split
+        // must not keep pointing at an input from the previous render.
+        row.parts = split ? [] : null;
+        row.partsSeparator = split ? split.separator : '';
+        row.input = null;
+        row.linkCell = null;
+        row.applyInput = null;
 
-            var apply = document.createElement('input');
-            apply.type = 'checkbox';
-            apply.className = 'mbzExtApply';
-            apply.checked = !row.isNew && row.missingCount === 0;
-            apply.disabled = readOnly || row.isNew || row.missingCount === 0;
-            apply.setAttribute('data-row', String(index));
-            apply.title = row.isNew
-                ? _('A new tag is written to every selected track.')
-                : (row.missingCount > 0
-                    ? sprintf(_('Apply this value to the %d selected tracks that have no such tag.'), row.missingCount)
-                    : _('Every selected track already has this tag with this value.'));
+        for (var part = 0; part < partCount; part++) {
+            var first = part === 0;
+            var tr = document.createElement('tr');
+            if (first && row.isNew) tr.className = 'mbzExtNew';
 
-            applyCell.appendChild(apply);
-            row.applyInput = apply;
-            tr.appendChild(applyCell);
+            if (showApply) {
+                var applyCell = document.createElement('td');
+                applyCell.className = 'mbzExtApplyCell';
+
+                // The box belongs to the tag, not to one of its artists, so
+                // only the first of a split tag carries it.
+                if (first) {
+                    var apply = document.createElement('input');
+                    apply.type = 'checkbox';
+                    apply.className = 'mbzExtApply';
+                    apply.checked = !row.isNew && row.missingCount === 0;
+                    apply.disabled = readOnly || row.isNew || row.missingCount === 0;
+                    apply.setAttribute('data-row', String(index));
+                    apply.title = row.isNew
+                        ? _('A new tag is written to every selected track.')
+                        : (row.missingCount > 0
+                            ? sprintf(_('Apply this value to the %d selected tracks that have no such tag.'), row.missingCount)
+                            : _('Every selected track already has this tag with this value.'));
+
+                    applyCell.appendChild(apply);
+                    row.applyInput = apply;
+                }
+
+                tr.appendChild(applyCell);
+            }
+
+            var nameCell = document.createElement('td');
+
+            if (first) {
+                var title = document.createElement('div');
+                title.className = 'mbzExtTitle';
+                title.textContent = row.title;
+                nameCell.appendChild(title);
+
+                // The raw tag name is self-explanatory, so only the state of a
+                // row is spelled out under it; a plain row is a single line.
+                var notes = [];
+                if (row.isNew) notes.push(_('(not saved yet)'));
+                if (!row.isNew && row.missingCount > 0 && mbzExtGroup) {
+                    notes.push(sprintf(_('(missing on %d of %d tracks)'), row.missingCount, mbzExtGroup.trackCount));
+                }
+
+                if (notes.length) {
+                    var label = document.createElement('div');
+                    label.className = 'mbzExtLabel';
+                    label.textContent = notes.join(' ');
+                    nameCell.appendChild(label);
+                }
+            }
+
+            tr.appendChild(nameCell);
+
+            var valueCell = document.createElement('td');
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'mbzExtValue';
+            input.value = split
+                ? split.ids[part]
+                : String(sourceValue === undefined || sourceValue === null ? '' : sourceValue);
+            input.spellcheck = false;
+            input.autocomplete = 'off';
+            input.disabled = readOnly;
+            input.setAttribute('data-row', String(index));
+            if (partCount > 1) input.setAttribute('data-part', String(part));
+            valueCell.appendChild(input);
+            tr.appendChild(valueCell);
+
+            var linkCell = document.createElement('td');
+            linkCell.className = 'mbzExtLinks';
+            mbzExtRenderLinkCell(input, linkCell, row.info);
+            tr.appendChild(linkCell);
+
+            if (split) row.parts.push({ input: input, linkCell: linkCell });
+
+            if (first) {
+                row.input = input;
+                row.linkCell = linkCell;
+            }
+
+            ui.rows.appendChild(tr);
         }
-
-        var nameCell = document.createElement('td');
-        var title = document.createElement('div');
-        title.className = 'mbzExtTitle';
-        title.textContent = row.title;
-        nameCell.appendChild(title);
-
-        // The raw tag name is self-explanatory, so only the state of a row is
-        // spelled out under it; a plain row is a single line.
-        var notes = [];
-        if (row.isNew) notes.push(_('(not saved yet)'));
-        if (!row.isNew && row.missingCount > 0 && mbzExtGroup) {
-            notes.push(sprintf(_('(missing on %d of %d tracks)'), row.missingCount, mbzExtGroup.trackCount));
-        }
-
-        if (notes.length) {
-            var label = document.createElement('div');
-            label.className = 'mbzExtLabel';
-            label.textContent = notes.join(' ');
-            nameCell.appendChild(label);
-        }
-
-        var valueCell = document.createElement('td');
-        var input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'mbzExtValue';
-        input.value = row.pendingValue !== undefined ? row.pendingValue : row.originalValue;
-        input.spellcheck = false;
-        input.autocomplete = 'off';
-        input.disabled = readOnly;
-        input.setAttribute('data-row', String(index));
-        valueCell.appendChild(input);
-        row.input = input;
-
-        var linkCell = document.createElement('td');
-        linkCell.className = 'mbzExtLinks';
-        row.linkCell = linkCell;
-        mbzExtRenderLinks(row);
-
-        tr.appendChild(nameCell);
-        tr.appendChild(valueCell);
-        tr.appendChild(linkCell);
-        ui.rows.appendChild(tr);
     });
 
     mbzExtRenderSuggestions(ui, readOnly);
@@ -1076,6 +1153,19 @@ function mbzExtOnInput(event) {
     var index = parseInt(input.getAttribute('data-row'), 10);
     var row = mbzExtRows[index];
     if (!row) return;
+
+    var part = parseInt(input.getAttribute('data-part'), 10);
+
+    if (row.parts && part >= 0 && row.parts[part]) {
+        row.parts[part].value = input.value;
+        // The merged value is what the status line and the save compare.
+        row.pendingValue = mbzExtRowValue(row);
+        mbzExtMarkChanged();
+        mbzExtRenderLinkCell(input, row.parts[part].linkCell, row.info);
+        mbzExtUpdateStatus();
+        mbzExtRenderDivergence(mbzExtUI, false);
+        return;
+    }
 
     row.pendingValue = input.value;
     mbzExtMarkChanged();
@@ -1238,13 +1328,15 @@ function mbzExtSaveGroupAsync(track, mbz) {
                 row.isNew = false;
                 row.applyToAll = false;
                 if (!entry.deleted) row.missingCount = 0;
-                if (row.input) row.input.value = row.originalValue;
-                if (row.applyInput && row.applyInput.setAttribute) {
-                    row.applyInput.checked = row.missingCount === 0;
-                    row.applyInput.disabled = row.missingCount === 0;
-                }
             });
         });
+
+        // Rebuilding re-splits a merged artist value, so a row the user cleared
+        // is gone and the remaining IDs are one row each again.
+        if (mbzExtUI) {
+            mbzExtRenderRows(mbzExtUI, false);
+            mbzExtUpdateStatus();
+        }
 
         mbzExtRenderDivergence(mbzExtUI, false);
     })().catch(function (error) {
@@ -1415,7 +1507,6 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
                 if (row.title !== edit.title || row.occurrence !== edit.occurrence) return;
                 row.originalValue = edit.value;
                 row.pendingValue = edit.value;
-                if (row.input && row.input.value !== edit.value) row.input.value = edit.value;
             });
         });
 
@@ -1431,8 +1522,13 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
             row.isNew = false;
             row.originalValue = value;
             row.pendingValue = value;
-            if (row.input) row.input.value = value;
         });
+
+        // Re-split what was written, so the rows match the stored value.
+        if (mbzExtUI) {
+            mbzExtRenderRows(mbzExtUI, false);
+            mbzExtUpdateStatus();
+        }
     })().catch(function (error) {
         // The properties dialog has no rejection path for saveAsync. Report the
         // failure and resolve so the modal cannot be left in a stuck state.
