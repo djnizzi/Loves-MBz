@@ -142,39 +142,8 @@
             text-align: right;
             white-space: normal;
         }
-        /* Draw the checkbox in the skin's text colour instead of the
-           browser's white control box. */
-        .mbzExtFillField input[type="checkbox"] {
-            -webkit-appearance: none;
-            appearance: none;
+        .mbzExtFillField > [data-control-class="Checkbox"] {
             flex: 0 0 auto;
-            width: 14px;
-            height: 14px;
-            margin: 0;
-            border: 1px solid currentColor;
-            border-radius: 2px;
-            background: transparent;
-            opacity: 0.7;
-            position: relative;
-            cursor: pointer;
-        }
-        .mbzExtFillField input[type="checkbox"]:hover,
-        .mbzExtFillField input[type="checkbox"]:checked {
-            opacity: 1;
-        }
-        .mbzExtFillField input[type="checkbox"]:checked {
-            background-color: rgba(128, 128, 128, 0.18);
-        }
-        .mbzExtFillField input[type="checkbox"]:checked::after {
-            content: "";
-            position: absolute;
-            left: 4px;
-            top: 1px;
-            width: 3px;
-            height: 7px;
-            border: solid currentColor;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
         }
     </style>
 

@@ -1637,25 +1637,27 @@ function mbzExtShowFillPlan(ui, state) {
     ui.fillFields.textContent = '';
 
     (state.fields || []).forEach(function (field, index) {
-        var row = document.createElement('label');
+        var row = document.createElement('div');
         row.className = 'flex row mbzExtFillField';
 
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = true;
-        input.setAttribute('data-fill-index', String(index));
-
-        var name = document.createElement('span');
-        name.textContent = field.label;
+        // Use MediaMonkey's own Checkbox control, the same one as
+        // "Save MusicBrainz tags", instead of a browser checkbox.
+        var box = document.createElement('div');
+        box.setAttribute('data-control-class', 'Checkbox');
+        box.setAttribute('data-id', 'mbzExtFillField' + index);
+        box.setAttribute('data-fill-index', String(index));
+        box.textContent = field.label;
 
         var value = document.createElement('span');
         value.className = 'mbzExtFillFieldValue';
         value.textContent = field.display || field.value || '';
 
-        row.appendChild(input);
-        row.appendChild(name);
+        row.appendChild(box);
         row.appendChild(value);
         ui.fillFields.appendChild(row);
+
+        if (typeof initializeControl === 'function') initializeControl(box);
+        if (box.controlClass) box.controlClass.checked = true;
     });
 }
 
@@ -1674,11 +1676,14 @@ function mbzExtFillSelectedKeys(ui) {
     var state = mbzExtFillPlanState;
     if (!ui || !ui.fillFields || !state) return keys;
 
-    var inputs = ui.fillFields.querySelectorAll('input[data-fill-index]');
-    for (var i = 0; i < inputs.length; i++) {
-        if (!inputs[i].checked) continue;
+    var boxes = ui.fillFields.querySelectorAll('[data-fill-index]');
+    for (var i = 0; i < boxes.length; i++) {
+        var checked = boxes[i].controlClass
+            ? boxes[i].controlClass.checked
+            : boxes[i].checked;
+        if (!checked) continue;
 
-        var index = parseInt(inputs[i].getAttribute('data-fill-index'), 10);
+        var index = parseInt(boxes[i].getAttribute('data-fill-index'), 10);
         if (state.fields[index]) keys.push(state.fields[index].key);
     }
 
