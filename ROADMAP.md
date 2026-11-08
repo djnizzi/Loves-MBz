@@ -70,7 +70,9 @@ never by title.
 - [ ] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
       `originalyear`, album type/status/country, `CATALOGNUMBER`, and
-      `discogs_url` from the release's Discogs URL relationship.
+      `discogs_url` from the release's Discogs URL relationship. `discogs_url`
+      is a plain extended tag, so it stays out of the add-on tab and shows in
+      MediaMonkey's built-in Custom tab.
 - [ ] Writes go through `track.commitAsync()`; the tag/library disagreement
       strip is extended so a fetched ID cannot silently overwrite a tag.
 - [ ] Cache a fetched release for the session, so reopening the dialog for the
