@@ -863,15 +863,18 @@
     }
 
     /**
-     * Splits an extended-tag value into canonical MBIDs. Picard can write
-     * several IDs into one value, separated by ';', ',' or whitespace.
+     * Splits an extended-tag value into canonical MBIDs. Picard writes several
+     * IDs into one value when the file format cannot repeat the field; ID3v2.3
+     * is the common case, and there the IDs are joined with '/'. MediaMonkey
+     * stores what the file holds, so one value can arrive as 'a/b', 'a; b' or
+     * 'a, b'.
      *
      * @param {*} value
      * @returns {{ids: string[], invalid: string[]}}
      */
     function extendedTagGuids(value) {
         var parts = String(value === undefined || value === null ? '' : value)
-            .split(/[\s;,]+/);
+            .split(/[\s;,/]+/);
         var ids = [];
         var invalid = [];
         var seen = {};
@@ -888,6 +891,22 @@
         }
 
         return { ids: ids, invalid: invalid };
+    }
+
+    /**
+     * The separator a multi-ID value already uses, so an edited value is
+     * written back the way MediaMonkey had it. An ID3v2.3 value joins its IDs
+     * with '/', while a Vorbis-style tag keeps them in separate entries and any
+     * value typed by hand is normalised to '; '.
+     *
+     * @param {*} value  the value as it was read
+     * @returns {string}
+     */
+    function extendedTagSeparator(value) {
+        var text = String(value === undefined || value === null ? '' : value);
+        if (/[;,]/.test(text)) return '; ';
+        if (text.indexOf('/') >= 0) return '/';
+        return '; ';
     }
 
     function musicBrainzUrl(entity, guid) {
@@ -1138,6 +1157,7 @@
         suggestNativeExtendedTags: suggestNativeExtendedTags,
         isMusicBrainzExtendedTag: isMusicBrainzExtendedTag,
         extendedTagGuids: extendedTagGuids,
+        extendedTagSeparator: extendedTagSeparator,
         musicBrainzUrl: musicBrainzUrl,
         parseExtendedTags: parseExtendedTags,
         applyExtendedTagEdits: applyExtendedTagEdits,

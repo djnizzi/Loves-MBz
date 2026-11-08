@@ -153,9 +153,14 @@ matching MusicBrainz page:
 | `MUSICBRAINZ_WORKID` | work |
 | `MUSICBRAINZ_LABELID` | label |
 
-A value containing several IDs (`;`, `,` or whitespace separated) gets one link
-per ID. On ID tags, values that are not UUIDs are kept, marked **Not a valid
-MusicBrainz ID**, and not linked. Non-ID MusicBrainz tags (album
+A value containing several IDs (`;`, `,`, `/` or whitespace separated) gets one
+link per ID, each labelled with the start of its own ID. This matters for MP3:
+ID3v2.3 has no repeated text frames, so MediaMonkey writes several artist IDs
+into one value joined with `/` (`8d1a1d1e…/9b7e2d41…`), and the tab lists a link
+for each one. Editing such a value keeps `/` as its separator instead of
+rewriting it to `;`, which other players would read as a single malformed ID.
+On ID tags, values that are not UUIDs are kept, marked **Not a valid MusicBrainz
+ID**, and not linked. Non-ID MusicBrainz tags (album
 status/type/country/date, disc ID) are listed without a link.
 
 Edit a value and click **OK** to write it back; an empty value removes that tag.
@@ -279,7 +284,10 @@ must support extended tags — formats such as WAV may discard them.
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
   from `mbzMbgid.musicBrainzUrl` and opens them with `uitools.openWeb`. On OK it
   re-reads the whole array and merges changed rows by exact tag name and
-  occurrence, so duplicate artist IDs and the built-in Custom tab are safe. In
+  occurrence, so duplicate artist IDs and the built-in Custom tab are safe. It
+  writes only `Songs.ExtendedTags`; MediaMonkey writes the file from that array,
+  so a repeated artist ID becomes repeated fields in FLAC and one `/`-joined
+  value in an ID3v2.3 MP3. In
   group mode it reads each selected song's row, shows only tags with one
   identical stored name and value across the selection, and sends a
   deletion-aware patch through the group track.

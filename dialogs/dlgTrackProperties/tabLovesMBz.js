@@ -858,16 +858,25 @@ function mbzExtRenderLinks(row) {
     row.linkCell.textContent = '';
 
     if (isIdTag) {
-        parsed.ids.forEach(function (guid) {
+        // One artist ID per line: a value such as 'id1/id2' (ID3v2.3 stores
+        // several artists that way) would otherwise draw identical links the
+        // user cannot tell apart.
+        var many = parsed.ids.length > 1;
+
+        parsed.ids.forEach(function (guid, index) {
             var url = mbz.musicBrainzUrl(row.info.entity, guid);
             if (!url) return;
+
+            if (many && index > 0) row.linkCell.appendChild(document.createElement('br'));
 
             var link = document.createElement('a');
             link.href = '#';
             link.className = 'hotlink mbzExtLink';
             link.setAttribute('data-url', url);
             link.title = url;
-            link.textContent = mbzExtEntityLabel(row.info.entity) + ' \u2197';
+            link.textContent = many
+                ? mbzExtShortGuid(guid) + ' \u2197'
+                : mbzExtEntityLabel(row.info.entity) + ' \u2197';
             row.linkCell.appendChild(link);
         });
     }
@@ -887,7 +896,13 @@ function mbzExtValueForSave(row, mbz) {
 
     var parsed = mbz.extendedTagGuids(value);
     if (parsed.ids.length && !parsed.invalid.length) {
-        return parsed.ids.join('; ');
+        // Keep the shape the file already uses: MediaMonkey writes an ID3v2.3
+        // multi-artist value joined with '/', and converting it to '; ' would
+        // turn two artists into one unreadable ID for other players.
+        var separator = parsed.ids.length > 1 && typeof mbz.extendedTagSeparator === 'function'
+            ? mbz.extendedTagSeparator(row.originalValue)
+            : '; ';
+        return parsed.ids.join(separator);
     }
     return value;
 }
