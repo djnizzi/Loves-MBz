@@ -129,8 +129,8 @@ function mbzExtPopulateAddChoices(ui, mbz) {
     mbz.musicBrainzTagChoices().forEach(function (choice) {
         var option = document.createElement('option');
         option.value = choice.name;
-        option.textContent = choice.label + ' \u2014 ' + choice.name;
-        option.title = choice.name;
+        option.textContent = choice.name;
+        option.title = choice.label || choice.name;
         ui.addTag.appendChild(option);
     });
 
@@ -892,11 +892,12 @@ function mbzExtValueForSave(row, mbz) {
     return value;
 }
 
-function mbzExtGroupIntro(ui, readOnly) {
-    if (!ui) return;
+function mbzExtGroupIntro(ui) {
+    if (!ui || !ui.intro) return;
 
-    ui.intro.textContent = _('Showing MusicBrainz tags that have the same value on every selected track that stores them. Check All tracks on a tag to write it to the selected tracks that have none.')
-        + (readOnly ? '' : ' ' + _('Editing applies to all selected tracks.'));
+    // The table is self-explanatory; the hint only pushed the rows down.
+    ui.intro.textContent = '';
+    ui.intro.style.display = 'none';
 }
 
 function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
@@ -943,8 +944,10 @@ function mbzExtRender(ui, tags, readOnly, mbz, groupInfo) {
     ui.table.style.display = '';
     ui.empty.style.display = 'none';
 
+    ui.intro.style.display = '';
+
     if (groupInfo) {
-        mbzExtGroupIntro(ui, readOnly, groupInfo.trackCount);
+        mbzExtGroupIntro(ui);
     } else if (!readOnly) {
         ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. Edit a value and click OK to save it; clear a value to remove that tag.');
     }

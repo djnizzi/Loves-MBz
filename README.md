@@ -22,7 +22,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.7**.
+Current version: **0.3.8**.
 
 ---
 
@@ -376,6 +376,14 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.8
+- **Shorter Add tag picker** — the dropdown lists the MusicBrainz tag names only
+  instead of each name plus its description, so the value field beside it gets
+  the width. The description is still available as the option's tooltip.
+- The explanatory line above the table in a group selection is gone; the tab
+  opens straight onto the tags.
+- New icon artwork for the menu and the add-on.
 
 ### 0.3.7
 - **Group edits are saved** — with several tracks selected, MediaMonkey decides

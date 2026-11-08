@@ -7,10 +7,10 @@ account; **Agent** work is repo and documentation.
 
 ### Owner
 
-- [ ] **New icon.** Two files, same artwork: a square PNG (used as the add-on
-      icon; `info.json` currently points at `lovesMBz.svg`) and a 24×24 SVG for
-      the menu (`skin/icon/lovesMBz.svg`, drawn at `viewBox="0 0 24 24"`). Keep
-      the filenames so `init.js`, the menu action and `info.json` need no change.
+- [x] **New icon.** `skin/icon/lovesMBz.svg` redrawn (24×24, used as the menu
+      and add-on icon) and `loves-mbz.png` added, with the `.ai` source beside it.
+      The PNG is not packaged in the `.mmip` yet; switching `info.json`'s `icon`
+      to it is a one-line change if the bitmap is preferred.
 - [ ] **README cover.** A wide banner for the top of `README.md`, plus the square
       image for the addons listing. Suggested path `docs/cover.png`; the README
       gets the image tag once the file exists.
@@ -35,4 +35,6 @@ account; **Agent** work is repo and documentation.
 
 ## Backlog
 
-Nothing queued yet — add ideas here as they come up.
+- [ ] **MusicBrainz links in the track-list context menu** — right-click a track
+      in table view and open its release, release group or artist page directly.
+- Add ideas here as they come up.
