@@ -48,13 +48,14 @@ version, so `info.json` says `0.4.0` and the package is named
   opens as "No album is selected"; a reopened dialog clears the previous
   release before showing the new one. The album tracklist is read under a read
   lock, so the preview no longer fails with "Read lock not acquired!"; release
-  details, fields and tracks share one scrolling content pane, so long releases
-  scroll instead of overlapping the controls. The release details are arranged
-  as two label/value pairs per row, and the dialog opens at 1200×960 so more of
-  the release fits without resizing. Field rows use MediaMonkey's own
-  checkboxes and can be selected again. The native Date field is always offered,
-  separately from Original date, so the release date can be written to
-  MediaMonkey's own date.
+  details and fields sit above a native `scrollable fill` track list, the same
+  scrolling pattern as the MusicBrainz tab, so a 30-track release scrolls inside
+  the dialog instead of expanding it. The release details are arranged as two
+  label/value pairs per row, and the dialog opens at 1200×960 so more of the
+  release fits without resizing. Field rows use MediaMonkey's own checkboxes and
+  can be selected again. The native Date field is always offered, separately
+  from Original date, so the release date can be written to MediaMonkey's own
+  date.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the
