@@ -85,9 +85,10 @@ stale. Artist cells list every artist MBID for the track, separated by `; `.
 This dialog shows the native MBGID columns, not `Songs.ExtendedTags`; use
 **Track Properties → MusicBrainz** for the per-track extended tags.
 
-The column cache rebuilds itself when MediaMonkey commits a change, so releases
+The column cache rebuilds itself when MediaMonkey commits a change — re-reading
+only the album rows, track links and artists that the event names — so releases
 and artists matched through MediaMonkey's own MusicBrainz lookup show up in the
-columns without a restart.
+columns without a restart, even in a large library.
 
 ### Setting an ID
 

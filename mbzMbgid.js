@@ -13,7 +13,9 @@
  * Tracklist cells are rendered synchronously, so the IDs are preloaded once
  * into three lookup tables. The load is paged (`ID > lastId LIMIT n`) so a
  * large library does not block the UI; values that arrive after a view has
- * been painted are shown on the next refresh at the end of the load.
+ * been painted are shown on the next refresh at the end of the load. Later,
+ * change notifications refresh only the rows they name (see refreshAsync)
+ * rather than re-reading every table.
  *
  * The values '0' and '' mean "not matched in MusicBrainz" and are treated as
  * empty, which is how MediaMonkey itself uses '0'.
@@ -292,6 +294,145 @@
             }
             return startCacheLoad();
         })();
+    }
+
+    /**
+     * Positive, de-duplicated integer ids from a change notification.
+     */
+    function splitIds(ids) {
+        var result = [];
+
+        (ids || []).forEach(function (value) {
+            var id = parseInt(value, 10);
+            if (id > 0 && result.indexOf(id) < 0) result.push(id);
+        });
+
+        return result;
+    }
+
+    /**
+     * Re-reads the album rows named by ids. A row that lost its IDs is removed
+     * from the tables, so a cleared match stops showing in the columns.
+     */
+    async function refreshAlbumsAsync(albumIds) {
+        for (var start = 0; start < albumIds.length; start += LOOKUP_CHUNK_SIZE) {
+            var batch = albumIds.slice(start, start + LOOKUP_CHUNK_SIZE);
+            var res = await app.db.getQueryResultAsync(
+                'SELECT ID, MBGID, MBRGGID FROM Albums WHERE ID IN (' + batch.join(',') + ')');
+
+            while (!res.eof) {
+                var albumId = parseInt(res.fields.getValue(0), 10);
+
+                if (albumId > 0) {
+                    var releaseId = cleanGuid(res.fields.getValue(1));
+                    var releaseGroupId = cleanGuid(res.fields.getValue(2));
+
+                    if (releaseId) releaseIds.set(albumId, releaseId);
+                    else releaseIds.delete(albumId);
+
+                    if (releaseGroupId) releaseGroupIds.set(albumId, releaseGroupId);
+                    else releaseGroupIds.delete(albumId);
+                }
+
+                res.next();
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the per-song artist IDs for the songs matching whereSql, which
+     * must be a column of Songs (`s.ID` or `asg.IDArtist`). Songs that come
+     * back without a usable MBID are removed, which covers a cleared artist
+     * match as well as a song that moved to another artist.
+     */
+    async function refreshArtistRowsAsync(whereSql, ids) {
+        for (var start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+            var batch = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
+            var sql =
+                'SELECT s.ID AS SongID, group_concat(DISTINCT a.MBGID) AS MBGIDs' +
+                ' FROM Songs s' +
+                ' JOIN ArtistsSongs asg ON asg.IDSong = s.ID AND asg.PersonType = 1' +
+                ' JOIN Artists a ON a.ID = asg.IDArtist' +
+                ' WHERE ' + whereSql + ' IN (' + batch.join(',') + ')' +
+                ' GROUP BY s.ID';
+
+            var res = await app.db.getQueryResultAsync(sql);
+
+            while (!res.eof) {
+                var songId = parseInt(res.fields.getValue(0), 10);
+
+                if (songId > 0) {
+                    var guids = joinGuids(res.fields.getValue(1));
+
+                    if (guids) artistIdsBySong.set(songId, guids);
+                    else artistIdsBySong.delete(songId);
+                }
+
+                res.next();
+            }
+        }
+    }
+
+    /**
+     * Applies a change notification without touching the rest of the cache.
+     * Song ids are turned into album ids through the database, because a track
+     * edit can move a track to another album and the event only names the
+     * track. Artist ids re-read every song credited to that artist.
+     *
+     * @param {{songIds?: number[], albumIds?: number[], artistIds?: number[]}} change
+     * @returns {Promise<{albumIds: number[], songIds: number[], artistIds: number[]}>}
+     */
+    async function refreshAsync(change) {
+        var songIds = splitIds(change && change.songIds);
+        var albumIds = splitIds(change && change.albumIds);
+        var artistIds = splitIds(change && change.artistIds);
+        var errors = [];
+
+        if (songIds.length) {
+            try {
+                for (var start = 0; start < songIds.length; start += LOOKUP_CHUNK_SIZE) {
+                    var batch = songIds.slice(start, start + LOOKUP_CHUNK_SIZE);
+                    var res = await app.db.getQueryResultAsync(
+                        'SELECT IDAlbum FROM Songs WHERE ID IN (' + batch.join(',') + ')');
+
+                    while (!res.eof) {
+                        var albumId = parseInt(res.fields.getValue(0), 10);
+                        if (albumId > 0 && albumIds.indexOf(albumId) < 0) albumIds.push(albumId);
+                        res.next();
+                    }
+                }
+
+                await refreshArtistRowsAsync('s.ID', songIds);
+            } catch (e) {
+                errors.push('tracks: ' + (e && e.message ? e.message : e));
+            }
+        }
+
+        if (albumIds.length) {
+            try {
+                await refreshAlbumsAsync(albumIds);
+            } catch (e) {
+                errors.push('albums: ' + (e && e.message ? e.message : e));
+            }
+        }
+
+        if (artistIds.length) {
+            try {
+                await refreshArtistRowsAsync('asg.IDArtist', artistIds);
+            } catch (e) {
+                errors.push('artists: ' + (e && e.message ? e.message : e));
+            }
+        }
+
+        state.error = errors.join('; ');
+
+        if (state.error) {
+            log('scoped refresh failed: ' + state.error);
+        }
+
+        if (!window._cleanUpCalled) refreshViews();
+
+        return { albumIds: albumIds, songIds: songIds, artistIds: artistIds };
     }
 
     function releaseIdForAlbum(albumId) {
@@ -983,6 +1124,7 @@
     window.mbzMbgid = {
         startCacheLoad: startCacheLoad,
         reload: reload,
+        refreshAsync: refreshAsync,
         lookupTracksAsync: lookupTracksAsync,
         lookupExtendedTagsAsync: lookupExtendedTagsAsync,
         getTrackArtistsAsync: getTrackArtistsAsync,
