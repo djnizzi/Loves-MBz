@@ -35,6 +35,7 @@ account; **Agent** work is repo and documentation.
 
 ## Backlog
 
-- [ ] **MusicBrainz links in the track-list context menu** — right-click a track
-      in table view and open its release, release group or artist page directly.
+- [x] **MusicBrainz links in the track-list context menu** — right-click a track
+      in table view and open its release, release group or artist page directly
+      (**MusicBrainz links** submenu, also under Edit → Tag Tools).
 - Add ideas here as they come up.

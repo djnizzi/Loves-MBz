@@ -22,6 +22,9 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
+Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
+links** to open its release, release group or artist page on musicbrainz.org.
+
 Current version: **0.3.9**.
 
 ---
@@ -367,7 +370,7 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialo
 info.json                          addon manifest (id, version, icon)
 init.js                            startup: loads the module, starts the cache
 mbzMbgid.js                        database access, ID lookup tables, writes
-actions_add.js                     Edit > Tag Tools action
+actions_add.js                     Edit > Tag Tools and track-list menu actions
 controls/trackListView_add.js      the three track-list columns
 dialogs/dlgLovesMBz.html           dialog markup
 dialogs/dlgLovesMBz.js             dialog: view, copy, edit
