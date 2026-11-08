@@ -25,7 +25,7 @@ MusicBrainz extended tags that actually exist, and lets you edit them.
 Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
-Current version: **0.3.11**.
+Current version: **0.3.12**.
 
 ---
 

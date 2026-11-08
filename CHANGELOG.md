@@ -3,6 +3,19 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.3.12
+- **One row per artist** — a MusicBrainz tag that stores several IDs in one value
+  (an ID3v2.3 MP3 joins artists with `/`) is now shown as one editable row per
+  ID, each with its own link, instead of a single value the user had to split by
+  hand. Clearing a row drops that artist and keeps the rest; on **OK** the rows
+  are merged back into the single stored value, keeping the `/` or `; `
+  separator the file already used.
+- **Adding an artist ID extends the tag** — picking `MUSICBRAINZ_ARTISTID` or
+  `MUSICBRAINZ_ALBUMARTISTID` in **Add tag** now appends to the tag that is
+  already there rather than creating a second entry with the same name. The
+  stored IDs keep their order and the new one goes last; an ID the tag already
+  has changes nothing.
+
 ## 0.3.11
 - **Slash-joined artist IDs** — an ID3v2.3 file has no repeated text frames,
   so MediaMonkey stores a multi-artist `MUSICBRAINZ_ARTISTID` as one value
