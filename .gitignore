@@ -1,3 +1,3 @@
 # Built add-on packages are produced per release and attached to the GitHub
 # release; only the add-on's source files belong in the repository.
-LovesMBz.mmip
+LovesMBz*.mmip
