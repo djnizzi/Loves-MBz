@@ -3,6 +3,34 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.0 (beta test build)
+
+Test build for the MusicBrainz metadata work — not published; install the
+`.mmip` by hand and report what breaks. MediaMonkey requires a three-number
+version, so `info.json` says `0.4.0` and the package is named
+`LovesMBz-0.4.0-beta.mmip`; a numbered release follows live testing.
+
+- **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
+  input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
+  number, barcode, status, type, country, date, script, language, ISRCs and the
+  track list. An album without a release ID is reported and never searched for.
+  Requests are serialized at least 1.1 s apart with a descriptive User-Agent and
+  backoff on 503/429.
+- **Preview before writing** — compare the current album and track values with
+  the fetched ones, tick the fields to write, then **Apply**. Only values that
+  actually differ are offered, and nothing is cleared.
+- **Fill from MusicBrainz** in Track Properties → MusicBrainz stages the open
+  track's native fields and extended tags after a confirmation; **OK** is the
+  save gate. Library tracks match release tracks by disc and track number,
+  never by title.
+- **Discogs URL** — when the release has a Discogs relationship its URL is
+  written as the plain `discogs_url` extended tag, visible in MediaMonkey's
+  built-in Custom tab.
+- **Dates** — `date` and `origDate` are written as the numeric `YYYYMMDD`
+  MediaMonkey expects; the dialog shows and compares ISO dates.
+- Album and artist ID columns are never written, so a fetched ID cannot
+  overwrite the library ID the lookup came from.
+
 ## 0.3.12
 - **One row per artist** — a MusicBrainz tag that stores several IDs in one value
   (an ID3v2.3 MP3 joins artists with `/`) is now shown as one editable row per

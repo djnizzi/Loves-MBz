@@ -41,6 +41,9 @@ album must already carry `Albums.MBGID`. When that is empty there is no search,
 no name matching and no request — the album is skipped and reported as skipped,
 so the add-on never guesses which release is meant.
 
+A `0.4.0` beta test package exists; tagging and publishing wait for live
+testing.
+
 MusicBrainz needs **no API key** for reads. The rules are a descriptive
 `User-Agent` and at most one request per second, and both live in the fetch
 module rather than in a user setting. Nothing is ever written to MusicBrainz, so
@@ -69,9 +72,10 @@ never by title.
       gate. The dialog's own inputs are not rewritten.
 - [x] Native tags for what the lookup returns: title, artist, album artist,
       date, original date, publisher (label), ISRC.
-- [ ] Relational native tags — genre, composer, lyricist, conductor, producer,
-      copyright, language — need extra includes (artist/work relations, genres)
-      and are not fetched yet.
+- [ ] Relational native tags with real columns — genre, composer, lyricist,
+      conductor, copyright, language — need extra includes (artist/work
+      relations, genres) and are not fetched yet. Producer and remix credits
+      have no native column; see **Nice to have**.
 - [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
       `originalyear`, album type/status/country, `CATALOGNUMBER`, and
@@ -89,6 +93,15 @@ never by title.
 - Searching MusicBrainz by artist or album name, AcoustID or disc ID.
 - Cover art from the Cover Art Archive.
 - Writing anything back to MusicBrainz (that needs OAuth and is out of scope).
+
+## Nice to have
+
+- Per-field selection in **Fill from MusicBrainz** — choose which staged values
+  are applied, instead of taking everything that differs.
+- Composer, lyricist, conductor and other relational credits, fetched from
+  artist/work relations and genres; these have native columns to write to.
+- Producer and remix credits — MediaMonkey has no native columns for either, so
+  they would be extended tags rather than native fields.
 
 ## Backlog
 
