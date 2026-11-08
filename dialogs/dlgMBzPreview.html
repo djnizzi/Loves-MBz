@@ -36,11 +36,12 @@
         .mbzTable td.mbzNowrap { white-space: nowrap; }
         .mbzNote { opacity: 0.7; }
         .mbzHidden { display: none; }
+        .mbzDisabled { opacity: 0.5; pointer-events: none; }
         .mbzButton { padding: 0 14px; line-height: 24px; }
     </style>
 </head>
 
-<body data-posSaveName="dlgMBzPreview" data-defaultSize="1020,700">
+<body data-posSaveName="dlgMBzPreview" data-defaultSize="1020,760">
     <div class="flex column fill padding" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
@@ -48,6 +49,28 @@
         <table data-id="meta" class="mbzMetaTable mbzHidden">
             <tbody data-id="metaRows"></tbody>
         </table>
+
+        <div data-id="fields" class="mbzHidden">
+            <div class="mbzScroll" style="max-height: 260px;">
+                <table class="mbzTable">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th data-localize>Field</th>
+                            <th data-localize>Current</th>
+                            <th data-localize>MusicBrainz</th>
+                            <th data-localize>Changes</th>
+                        </tr>
+                    </thead>
+                    <tbody data-id="fieldRows"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex row" style="align-items: center; gap: 8px;">
+            <div class="button mbzButton mbzHidden" data-id="btnApply" data-localize>Apply selected</div>
+            <label data-id="applyStatus" class="fill"></label>
+        </div>
 
         <div data-id="tracks" class="fill mbzScroll mbzHidden" style="min-height: 160px;">
             <table class="mbzTable">
@@ -65,7 +88,7 @@
             </table>
         </div>
 
-        <label data-id="note" class="mbzNote" data-localize>Preview only. Nothing is written to tags or the library.</label>
+        <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply.</label>
 
         <div data-control-class="Buttons">
             <div data-id="btnClose" data-default="1" data-esc></div>

@@ -62,21 +62,24 @@ never by title.
 - [x] Read-only preview: one album per dialog, the fetched values and the full
       track list, nothing written. Albums with no release ID say why instead of
       being queried.
-- [ ] Write step: current value against fetched value per field, one checkbox
+- [x] Write step: current value against fetched value per field, one checkbox
       per field, nothing written until **Apply**.
-- [ ] Native tags: artist, album artist, title, date, original date, genre,
-      composer, lyricist, conductor, producer, publisher (label), copyright,
-      language, ISRC, track and disc numbers.
-- [ ] Extended tags for values with no column, under Picard's names:
+- [x] Native tags for what the lookup returns: title, artist, album artist,
+      date, original date, publisher (label), ISRC.
+- [ ] Relational native tags — genre, composer, lyricist, conductor, producer,
+      copyright, language — need extra includes (artist/work relations, genres)
+      and are not fetched yet.
+- [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
       `originalyear`, album type/status/country, `CATALOGNUMBER`, and
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
-- [ ] Writes go through `track.commitAsync()`; the tag/library disagreement
-      strip is extended so a fetched ID cannot silently overwrite a tag.
-- [ ] Cache a fetched release for the session, so reopening the dialog for the
-      same album does not call the API again.
+- [x] Writes go through `track.commitAsync()`; the album and artist ID columns
+      are never written, so a fetched ID cannot silently overwrite the library
+      value the lookup came from.
+- [ ] Keep the fetched-release cache across dialog openings; it currently lives
+      as long as the dialog.
 
 ### Not in 0.4.0
 

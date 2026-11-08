@@ -1,17 +1,20 @@
 'use strict';
 
 /*
- * Loves MBz — read-only MusicBrainz release preview.
+ * Loves MBz — MusicBrainz release preview and apply.
  *
  * Opens for one album and asks mbzFetch for its release. mbzFetch reads
  * Albums.MBGID first and makes no request at all when the album has no release
  * ID; this dialog only reports that outcome.
  *
- * Nothing here writes: the window ends at "this is what MusicBrainz says".
- * Tag writing is a separate, later step.
+ * When the release arrives, mbzApply compares it with the album's library
+ * tracks and returns only the fields that would change. Each field gets a
+ * checkbox; nothing is written until Apply, and the album's ID columns are
+ * never touched.
  */
 
 localRequirejs('mbzFetch');
+localRequirejs('mbzApply');
 
 function mbzPreviewText(value) {
     return String(value === undefined || value === null ? '' : value).trim();
@@ -102,9 +105,25 @@ function init(params) {
 
     var albumId = (params && params.albumId) ? parseInt(params.albumId, 10) : 0;
     var fetch = window.mbzFetch;
+    var apply = window.mbzApply;
+    var currentPlan = null;
+    var lastResult = null;
+
+    var canEdit = true;
+    try {
+        if (typeof uitools !== 'undefined' && uitools.getCanEdit) {
+            canEdit = !!uitools.getCanEdit();
+        }
+    } catch (e) {
+        canEdit = true;
+    }
 
     var UI = {
         summary: qid('summary'),
+        fields: qid('fields'),
+        fieldRows: qid('fieldRows'),
+        btnApply: qid('btnApply'),
+        applyStatus: qid('applyStatus'),
         meta: qid('meta'),
         metaRows: qid('metaRows'),
         tracks: qid('tracks'),
@@ -118,6 +137,10 @@ function init(params) {
 
     function setNote(text) {
         if (UI.note) UI.note.textContent = text;
+    }
+
+    function setStatus(text) {
+        if (UI.applyStatus) UI.applyStatus.textContent = text;
     }
 
     function addMeta(label, value) {
@@ -197,6 +220,108 @@ function init(params) {
         if (UI.tracks) UI.tracks.classList.remove('mbzHidden');
     }
 
+    function renderFields(plan) {
+        UI.fieldRows.textContent = '';
+        currentPlan = plan;
+
+        if (!plan || !plan.fields.length) {
+            UI.fields.classList.add('mbzHidden');
+            if (UI.btnApply) UI.btnApply.classList.add('mbzHidden');
+
+            if (plan && plan.libraryCount && !plan.matches.length) {
+                setNote(_('No library tracks match this release by disc and track number, so there is nothing to write.'));
+            } else if (plan) {
+                setNote(_('MusicBrainz matches the library; there is nothing to apply.'));
+            }
+            return;
+        }
+
+        plan.fields.forEach(function (field) {
+            var row = document.createElement('tr');
+
+            var checkCell = document.createElement('td');
+            checkCell.className = 'mbzNowrap';
+            var box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = true;
+            box.setAttribute('data-key', field.key);
+            box.disabled = !canEdit;
+            checkCell.appendChild(box);
+            row.appendChild(checkCell);
+
+            row.appendChild(mbzPreviewCell(field.label));
+            row.appendChild(mbzPreviewCell(field.current || '\u2014'));
+            row.appendChild(mbzPreviewCell(field.value || _('per track')));
+            row.appendChild(mbzPreviewCell(field.changes + ' / ' + field.total, 'mbzNowrap'));
+
+            UI.fieldRows.appendChild(row);
+        });
+
+        UI.fields.classList.remove('mbzHidden');
+        if (UI.btnApply) UI.btnApply.classList.toggle('mbzHidden', !canEdit);
+
+        var note = _('Ticked fields are written to the album\'s library tracks; nothing is written until Apply.');
+        if (plan.unmatched) {
+            note += ' ' + sprintf(_('%d release track(s) have no library counterpart and will be ignored.'), plan.unmatched);
+        }
+        setNote(note);
+    }
+
+    function loadPlan(result) {
+        if (!apply) {
+            setNote(_('The apply module did not load. Check debug.log for lines starting with "Loves MBz:".'));
+            return;
+        }
+
+        window.localPromise(apply.buildPlanAsync(albumId, result.release)).then(function (plan) {
+            if (window._cleanUpCalled) return;
+            renderFields(plan);
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+            setNote(sprintf(_('Could not compare the release with the library: %s'), mbzPreviewErrorText(error)));
+        });
+    }
+
+    function applySelected() {
+        if (!canEdit || !currentPlan || !apply) return;
+
+        var boxes = UI.fieldRows.querySelectorAll('input[data-key]');
+        var keys = [];
+
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].checked) keys.push(boxes[i].getAttribute('data-key'));
+        }
+
+        if (!keys.length) {
+            setStatus(_('Tick at least one field to apply.'));
+            return;
+        }
+
+        if (UI.btnApply) UI.btnApply.classList.add('mbzDisabled');
+        setStatus(_('Writing...'));
+
+        window.localPromise(apply.applyAsync(currentPlan, keys)).then(function (result) {
+            if (window._cleanUpCalled) return;
+
+            if (UI.btnApply) UI.btnApply.classList.remove('mbzDisabled');
+
+            var message = sprintf(_('Updated %d track(s).'), result.tracks);
+            if (result.failed.length) {
+                message += ' ' + sprintf(_('%d track(s) failed: %s'),
+                    result.failed.length, result.failed[0].error);
+            }
+            setStatus(message);
+
+            // Re-read the library so the fields show what is left to change.
+            if (lastResult) loadPlan(lastResult);
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+
+            if (UI.btnApply) UI.btnApply.classList.remove('mbzDisabled');
+            setStatus(sprintf(_('Could not write: %s'), mbzPreviewErrorText(error)));
+        });
+    }
+
     if (!fetch) {
         setSummary(_('The MusicBrainz fetch module did not load. Check debug.log for lines starting with "Loves MBz:".'));
         return;
@@ -207,13 +332,21 @@ function init(params) {
         return;
     }
 
+    window.localListen(UI.btnApply, 'click', applySelected);
+
     setSummary(_('Reading the release from MusicBrainz...'));
 
     window.localPromise(fetch.previewAsync(albumId)).then(function (result) {
         if (window._cleanUpCalled) return;
 
-        if (result.skipped) renderSkipped(result);
-        else renderRelease(result);
+        if (result.skipped) {
+            renderSkipped(result);
+            return;
+        }
+
+        lastResult = result;
+        renderRelease(result);
+        loadPlan(result);
     }, function (error) {
         if (window._cleanUpCalled) return;
 

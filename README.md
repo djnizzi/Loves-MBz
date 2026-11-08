@@ -26,9 +26,10 @@ Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
 **Preview MusicBrainz metadata…** reads the release behind the selected album's
-existing release ID and shows what MusicBrainz holds — artists, label, barcode,
-status, type, country, script and the full track list — without writing
-anything. An album without a release ID is skipped without a request; the
+existing release ID, shows what MusicBrainz holds — artists, label, barcode,
+status, type, country, script, the full track list and the release's Discogs
+page — and lets you tick fields to write back. Nothing is written until
+**Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
 Current version: **0.3.12**.
@@ -99,15 +100,45 @@ only the album rows, track links and artists that the event names — so release
 and artists matched through MediaMonkey's own MusicBrainz lookup show up in the
 columns without a restart, even in a large library.
 
-### Previewing the release metadata
+### Previewing and applying the release metadata
 
 **Edit → Tag Tools → Preview MusicBrainz metadata…** (also in the track list
-context menu) opens a read-only view of the release behind the first selected
-track's album: artist credit, date, country, status, type, label and catalogue
-number, barcode, the Discogs page when the release links one, script/language,
-and every medium's tracks with their number, title, length, ISRC and recording
-ID. The Discogs link is MusicBrainz's URL relationship for the release; it is
-the value Picard stores as `discogs_url`.
+context menu) opens the release behind the first selected track's album: artist
+credit, date, country, status, type, label and catalogue number, barcode, the
+Discogs page when the release links one, script/language, and every medium's
+tracks with their number, title, length, ISRC and recording ID. The Discogs link
+is MusicBrainz's URL relationship for the release; it is the value Picard stores
+as `discogs_url`.
+
+Below that, **Fields to write** lists only the fields whose MusicBrainz value
+differs from the library, one row and one checkbox each, with the current value,
+the fetched value and how many matched tracks would change. Everything starts
+ticked; untick anything you want to keep, then press **Apply**. Nothing is
+written before that click.
+
+| Written to | Fields |
+|---|---|
+| Native track tags | title, artist, ISRC |
+| Native album-level tags | album artist, date, original date, label (`publisher`) |
+| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originalyear`, `discogs_url` |
+| Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS` |
+
+Library tracks are matched to the release by disc and track number, never by
+title. A library track with no counterpart in the release is left alone, and a
+release track with no library counterpart is counted, so a partial match cannot
+write the wrong title onto a track. Extended tags are merged into each track's
+existing `Songs.ExtendedTags`: a tag already stored under another file-format
+name is replaced in place, unrelated tags and edits queued by the built-in
+**Custom** tab survive, and a field MusicBrainz has no value for is not offered,
+so nothing is cleared. `discogs_url` stays a plain extended tag, so it appears
+in MediaMonkey's **Custom** tab rather than this add-on's MusicBrainz tab.
+
+**Apply** writes the ticked fields, calls `commitAsync()` on every touched
+track, then clears MediaMonkey's database cache and refreshes the view. The
+dialog re-reads the library and lists whatever is still different. The album's
+`MBGID`/`MBRGGID` and the artist rows are never written: the release ID is the
+lookup key, so applying cannot overwrite it. In Party Mode the preview still
+works, but the fields and **Apply** are hidden.
 
 The lookup is by release ID only. The album must already carry `Albums.MBGID`
 (set it in the IDs dialog, or let MediaMonkey match the release); when that is
@@ -118,9 +149,6 @@ itself with a `User-Agent` and keeps requests at least 1.1 s apart. A busy
 server (`503`/`429`) is retried twice with a growing delay, and the parsed
 release is cached by ID for that dialog, so previewing the same album again
 does not call the API.
-
-Nothing is written — not the database, not tags, not files. Writing the
-fetched values is a separate step.
 
 ### Setting an ID
 
@@ -316,7 +344,15 @@ must support extended tags — formats such as WAV may discard them.
   `503`/`429` with backoff, stops once the dialog has closed, and caches the
   parsed release by ID. `url-rels` is part of the lookup, so the release's
   Discogs page is available as `discogsUrls`. The dialog renders the release
-  and its track list as text only.
+  and its track list, then asks `mbzApply.js` for the diff.
+- **Applying** — `mbzApply.js` describes the release (native values and the
+  Picard extended tag names), loads the album's tracks with
+  `app.db.getTracklist('SELECT * FROM Songs WHERE IDAlbum = …')`, and matches
+  them by disc and track number. `buildPlanAsync` returns one entry per field
+  whose fetched value differs, reading current values from the track and its
+  `ExtendedTags`. `applyAsync` writes only the ticked fields, merges tags with
+  `mergeTags` (replace in place by normalized name, append the rest), calls
+  `track.commitAsync()`, then `app.db.clearCache()` and `uitools.refreshView()`.
 - **Writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in `mbzMbgid.js` run
   one validated `UPDATE` against `Albums` or `Artists`, then
   `app.db.clearCache()` and `uitools.refreshView()` so MediaMonkey does not keep
@@ -365,14 +401,14 @@ PowerShell:
 
 ```powershell
 # from this folder
-Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\mbzFetch.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
+Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\mbzFetch.js, .\mbzApply.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
 Rename-Item .\LovesMBz.zip .\LovesMBz.mmip
 ```
 
 bash / Git Bash, if `zip` is available:
 
 ```bash
-zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js actions_add.js controls dialogs skin loves-mbz.png
+zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js mbzApply.js actions_add.js controls dialogs skin loves-mbz.png
 ```
 
 ## Troubleshooting
@@ -413,6 +449,12 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js actions_add.js co
   the value from a MusicBrainz page to get a link.
 - **An extended-tag edit did not stick** — the file format may not support the
   tag, or Party Mode is on. Check the value after reopening Track Properties.
+- **Apply changed nothing** — every offered field already matched, or no library
+  track matched the release by disc and track number. Nothing is matched by
+  title.
+- **Some tracks were skipped** — their disc/track numbers have no counterpart in
+  the release. The dialog counts them; fix the numbering or apply to the release
+  that matches.
 - **The preview says the album has no release ID** — `Albums.MBGID` is empty or
   `0`. Set it in the IDs dialog (or let MediaMonkey match the release); the
   preview deliberately does not search by name.
@@ -429,12 +471,13 @@ info.json                          addon manifest (id, version, icon)
 init.js                            startup: loads the module, starts the cache
 mbzMbgid.js                        database access, ID lookup tables, writes
 mbzFetch.js                        throttled MusicBrainz release lookup
+mbzApply.js                        release-to-library diff and writes
 actions_add.js                     Edit > Tag Tools and track-list menu actions
 controls/trackListView_add.js      the three track-list columns
 dialogs/dlgLovesMBz.html           dialog markup
 dialogs/dlgLovesMBz.js             dialog: view, copy, edit
 dialogs/dlgMBzPreview.html         preview dialog markup
-dialogs/dlgMBzPreview.js           preview: release and track list, read-only
+dialogs/dlgMBzPreview.js           preview: compare, tick fields, Apply
 dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
 dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
 dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
