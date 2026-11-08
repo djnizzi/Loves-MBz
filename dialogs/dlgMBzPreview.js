@@ -243,13 +243,18 @@ function init(params) {
 
             var checkCell = document.createElement('td');
             checkCell.className = 'mbzNowrap';
-            var box = document.createElement('input');
-            box.type = 'checkbox';
-            box.checked = true;
+            var box = document.createElement('div');
+            box.setAttribute('data-control-class', 'Checkbox');
+            box.setAttribute('data-id', 'mbzPreviewField' + field.key);
             box.setAttribute('data-key', field.key);
-            box.disabled = !canEdit;
             checkCell.appendChild(box);
             row.appendChild(checkCell);
+
+            if (typeof initializeControl === 'function') initializeControl(box);
+            if (box.controlClass) {
+                box.controlClass.checked = true;
+                if (!canEdit) box.controlClass.disabled = true;
+            }
 
             row.appendChild(mbzPreviewCell(field.label));
             row.appendChild(mbzPreviewCell(field.current || '\u2014'));
@@ -287,11 +292,14 @@ function init(params) {
     function applySelected() {
         if (!canEdit || !currentPlan || !apply) return;
 
-        var boxes = UI.fieldRows.querySelectorAll('input[data-key]');
+        var boxes = UI.fieldRows.querySelectorAll('[data-key]');
         var keys = [];
 
         for (var i = 0; i < boxes.length; i++) {
-            if (boxes[i].checked) keys.push(boxes[i].getAttribute('data-key'));
+            var checked = boxes[i].controlClass
+                ? boxes[i].controlClass.checked
+                : boxes[i].checked;
+            if (checked) keys.push(boxes[i].getAttribute('data-key'));
         }
 
         if (!keys.length) {

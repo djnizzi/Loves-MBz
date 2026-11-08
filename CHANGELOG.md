@@ -35,6 +35,11 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Years and original date** — Fill writes the native year and original year
   alongside date and original date, and adds Picard's `originaldate` tag next
   to `originalyear`.
+- **Preview fixes** — the album tracklist is read under a read lock, so the
+  preview no longer fails with "Read lock not acquired!"; field rows use
+  MediaMonkey's own checkboxes and can be selected again. The native Date field
+  is always offered, separately from Original date, so the release date can be
+  written to MediaMonkey's own date.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the

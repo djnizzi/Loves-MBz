@@ -22,7 +22,7 @@
 (function () {
     var NATIVE_FIELDS = [
         { key: 'albumArtist', label: _('Album artist'), scope: 'album', native: 'albumArtist' },
-        { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date' },
+        { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date', force: true },
         { key: 'year', label: _('Year'), scope: 'album', native: 'year', kind: 'year' },
         { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate', kind: 'date' },
         { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
@@ -326,12 +326,21 @@
 
     function collectTracks(list) {
         var tracks = [];
-        var count = list ? (list.count || 0) : 0;
+        if (!list) return tracks;
 
-        for (var i = 0; i < count; i++) {
-            var track = list.getValue(i);
-            if (track) tracks.push(track);
+        // SharedList.getValue() requires a read lock; without one MediaMonkey
+        // raises "Read lock not acquired!" and the preview never loads a plan.
+        function collect() {
+            var count = list.count || 0;
+
+            for (var i = 0; i < count; i++) {
+                var track = list.getValue(i);
+                if (track) tracks.push(track);
+            }
         }
+
+        if (typeof list.locked === 'function') list.locked(collect);
+        else collect();
 
         return tracks;
     }
@@ -393,7 +402,7 @@
                 if (normalizeText(value) !== normalizeText(currents[index])) changes++;
             });
 
-            if (!changes) return;
+            if (!changes && !def.force) return;
 
             var same = fetched.every(function (value) { return value === fetched[0]; });
 
