@@ -25,7 +25,7 @@ MusicBrainz extended tags that actually exist, and lets you edit them.
 Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
-Current version: **0.3.10**.
+Current version: **0.3.11**.
 
 ---
 
@@ -390,6 +390,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.11
+- **Slash-joined artist IDs** — an ID3v2.3 file has no repeated text frames,
+  so MediaMonkey stores a multi-artist `MUSICBRAINZ_ARTISTID` as one value
+  joined with `/`. The Track Properties tab now reads that as several IDs, gives
+  each artist its own link, and keeps the `/` separator when the value is saved
+  instead of rewriting it to `;`.
 
 ### 0.3.10
 - **Scoped cache refresh** — a change event now re-reads only the album row, the
