@@ -124,10 +124,23 @@
         return new Promise(function (resolve, reject) {
             var xhr = new XMLHttpRequest();
             var finished = false;
+            var timer = setTimeout(function () {
+                if (finished) return;
+                finished = true;
+                try { xhr.abort(); } catch (e) {}
+                reject(new Error(_('MusicBrainz did not answer in time.')));
+            }, REQUEST_TIMEOUT_MS + 2000);
+
+            function stopTimer() {
+                if (!timer) return;
+                clearTimeout(timer);
+                timer = null;
+            }
 
             function fail(message) {
                 if (finished) return;
                 finished = true;
+                stopTimer();
                 reject(new Error(message));
             }
 
@@ -146,9 +159,11 @@
 
                 if (xhr.status === 200) {
                     finished = true;
+                    stopTimer();
                     resolve(xhr.responseText);
                 } else if (xhr.status === 503 || xhr.status === 429) {
                     finished = true;
+                    stopTimer();
                     resolve(null);     // busy: the caller retries
                 } else if (xhr.status === 404) {
                     fail(_('MusicBrainz has no release with that ID.'));

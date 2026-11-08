@@ -465,7 +465,7 @@
      *   native: Object, tags: Array<{title: string, value: string}>,
      *   labels: string[]}>}
      */
-    async function buildPendingAsync(track, release) {
+    async function buildPendingAsync(track, release, tagsText) {
         var described = describeRelease(release);
         var disc = leadingInt(track.discNumber);
         var number = leadingInt(track.trackNumber);
@@ -501,7 +501,12 @@
 
         var tags = [];
         try {
-            tags = parseTags(await track.getExtendedTagsAsync()) || [];
+            // Group editing passes the tags it already read from the database;
+            // the group proxy track has no per-track extended-tag array of its own.
+            var currentTags = tagsText === undefined
+                ? await track.getExtendedTagsAsync()
+                : tagsText;
+            tags = parseTags(currentTags) || [];
         } catch (e) {
             tags = [];
         }
@@ -603,14 +608,16 @@
      * properties plus a merge into its extended tags. The Track Properties OK
      * button performs the save.
      */
-    async function applyPendingAsync(track, pending) {
+    async function applyPendingAsync(track, pending, tagsText) {
         if (!pending || !pending.matched) return 0;
 
         var writes = pending.tags || [];
         var written = 0;
 
         if (writes.length) {
-            var tags = parseTags(await track.getExtendedTagsAsync());
+            var tags = parseTags(tagsText === undefined
+                ? await track.getExtendedTagsAsync()
+                : tagsText);
             if (!Array.isArray(tags)) {
                 throw new Error(_('The extended tags of this track could not be read as JSON.'));
             }

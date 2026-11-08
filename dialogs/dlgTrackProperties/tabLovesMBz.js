@@ -73,6 +73,30 @@ function mbzExtErrorText(error) {
     return error.message ? error.message : String(error);
 }
 
+/** Fails a group operation instead of leaving the fill button disabled forever. */
+function mbzExtWithTimeout(promise, ms, message) {
+    return new Promise(function (resolve, reject) {
+        var settled = false;
+        var timer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            reject(new Error(message));
+        }, ms);
+
+        Promise.resolve(promise).then(function (value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        }, function (error) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            reject(error);
+        });
+    });
+}
+
 function mbzExtListen(dialog, element, eventName, handler) {
     if (!element) return;
     if (dialog && typeof dialog.trackLocalListen === 'function') {
@@ -1428,11 +1452,21 @@ function mbzExtSaveGroupAsync(track, mbz) {
  * albums are fetched once each and the fetch cache covers albums that share a
  * release ID.
  */
-async function mbzExtBuildGroupFillAsync(tracks) {
+async function mbzExtBuildGroupFillAsync(tracks, onProgress) {
     var fetch = window.mbzFetch;
     var apply = window.mbzApply;
+    var mbz = window.mbzMbgid;
     var albumIds = [];
     var counts = { noAlbum: 0, noRelease: 0, unmatched: 0, same: 0 };
+
+    function report(phase, current, total) {
+        if (typeof onProgress !== 'function') return;
+        try {
+            onProgress(phase, current, total);
+        } catch (e) {
+            // progress text is cosmetic; never fail the fill for it
+        }
+    }
 
     tracks.forEach(function (track) {
         var albumId = parseInt(track && track.idalbum, 10);
@@ -1444,6 +1478,29 @@ async function mbzExtBuildGroupFillAsync(tracks) {
     });
 
     var work = [];
+    if (!albumIds.length) return { work: work, counts: counts, tagsById: null };
+
+    // Group tracks expose only a common tag patch, so read each selected
+    // track's own ExtendedTags in one database query. Passing these values to
+    // buildPendingAsync also avoids waiting on a group proxy track's
+    // getExtendedTagsAsync(), which never completes.
+    var tagsById = null;
+    if (mbz && typeof mbz.lookupExtendedTagsAsync === 'function') {
+        var songIds = [];
+        tracks.forEach(function (track) {
+            var id = parseInt(track && track.id, 10);
+            if (id > 0 && songIds.indexOf(id) === -1) songIds.push(id);
+        });
+
+        report('tags', 1, 1);
+        try {
+            tagsById = await mbz.lookupExtendedTagsAsync(songIds);
+        } catch (e) {
+            tagsById = null;
+        }
+    }
+
+    if (window._cleanUpCalled) return { work: work, counts: counts, tagsById: tagsById };
 
     for (var a = 0; a < albumIds.length; a++) {
         if (window._cleanUpCalled) break;
@@ -1452,6 +1509,8 @@ async function mbzExtBuildGroupFillAsync(tracks) {
         var albumTracks = tracks.filter(function (track) {
             return parseInt(track && track.idalbum, 10) === albumId;
         });
+
+        report('release', a + 1, albumIds.length);
         var result = await fetch.previewAsync(albumId);
 
         if (window._cleanUpCalled) break;
@@ -1463,7 +1522,11 @@ async function mbzExtBuildGroupFillAsync(tracks) {
 
         for (var i = 0; i < albumTracks.length; i++) {
             var track = albumTracks[i];
-            var pending = await apply.buildPendingAsync(track, result.release);
+            var trackId = parseInt(track && track.id, 10);
+            var tagsText = tagsById && tagsById.has(trackId) ? tagsById.get(trackId) : '';
+
+            report('track', i + 1, albumTracks.length);
+            var pending = await apply.buildPendingAsync(track, result.release, tagsText);
 
             if (window._cleanUpCalled) break;
 
@@ -1481,7 +1544,7 @@ async function mbzExtBuildGroupFillAsync(tracks) {
         }
     }
 
-    return { work: work, counts: counts };
+    return { work: work, counts: counts, tagsById: tagsById };
 }
 
 function mbzExtGroupFillSkipText(counts) {
@@ -1495,7 +1558,7 @@ function mbzExtGroupFillSkipText(counts) {
     return parts.length ? ' ' + sprintf(_('Skipped: %s.'), parts.join(', ')) : '';
 }
 
-async function mbzExtCommitGroupFillAsync(work) {
+async function mbzExtCommitGroupFillAsync(work, tagsById) {
     var apply = window.mbzApply;
     var written = 0;
     var failed = [];
@@ -1504,8 +1567,17 @@ async function mbzExtCommitGroupFillAsync(work) {
         if (window._cleanUpCalled) break;
 
         try {
-            await apply.applyPendingAsync(work[i].track, work[i].pending);
-            if (work[i].track.commitAsync) await work[i].track.commitAsync();
+            var trackId = parseInt(work[i].track && work[i].track.id, 10);
+            var tagsText = tagsById && tagsById.has(trackId) ? tagsById.get(trackId) : '';
+
+            await mbzExtWithTimeout(
+                apply.applyPendingAsync(work[i].track, work[i].pending, tagsText),
+                15000,
+                _('Timed out saving this track.'));
+            if (work[i].track.commitAsync) {
+                await mbzExtWithTimeout(work[i].track.commitAsync(), 15000,
+                    _('Timed out saving this track.'));
+            }
             written++;
         } catch (error) {
             failed.push({
@@ -1670,7 +1742,7 @@ function mbzExtApplyFillPlan(ui, dialog) {
     if (ui.fillButton) ui.fillButton.classList.add('mbzExtBusy');
     if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Saving tracks...');
 
-    dialog.localPromise(mbzExtCommitGroupFillAsync(work)).then(function (result) {
+    dialog.localPromise(mbzExtCommitGroupFillAsync(work, state.tagsById)).then(function (result) {
         if (window._cleanUpCalled) return;
 
         mbzExtHideFillPlan(ui);
@@ -1730,7 +1802,21 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
     ui.fillButton.classList.add('mbzExtBusy');
     if (ui.fillStatus) ui.fillStatus.textContent = _('Reading the release...');
 
-    dialog.localPromise(mbzExtBuildGroupFillAsync(selection.tracks)).then(function (plan) {
+    dialog.localPromise(mbzExtWithTimeout(
+        mbzExtBuildGroupFillAsync(selection.tracks, function (phase, current, total) {
+            if (!ui.fillStatus || window._cleanUpCalled) return;
+
+            if (phase === 'tags') {
+                ui.fillStatus.textContent = _('Reading the selected tracks...');
+            } else if (phase === 'release') {
+                ui.fillStatus.textContent = sprintf(_('Reading release %d of %d...'), current, total);
+            } else {
+                ui.fillStatus.textContent = sprintf(_('Matching track %d of %d...'), current, total);
+            }
+        }),
+        60000,
+        _('Reading the release took too long. Try again.')
+    )).then(function (plan) {
         if (window._cleanUpCalled) return;
 
         if (!plan.work.length) {
@@ -1745,6 +1831,7 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
             work: plan.work,
             counts: plan.counts,
             fields: mbzExtFillAggregateFields(plan.work),
+            tagsById: plan.tagsById,
             title: sprintf(_('Choose what to overwrite on %d selected track(s). Applying saves them immediately.'), plan.work.length)
         });
         if (ui.fillStatus) {

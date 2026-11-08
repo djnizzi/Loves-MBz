@@ -17,7 +17,9 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Multi-track fill** — selecting several files and pressing **Fill from
   MusicBrainz** fills each matching disc/track and saves those tracks
   immediately when **Apply selected** is clicked; the checkbox list is the
-  confirmation, and Cancel cannot undo it.
+  confirmation, and Cancel cannot undo it. Group fill reads extended tags with
+  one database query, reports release and track progress, and times out a
+  stalled request or save instead of leaving the button disabled.
 - **Disc/track matching** — files with no disc tag are matched to the first
   disc, a single-disc release matches by track number alone, and releases whose
   track positions are not plain numbers (vinyl A1/B1) use the medium position.
@@ -43,7 +45,7 @@ version, so `info.json` says `0.4.0` and the package is named
   the fetched ones, tick the fields to write, then **Apply**. Only values that
   actually differ are offered, and nothing is cleared.
 - **Fill from MusicBrainz** in Track Properties → MusicBrainz stages the open
-  track's native fields and extended tags after a confirmation; **OK** is the
+  track's native fields and extended tags after choosing fields; **OK** is the
   save gate. Library tracks match release tracks by disc and track number,
   never by title.
 - **Discogs URL** — when the release has a Discogs relationship its URL is
