@@ -32,7 +32,7 @@ page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
-Current version: **0.4.0** (beta test build).
+Current version: **0.4.0 "Foundation"**.
 
 ---
 

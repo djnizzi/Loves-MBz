@@ -3,12 +3,11 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
-## 0.4.0 (beta test build)
+## 0.4.0 "Foundation" (2026-11-08)
 
-Test build for the MusicBrainz metadata work — not published; install the
-`.mmip` by hand and report what breaks. MediaMonkey requires a three-number
-version, so `info.json` says `0.4.0` and the package is named
-`LovesMBz-0.4.0-beta.mmip`; a numbered release follows live testing.
+The first release of the MusicBrainz metadata work. MediaMonkey requires a
+three-number version, so `info.json` says `0.4.0`; the release asset is
+`LovesMBz.mmip` from tag `v0.4.0`.
 
 - **Lookup fix** — the request no longer sends `text-representation`, which
   MusicBrainz rejects for releases with HTTP 400. The release response still
@@ -52,12 +51,12 @@ version, so `info.json` says `0.4.0` and the package is named
   to finish loading before reading its album, so a valid selection no longer
   opens as "No album is selected"; a reopened dialog clears the previous
   release before showing the new one. The album tracklist is read under a read
-  lock, so the preview no longer fails with "Read lock not acquired!"; release
+  lock, so the preview no longer fails with "Read lock not acquired!"; the
   field chooser is capped at its own height with a scrollbar, and the track list
   takes the remaining height as a native scrollable list, so a 30-track release
-  scrolls inside the dialog instead of expanding it. The native footer buttons
-  live outside the content column, so they keep their own row and cannot be
-  squeezed out of the dialog. The release details are arranged as two
+  scrolls inside the dialog instead of expanding it. The redundant bottom-right
+  Close button is removed; the window's close icon closes the preview. The
+  release details are arranged as two
   label/value pairs per row, and the dialog opens at 1200×960 so more of the
   release fits without resizing. Field rows use MediaMonkey's own checkboxes and
   can be selected again. The native Date field is always offered, separately

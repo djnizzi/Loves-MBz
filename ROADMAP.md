@@ -41,8 +41,8 @@ album must already carry `Albums.MBGID`. When that is empty there is no search,
 no name matching and no request — the album is skipped and reported as skipped,
 so the add-on never guesses which release is meant.
 
-A `0.4.0` beta test package exists; tagging and publishing wait for live
-testing.
+0.4.0 "Foundation" is tagged and pushed; the GitHub release carries the
+installable `.mmip`.
 
 MusicBrainz needs **no API key** for reads. The rules are a descriptive
 `User-Agent` and at most one request per second, and both live in the fetch
