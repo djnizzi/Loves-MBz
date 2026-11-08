@@ -44,10 +44,11 @@ version, so `info.json` says `0.4.0` and the package is named
   the local album have different numbers of tracks, and the tag-vs-library
   warning fetches both release IDs and reports when their track totals differ.
 - **Preview fixes** — the album tracklist is read under a read lock, so the
-  preview no longer fails with "Read lock not acquired!"; field rows use
-  MediaMonkey's own checkboxes and can be selected again. The native Date field
-  is always offered, separately from Original date, so the release date can be
-  written to MediaMonkey's own date.
+  preview no longer fails with "Read lock not acquired!"; the release metadata
+  list has its own scroll pane, so long release data cannot crowd out the field
+  list or track list. Field rows use MediaMonkey's own checkboxes and can be
+  selected again. The native Date field is always offered, separately from
+  Original date, so the release date can be written to MediaMonkey's own date.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the

@@ -15,6 +15,7 @@
             vertical-align: top;
         }
         .mbzMetaTable td { padding: 2px 0; user-select: text; }
+        .mbzMetaScroll { max-height: 200px; overflow: auto; }
         .mbzScroll { overflow: auto; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; }
         .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
         .mbzTable th {
@@ -48,9 +49,11 @@
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
         <label data-id="warning" class="mbzWarning mbzHidden" data-localize></label>
 
-        <table data-id="meta" class="mbzMetaTable mbzHidden">
-            <tbody data-id="metaRows"></tbody>
-        </table>
+        <div data-id="metaScroll" class="mbzMetaScroll mbzHidden">
+            <table data-id="meta" class="mbzMetaTable">
+                <tbody data-id="metaRows"></tbody>
+            </table>
+        </div>
 
         <div data-id="fields" class="mbzHidden">
             <div class="mbzScroll" style="max-height: 260px;">

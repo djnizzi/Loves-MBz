@@ -128,6 +128,7 @@ function init(params) {
         btnApply: qid('btnApply'),
         applyStatus: qid('applyStatus'),
         meta: qid('meta'),
+        metaScroll: qid('metaScroll'),
         metaRows: qid('metaRows'),
         tracks: qid('tracks'),
         trackRows: qid('trackRows'),
@@ -225,7 +226,8 @@ function init(params) {
             }
         }
 
-        if (UI.meta) UI.meta.classList.remove('mbzHidden');
+        if (UI.metaScroll) UI.metaScroll.classList.remove('mbzHidden');
+        else if (UI.meta) UI.meta.classList.remove('mbzHidden');
         if (UI.tracks) UI.tracks.classList.remove('mbzHidden');
     }
 
