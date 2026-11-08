@@ -22,7 +22,7 @@ the album or artist behind the selected track. A **MusicBrainz** tab in
 **Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
 MusicBrainz extended tags that actually exist, and lets you edit them.
 
-Current version: **0.3.8**.
+Current version: **0.3.9**.
 
 ---
 
@@ -85,9 +85,9 @@ stale. Artist cells list every artist MBID for the track, separated by `; `.
 This dialog shows the native MBGID columns, not `Songs.ExtendedTags`; use
 **Track Properties → MusicBrainz** for the per-track extended tags.
 
-After MediaMonkey matches new releases/artists, use **Tools → Loves MBz:
-reload MusicBrainz ID cache** to rebuild the track-list columns without
-restarting MediaMonkey.
+The column cache rebuilds itself when MediaMonkey commits a change, so releases
+and artists matched through MediaMonkey's own MusicBrainz lookup show up in the
+columns without a restart.
 
 ### Setting an ID
 
@@ -323,9 +323,10 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialo
 - **The columns list is empty** — the cache has not loaded yet, or the library
   has no MusicBrainz matches. MediaMonkey only fills these fields when a
   release/artist is matched through its own MusicBrainz lookup.
-- **IDs do not change after matching a release** — the column cache is built at
-  start-up. Run **Tools → Loves MBz: reload MusicBrainz ID cache**, or
-  restart MediaMonkey. The dialog always shows current values.
+- **IDs do not change after matching a release** — the columns are fed by a
+  cache that rebuilds on MediaMonkey's change events. A match written straight
+  into the database (by another tool, or with MediaMonkey closed) still needs a
+  restart. The dialog always shows current values.
 - **No MusicBrainz IDs group in the column chooser** — `controls/trackListView_add.js`
   failed to load. Check `debug.log` in the MediaMonkey program folder for lines
   starting with `Loves MBz:`.
@@ -365,7 +366,7 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialo
 info.json                          addon manifest (id, version, icon)
 init.js                            startup: loads the module, starts the cache
 mbzMbgid.js                        database access, ID lookup tables, writes
-actions_add.js                     Edit > Tag Tools and Tools menu actions
+actions_add.js                     Edit > Tag Tools action
 controls/trackListView_add.js      the three track-list columns
 dialogs/dlgLovesMBz.html           dialog markup
 dialogs/dlgLovesMBz.js             dialog: view, copy, edit
@@ -376,6 +377,13 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.9
+- **Columns refresh themselves** — the lookup tables behind the three track-list
+  columns are rebuilt when MediaMonkey commits a change, so IDs matched through
+  MediaMonkey's own MusicBrainz lookup appear without restarting. The
+  **Tools → reload MusicBrainz ID cache** entry is gone; the IDs dialog still
+  queries the database every time.
 
 ### 0.3.8
 - **Shorter Add tag picker** — the dropdown lists the MusicBrainz tag names only

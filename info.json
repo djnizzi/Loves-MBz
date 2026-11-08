@@ -2,7 +2,7 @@
     "title": "Loves MBz",
     "id": "lovesMBz",
     "description": "Shows and edits the MusicBrainz IDs MediaMonkey stores but never displays: release, release group and artist IDs on album and artist rows, plus per-track MusicBrainz extended tags, with a warning when the two disagree.",
-    "version": "0.3.8",
+    "version": "0.3.9",
     "author": "NiZDesign",
     "type": "general",
     "icon": "lovesMBz.svg",
