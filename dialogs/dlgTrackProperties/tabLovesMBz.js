@@ -51,6 +51,7 @@ var mbzExtFileSeparator = '; ';
 var mbzExtGroupLookup = null;
 var mbzExtGroupArtists = null;
 var mbzExtFillPlanState = null;
+var mbzExtCountToken = 0;
 
 /**
  * A group edit rebuilds window.modified/window.tagModified from the checked
@@ -448,11 +449,58 @@ function mbzExtConflicts() {
     return mbzExtGroup ? mbzExtGroupConflicts() : mbzExtSingleConflicts();
 }
 
+function mbzExtReleaseTrackCount(release) {
+    var total = 0;
+    var media = (release && release.media) || [];
+
+    for (var i = 0; i < media.length; i++) {
+        total += (media[i].tracks || []).length;
+    }
+
+    return total;
+}
+
+/** The tag and library release IDs can name editions with different track counts. */
+function mbzExtLoadReleaseCounts(conflicts, token) {
+    var conflict = null;
+
+    (conflicts || []).forEach(function (item) {
+        if (item.key === 'release' && item.tagValue && item.nativeValue) conflict = item;
+    });
+
+    if (!conflict) return;
+
+    var fetch = window.mbzFetch;
+    if (!fetch || typeof fetch.fetchReleaseAsync !== 'function') return;
+
+    return mbzExtPromise(Promise.all([
+        fetch.fetchReleaseAsync(conflict.nativeValue),
+        fetch.fetchReleaseAsync(conflict.tagValue)
+    ])).then(function (releases) {
+        if (window._cleanUpCalled || token !== mbzExtCountToken || !conflict.countLabel) return;
+
+        var libraryCount = mbzExtReleaseTrackCount(releases[0]);
+        var tagCount = mbzExtReleaseTrackCount(releases[1]);
+
+        if (!(libraryCount > 0) || !(tagCount > 0) || libraryCount === tagCount) return;
+
+        conflict.countLabel.textContent = sprintf(
+            _('The tag release has %d tracks; the library release has %d.'),
+            tagCount, libraryCount);
+        conflict.countLabel.title =
+            'Tag: ' + conflict.tagValue + ' / library: ' + conflict.nativeValue;
+        conflict.countLabel.style.display = '';
+    }, function () {
+        // A stale or invalid tag ID must not break the warning strip.
+    });
+}
+
 function mbzExtRenderDivergence(ui, readOnly) {
     if (!ui || !ui.diverge) return;
 
     ui.diverge.textContent = '';
 
+    var countToken = ++mbzExtCountToken;
     var conflicts = mbzExtConflicts();
 
     if (!conflicts.length) {
@@ -517,8 +565,19 @@ function mbzExtRenderDivergence(ui, readOnly) {
             item.appendChild(note);
         }
 
+        if (conflict.key === 'release') {
+            var countLabel = document.createElement('label');
+            countLabel.className = 'mbzExtLabel';
+            countLabel.setAttribute('data-release-count', conflict.key);
+            countLabel.style.display = 'none';
+            conflict.countLabel = countLabel;
+            item.appendChild(countLabel);
+        }
+
         ui.diverge.appendChild(item);
     });
+
+    mbzExtLoadReleaseCounts(conflicts, countToken);
 }
 
 function mbzExtOnDivergeClick(event) {

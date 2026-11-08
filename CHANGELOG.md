@@ -40,6 +40,9 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Years and original date** — Fill writes the native year and original year
   alongside date and original date, and adds Picard's `originaldate` tag next
   to `originalyear`.
+- **Track-count warnings** — preview warns when the MusicBrainz release and
+  the local album have different numbers of tracks, and the tag-vs-library
+  warning fetches both release IDs and reports when their track totals differ.
 - **Preview fixes** — the album tracklist is read under a read lock, so the
   preview no longer fails with "Read lock not acquired!"; field rows use
   MediaMonkey's own checkboxes and can be selected again. The native Date field

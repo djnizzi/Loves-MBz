@@ -122,6 +122,7 @@ function init(params) {
 
     var UI = {
         summary: qid('summary'),
+        warning: qid('warning'),
         fields: qid('fields'),
         fieldRows: qid('fieldRows'),
         btnApply: qid('btnApply'),
@@ -135,6 +136,12 @@ function init(params) {
 
     function setSummary(text) {
         if (UI.summary) UI.summary.textContent = text;
+    }
+
+    function setWarning(text) {
+        if (!UI.warning) return;
+        UI.warning.textContent = text || '';
+        UI.warning.style.display = text ? '' : 'none';
     }
 
     function setNote(text) {
@@ -225,6 +232,15 @@ function init(params) {
     function renderFields(plan) {
         UI.fieldRows.textContent = '';
         currentPlan = plan;
+
+        var releaseTracks = plan ? plan.matches.length + plan.unmatched : 0;
+        if (plan && plan.libraryCount > 0 && releaseTracks > 0 &&
+            releaseTracks !== plan.libraryCount) {
+            setWarning(sprintf(_('Warning: the MusicBrainz release has %d tracks, but this album has %d.'),
+                releaseTracks, plan.libraryCount));
+        } else {
+            setWarning('');
+        }
 
         if (!plan || !plan.fields.length) {
             UI.fields.classList.add('mbzHidden');
@@ -344,6 +360,7 @@ function init(params) {
 
     window.localListen(UI.btnApply, 'click', applySelected);
 
+    setWarning('');
     setSummary(_('Reading the release from MusicBrainz...'));
 
     window.localPromise(fetch.previewAsync(albumId)).then(function (result) {
