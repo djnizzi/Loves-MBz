@@ -55,9 +55,9 @@ version, so `info.json` says `0.4.0` and the package is named
   lock, so the preview no longer fails with "Read lock not acquired!"; release
   field chooser is capped at its own height with a scrollbar, and the track list
   takes the remaining height as a native scrollable list, so a 30-track release
-  scrolls inside the dialog instead of expanding it. Every other row keeps its
-  natural height, so the native footer buttons cannot be squeezed out of the
-  dialog. The release details are arranged as two
+  scrolls inside the dialog instead of expanding it. The native footer buttons
+  live outside the content column, so they keep their own row and cannot be
+  squeezed out of the dialog. The release details are arranged as two
   label/value pairs per row, and the dialog opens at 1200×960 so more of the
   release fits without resizing. Field rows use MediaMonkey's own checkboxes and
   can be selected again. The native Date field is always offered, separately

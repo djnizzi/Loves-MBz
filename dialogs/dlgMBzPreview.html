@@ -6,11 +6,22 @@
     <script src="dlgMBzPreview.js"></script>
     <style type="text/css">
         html.dialog, html.dialog body { height: 100%; }
-        html.dialog body { margin: 0; overflow: hidden; }
-        .mbzPreviewRoot { box-sizing: border-box; height: 100%; min-height: 0; overflow: hidden; }
+        html.dialog body {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            overflow: hidden;
+        }
+        .mbzPreviewRoot {
+            box-sizing: border-box;
+            flex: 1 1 0;
+            height: auto;
+            min-height: 0;
+            overflow: hidden;
+        }
         .mbzPreviewRoot > * { flex: 0 0 auto; }
         .mbzPreviewRoot > .mbzTrackScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; }
-        .mbzPreviewRoot > [data-control-class="Buttons"] { min-height: 32px; }
+        .mbzPreviewButtons { flex: 0 0 auto; min-height: 32px; padding: 0 10px 10px; }
         .mbzFieldScroll { flex: 0 0 auto; max-height: 14em; overflow-y: auto; }
         .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; }
         .mbzMetaTable th {
@@ -48,7 +59,7 @@
 </head>
 
 <body data-posSaveName="dlgMBzPreview" data-defaultSize="1200,960">
-    <div class="flex column stretchWidth stretchHeight padding mbzPreviewRoot" style="gap: 10px;">
+    <div class="flex column fill padding mbzPreviewRoot" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
         <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
@@ -96,10 +107,10 @@
         </div>
 
         <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply.</label>
+    </div>
 
-        <div data-control-class="Buttons">
-            <div data-id="btnClose" data-default="1" data-esc></div>
-        </div>
+    <div data-control-class="Buttons" class="mbzPreviewButtons">
+        <div data-id="btnClose" data-default="1" data-esc></div>
     </div>
 </body>
 
