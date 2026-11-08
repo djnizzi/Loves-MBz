@@ -25,7 +25,7 @@ MusicBrainz extended tags that actually exist, and lets you edit them.
 Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
-Current version: **0.3.9**.
+Current version: **0.3.10**.
 
 ---
 
@@ -382,6 +382,19 @@ skin/icon/lovesMBz.svg             menu icon
 ```
 
 ## Changelog
+
+### 0.3.10
+- **Scoped cache refresh** — a change event now re-reads only the album row, the
+  track's artist links or the songs of the artist it names, instead of clearing
+  and reloading every lookup table. A large library no longer does a full pass
+  after each edit.
+- **MusicBrainz links in the track-list menu** — right-click a track (or use
+  **Edit → Tag Tools**) and pick **MusicBrainz links** to open its release,
+  release group or artist page; only the IDs that track actually has are
+  offered.
+- **New icon** — the menu icon follows the skin's colour again (white on dark
+  themes) instead of carrying its own dark fill, and the add-on icon is now the
+  square PNG, so the install dialog shows it fitted rather than overflowing.
 
 ### 0.3.9
 - **Columns refresh themselves** — the lookup tables behind the three track-list
