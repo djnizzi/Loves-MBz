@@ -5,6 +5,10 @@
     <script src="file:///mminit.js"></script>
     <script src="dlgMBzPreview.js"></script>
     <style type="text/css">
+        html.dialog, html.dialog body { height: 100%; }
+        html.dialog body { margin: 0; overflow: hidden; }
+        .mbzPreviewRoot { box-sizing: border-box; height: 100%; min-height: 0; overflow: auto; }
+        .mbzListScroll { flex: 1 1 0; min-height: 160px; overflow: auto; }
         .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; }
         .mbzMetaTable th {
             text-align: left;
@@ -44,7 +48,7 @@
 </head>
 
 <body data-posSaveName="dlgMBzPreview" data-defaultSize="1020,760">
-    <div class="flex column fill padding" style="gap: 10px;">
+    <div class="flex column fill padding mbzPreviewRoot" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
         <label data-id="warning" class="mbzWarning mbzHidden" data-localize></label>
@@ -77,7 +81,7 @@
             <label data-id="applyStatus" class="fill"></label>
         </div>
 
-        <div data-id="tracks" class="fill mbzScroll mbzHidden" style="min-height: 160px;">
+        <div data-id="tracks" class="scrollable mbzListScroll mbzScroll mbzHidden">
             <table class="mbzTable">
                 <thead>
                     <tr>
