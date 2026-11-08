@@ -69,7 +69,8 @@ never by title.
       language, ISRC, track and disc numbers.
 - [ ] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
-      `originalyear`, album type/status/country, `CATALOGNUMBER`.
+      `originalyear`, album type/status/country, `CATALOGNUMBER`, and
+      `discogs_url` from the release's Discogs URL relationship.
 - [ ] Writes go through `track.commitAsync()`; the tag/library disagreement
       strip is extended so a fetched ID cannot silently overwrite a tag.
 - [ ] Cache a fetched release for the session, so reopening the dialog for the

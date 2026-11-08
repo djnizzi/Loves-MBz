@@ -21,7 +21,7 @@
     var API_ROOT = 'https://musicbrainz.org/ws/2/';
     var USER_AGENT = 'LovesMBz ( https://github.com/djnizzi/Loves-MBz )';
     var INCLUDE = 'artist-credits+labels+recordings+release-groups+media+discids' +
-        '+text-representation+isrcs';
+        '+text-representation+isrcs+url-rels';
     var MIN_INTERVAL_MS = 1100;     // the API allows one request per second
     var REQUEST_TIMEOUT_MS = 20000;
     var MAX_ATTEMPTS = 3;
@@ -58,6 +58,32 @@
         }
 
         return GUID_RE.test(id) ? id : '';
+    }
+
+    /**
+     * Discogs pages linked from a release. MusicBrainz stores these as URL
+     * relationships; Picard's `discogs_url` extended tag holds the same value.
+     * Returns [] when the release has no Discogs link.
+     */
+    function discogsUrls(release) {
+        var relations = (release && release.relations) ? release.relations : [];
+        var urls = [];
+
+        for (var i = 0; i < relations.length; i++) {
+            var relation = relations[i] || {};
+            var resource = (relation.url && relation.url.resource)
+                ? String(relation.url.resource).trim()
+                : '';
+
+            if (!resource) continue;
+
+            var isDiscogs = relation.type === 'discogs' ||
+                /^https?:\/\/(www\.)?discogs\.com\//i.test(resource);
+
+            if (isDiscogs && urls.indexOf(resource) === -1) urls.push(resource);
+        }
+
+        return urls;
     }
 
     function errorText(error) {
@@ -233,6 +259,7 @@
         fetchReleaseAsync: fetchReleaseAsync,
         releaseIdForAlbumAsync: releaseIdForAlbumAsync,
         normalizeReleaseId: normalizeReleaseId,
+        discogsUrls: discogsUrls,
         clearCache: function () {
             cache.clear();
         },

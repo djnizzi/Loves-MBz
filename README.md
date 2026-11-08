@@ -104,8 +104,10 @@ columns without a restart, even in a large library.
 **Edit → Tag Tools → Preview MusicBrainz metadata…** (also in the track list
 context menu) opens a read-only view of the release behind the first selected
 track's album: artist credit, date, country, status, type, label and catalogue
-number, barcode, script/language, and every medium's tracks with their number,
-title, length, ISRC and recording ID.
+number, barcode, the Discogs page when the release links one, script/language,
+and every medium's tracks with their number, title, length, ISRC and recording
+ID. The Discogs link is MusicBrainz's URL relationship for the release; it is
+the value Picard stores as `discogs_url`.
 
 The lookup is by release ID only. The album must already carry `Albums.MBGID`
 (set it in the IDs dialog, or let MediaMonkey match the release); when that is
@@ -312,8 +314,9 @@ must support extended tags — formats such as WAV may discard them.
   `fetchReleaseAsync` validates the UUID, serializes lookups through a queue
   (one request, then at least 1.1 s), sends a `User-Agent`, retries
   `503`/`429` with backoff, stops once the dialog has closed, and caches the
-  parsed release by ID. The dialog renders the release and its track list as
-  text only.
+  parsed release by ID. `url-rels` is part of the lookup, so the release's
+  Discogs page is available as `discogsUrls`. The dialog renders the release
+  and its track list as text only.
 - **Writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in `mbzMbgid.js` run
   one validated `UPDATE` against `Albums` or `Artists`, then
   `app.db.clearCache()` and `uitools.refreshView()` so MediaMonkey does not keep

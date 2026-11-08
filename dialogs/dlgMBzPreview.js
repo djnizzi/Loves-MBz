@@ -181,6 +181,7 @@ function init(params) {
         addMeta(_('Type'), mbzPreviewType(release));
         addMeta(_('Label'), mbzPreviewLabel(release));
         addMeta(_('Barcode'), mbzPreviewText(release.barcode));
+        addMeta(_('Discogs'), fetch.discogsUrls(release).join(', '));
         addMeta(_('Script'), mbzPreviewScript(release));
         addMeta(_('Release ID'), result.releaseId);
         addMeta(_('Tracks'), trackTotal ? String(trackTotal) : '');
