@@ -32,24 +32,72 @@ actions.lovesMBzShowIds = {
  * "Read lock not acquired!" when a shared Track property is read outside a
  * read lock, so the two values are copied while the list is locked.
  */
-function mbzSelectedIds() {
+function mbzSelectedIdsFromList(list) {
     var ids = { songId: 0, albumId: 0 };
-    var list = uitools.getSelectedTracklist();
 
-    if (!list || !(list.count > 0)) return ids;
+    if (!list) return ids;
+
+    // firstSelected is the least fragile way to read the selection while the
+    // list is loading; locked() may defer its callback.
+    try {
+        var track = list.firstSelected;
+        if (track) {
+            ids.songId = parseInt(track.id, 10) || 0;
+            ids.albumId = parseInt(track.idalbum, 10) || 0;
+            return ids;
+        }
+    } catch (e) {
+        // fall through to the value helpers
+    }
+
+    try {
+        var albumIds = list.getAllValues ? list.getAllValues('idalbum') : [];
+        var songIds = list.getAllValues ? list.getAllValues('id') : [];
+        ids.albumId = albumIds && albumIds.length ? parseInt(albumIds[0], 10) || 0 : 0;
+        ids.songId = songIds && songIds.length ? parseInt(songIds[0], 10) || 0 : 0;
+        if (ids.albumId > 0 || ids.songId > 0) return ids;
+    } catch (e) {
+        // fall back to a read lock below
+    }
 
     function read() {
-        var track = list.getValue(0);
-        if (!track) return;
+        var first = list.getValue ? list.getValue(0) : null;
+        if (!first) return;
 
-        ids.songId = parseInt(track.id, 10) || 0;
-        ids.albumId = parseInt(track.idalbum, 10) || 0;
+        ids.songId = parseInt(first.id, 10) || 0;
+        ids.albumId = parseInt(first.idalbum, 10) || 0;
     }
 
     if (typeof list.locked === 'function') list.locked(read);
     else read();
 
     return ids;
+}
+
+function mbzSelectedIds() {
+    return mbzSelectedIdsFromList(uitools.getSelectedTracklist());
+}
+
+/**
+ * Selected tracklists are returned before they are populated. Waiting for
+ * whenLoaded() prevents the preview from opening with albumId 0 on a selection
+ * that is still being delivered.
+ */
+function mbzSelectedIdsAsync(list) {
+    if (!list) return Promise.resolve({ songId: 0, albumId: 0 });
+
+    var loaded = null;
+    try {
+        if (typeof list.whenLoaded === 'function') loaded = list.whenLoaded();
+    } catch (e) {
+        loaded = null;
+    }
+
+    return Promise.resolve(loaded).then(function (loadedList) {
+        return mbzSelectedIdsFromList(loadedList || list);
+    }, function () {
+        return mbzSelectedIdsFromList(list);
+    });
 }
 
 /**
@@ -142,13 +190,17 @@ actions.lovesMBzPreview = {
     icon: 'lovesMBz',
     disabled: uitools.notMediaListSelected,
     execute: function () {
-        var ids = mbzSelectedIds();
+        var list = uitools.getSelectedTracklist();
+        if (!list) return;
 
-        uitools.openDialog('dlgMBzPreview', {
-            show: true,
-            modal: false,
-            title: _('MusicBrainz metadata preview'),
-            albumId: ids.albumId
+        mbzSelectedIdsAsync(list).then(function (ids) {
+            uitools.openDialog('dlgMBzPreview', {
+                show: true,
+                modal: false,
+                title: _('MusicBrainz metadata preview'),
+                albumId: ids.albumId,
+                tracks: list
+            });
         });
     }
 };

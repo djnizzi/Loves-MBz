@@ -43,13 +43,16 @@ version, so `info.json` says `0.4.0` and the package is named
 - **Track-count warnings** — preview warns when the MusicBrainz release and
   the local album have different numbers of tracks, and the tag-vs-library
   warning fetches both release IDs and reports when their track totals differ.
-- **Preview fixes** — the album tracklist is read under a read lock, so the
-  preview no longer fails with "Read lock not acquired!"; the release metadata
-  list and the track list each have their own scroll pane, sized against the
-  dialog height, so long releases no longer push the buttons out of view. Field
-  rows use MediaMonkey's own checkboxes and can be selected again. The native
-  Date field is always offered, separately from Original date, so the release
-  date can be written to MediaMonkey's own date.
+- **Preview fixes** — the preview waits for MediaMonkey's selected tracklist
+  to finish loading before reading its album, so a valid selection no longer
+  opens as "No album is selected"; a reopened dialog clears the previous
+  release before showing the new one. The album tracklist is read under a read
+  lock, so the preview no longer fails with "Read lock not acquired!"; the
+  release metadata list and the track list each have their own scroll pane,
+  sized against the dialog height, so long releases no longer push the buttons
+  out of view. Field rows use MediaMonkey's own checkboxes and can be selected
+  again. The native Date field is always offered, separately from Original date,
+  so the release date can be written to MediaMonkey's own date.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the

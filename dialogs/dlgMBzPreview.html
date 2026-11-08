@@ -41,7 +41,7 @@
         .mbzTable td.mbzNowrap { white-space: nowrap; }
         .mbzNote { opacity: 0.7; }
         .mbzWarning { color: #d9534f; white-space: normal; }
-        .mbzHidden { display: none; }
+        .mbzHidden { display: none !important; }
         .mbzDisabled { opacity: 0.5; pointer-events: none; }
         .mbzButton { padding: 0 14px; line-height: 24px; }
     </style>
@@ -51,7 +51,7 @@
     <div class="flex column fill padding mbzPreviewRoot" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
-        <label data-id="warning" class="mbzWarning mbzHidden" data-localize></label>
+        <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
 
         <div data-id="metaScroll" class="mbzMetaScroll mbzHidden">
             <table data-id="meta" class="mbzMetaTable">

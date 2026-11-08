@@ -106,6 +106,7 @@ function init(params) {
     wnd.resizeable = true;
 
     var albumId = (params && params.albumId) ? parseInt(params.albumId, 10) : 0;
+    var sourceList = params && params.tracks;
     var fetch = window.mbzFetch;
     var apply = window.mbzApply;
     var currentPlan = null;
@@ -151,6 +152,22 @@ function init(params) {
 
     function setStatus(text) {
         if (UI.applyStatus) UI.applyStatus.textContent = text;
+    }
+
+    /** A reused dialog must not keep the previous release's rows or sections. */
+    function resetView() {
+        if (UI.metaRows) UI.metaRows.textContent = '';
+        if (UI.fieldRows) UI.fieldRows.textContent = '';
+        if (UI.trackRows) UI.trackRows.textContent = '';
+        if (UI.applyStatus) UI.applyStatus.textContent = '';
+
+        if (UI.fields) UI.fields.classList.add('mbzHidden');
+        if (UI.btnApply) UI.btnApply.classList.add('mbzHidden');
+        if (UI.tracks) UI.tracks.classList.add('mbzHidden');
+        if (UI.metaScroll) UI.metaScroll.classList.add('mbzHidden');
+        else if (UI.meta) UI.meta.classList.add('mbzHidden');
+
+        setWarning('');
     }
 
     function addMeta(label, value) {
@@ -350,36 +367,89 @@ function init(params) {
         });
     }
 
+    resetView();
+
     if (!fetch) {
         setSummary(_('The MusicBrainz fetch module did not load. Check debug.log for lines starting with "Loves MBz:".'));
         return;
     }
 
-    if (!(albumId > 0)) {
+    if (albumId > 0) {
+        startPreview();
+    } else if (sourceList) {
+        loadSelectedAlbum();
+    } else {
         renderSkipped({ reason: 'no-album' });
-        return;
     }
 
-    window.localListen(UI.btnApply, 'click', applySelected);
+    /** Read the album from the loaded list copy, not from the still-loading list. */
+    function albumIdFromList(list) {
+        var track = null;
 
-    setWarning('');
-    setSummary(_('Reading the release from MusicBrainz...'));
-
-    window.localPromise(fetch.previewAsync(albumId)).then(function (result) {
-        if (window._cleanUpCalled) return;
-
-        if (result.skipped) {
-            renderSkipped(result);
-            return;
+        try {
+            track = list && list.firstSelected;
+            if (track) return parseInt(track.idalbum, 10) || 0;
+        } catch (e) {
+            track = null;
         }
 
-        lastResult = result;
-        renderRelease(result);
-        loadPlan(result);
-    }, function (error) {
-        if (window._cleanUpCalled) return;
+        try {
+            var albumIds = list && list.getAllValues ? list.getAllValues('idalbum') : [];
+            if (albumIds && albumIds.length) return parseInt(albumIds[0], 10) || 0;
+        } catch (e) {
+            // fall back to a locked read
+        }
 
-        setSummary(sprintf(_('Could not read the release: %s'), mbzPreviewErrorText(error)));
-        setNote(_('The release ID is unchanged and nothing was written.'));
-    });
+        var id = 0;
+        function read() {
+            var first = list && list.getValue ? list.getValue(0) : null;
+            id = first ? parseInt(first.idalbum, 10) || 0 : 0;
+        }
+
+        if (list && typeof list.locked === 'function') list.locked(read);
+        else read();
+        return id;
+    }
+
+    function loadSelectedAlbum() {
+        var loaded = null;
+        try {
+            if (typeof sourceList.whenLoaded === 'function') loaded = sourceList.whenLoaded();
+        } catch (e) {
+            loaded = null;
+        }
+
+        window.localPromise(loaded).then(function (loadedList) {
+            if (window._cleanUpCalled) return;
+
+            albumId = albumIdFromList(loadedList || sourceList);
+            if (albumId > 0) startPreview();
+            else renderSkipped({ reason: 'no-album' });
+        }, function () {
+            if (!window._cleanUpCalled) renderSkipped({ reason: 'no-album' });
+        });
+    }
+
+    function startPreview() {
+        window.localListen(UI.btnApply, 'click', applySelected);
+        setSummary(_('Reading the release from MusicBrainz...'));
+
+        window.localPromise(fetch.previewAsync(albumId)).then(function (result) {
+            if (window._cleanUpCalled) return;
+
+            if (result.skipped) {
+                renderSkipped(result);
+                return;
+            }
+
+            lastResult = result;
+            renderRelease(result);
+            loadPlan(result);
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+
+            setSummary(sprintf(_('Could not read the release: %s'), mbzPreviewErrorText(error)));
+            setNote(_('The release ID is unchanged and nothing was written.'));
+        });
+    }
 }
