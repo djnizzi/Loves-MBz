@@ -86,7 +86,7 @@ never by title.
       have no native column; see **Nice to have**.
 - [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
-      `originaldate`, `originalyear`, album type/status/country,
+      `originaldate`, album type/status/country,
       `CATALOGNUMBER`, and
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in

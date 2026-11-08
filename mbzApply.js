@@ -46,7 +46,6 @@
         { key: 'script', label: _('Script'), scope: 'album', tag: 'SCRIPT' },
         { key: 'discogs', label: _('Discogs URL'), scope: 'album', tag: 'discogs_url' },
         { key: 'originaldate', label: _('Original date (tag)'), scope: 'album', tag: 'originaldate' },
-        { key: 'originalyear', label: _('Original year (tag)'), scope: 'album', tag: 'originalyear' },
         { key: 'recordingid', label: _('MusicBrainz recording ID'), scope: 'track', tag: 'MUSICBRAINZ_TRACKID' },
         { key: 'releasetrackid', label: _('MusicBrainz release track ID'), scope: 'track', tag: 'MUSICBRAINZ_RELEASETRACKID' },
         { key: 'artistid', label: _('MusicBrainz artist ID'), scope: 'track', tag: 'MUSICBRAINZ_ARTISTID' },
@@ -192,8 +191,7 @@
             CATALOGNUMBER: catalogNumbers(release),
             SCRIPT: releaseScript(release),
             discogs_url: discogsUrls(release).join(', '),
-            originaldate: origDate,
-            originalyear: yearOf(origDate)
+            originaldate: origDate
         };
 
         var tracks = [];

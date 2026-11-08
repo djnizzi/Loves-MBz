@@ -120,7 +120,7 @@ written before that click.
 |---|---|
 | Native track tags | title, artist, ISRC |
 | Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
-| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `originalyear`, `discogs_url` |
+| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS` |
 
 Library tracks are matched to the release by disc and track number, never by
@@ -233,8 +233,9 @@ field, which overwrites nothing and happens immediately.
 `Albums.MBGID` onto the dialog's track: native fields (`; `-separated album
 artist and artist, date, year, original date, original year, every label joined
 into `publisher`, title, ISRC) and the extended tags, including the joined
-credit in `ARTISTS`/`ALBUMARTISTS`, `originaldate`, `originalyear` and
-`discogs_url`. It lists every differing field with a checkbox; **Apply
+credit in `ARTISTS`/`ALBUMARTISTS`, `originaldate` and `discogs_url`. The
+`originalyear` tag is deliberately not written, because a library can store a
+full `YYYY-MM-DD` date there and a four-digit year would replace it. It lists every differing field with a checkbox; **Apply
 selected** stages only those fields. Values that already match are skipped,
 and the track is matched to the release by disc and track number. Nothing is
 saved until you click **OK** in Track Properties, which is what commits the

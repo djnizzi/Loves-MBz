@@ -8,7 +8,8 @@
         html.dialog, html.dialog body { height: 100%; }
         html.dialog body { margin: 0; overflow: hidden; }
         .mbzPreviewRoot { box-sizing: border-box; height: 100%; min-height: 0; overflow: hidden; }
-        .mbzPreviewScroll { flex: 1 1 0; min-height: 0; overflow: hidden; }
+        .mbzFieldScroll { flex: 0 0 auto; max-height: 14em; overflow-y: auto; }
+        .mbzTrackScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; }
         .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; }
         .mbzMetaTable th {
             text-align: left;
@@ -20,7 +21,6 @@
         }
         .mbzMetaTable td { padding: 2px 24px 2px 0; user-select: text; }
         .mbzMetaTable td:last-child { padding-right: 0; }
-        .mbzScroll { overflow: auto; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; }
         .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
         .mbzTable th {
             text-align: left;
@@ -46,53 +46,51 @@
 </head>
 
 <body data-posSaveName="dlgMBzPreview" data-defaultSize="1200,960">
-    <div class="flex column fill padding mbzPreviewRoot" style="gap: 10px;">
+    <div class="flex column stretchWidth stretchHeight padding mbzPreviewRoot" style="gap: 10px;">
 
         <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
         <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
 
-        <div class="flex column mbzPreviewScroll" data-id="previewScroll" style="gap: 10px;">
-            <div data-id="metaScroll" class="mbzHidden">
-                <table data-id="meta" class="mbzMetaTable">
-                    <tbody data-id="metaRows"></tbody>
-                </table>
-            </div>
+        <div data-id="metaScroll" class="mbzHidden">
+            <table data-id="meta" class="mbzMetaTable">
+                <tbody data-id="metaRows"></tbody>
+            </table>
+        </div>
 
-            <div data-id="fields" class="mbzHidden">
-                <table class="mbzTable">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th data-localize>Field</th>
-                            <th data-localize>Current</th>
-                            <th data-localize>MusicBrainz</th>
-                            <th data-localize>Changes</th>
-                        </tr>
-                    </thead>
-                    <tbody data-id="fieldRows"></tbody>
-                </table>
-            </div>
+        <div data-id="fields" class="mbzFieldScroll mbzHidden">
+            <table class="mbzTable">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th data-localize>Field</th>
+                        <th data-localize>Current</th>
+                        <th data-localize>MusicBrainz</th>
+                        <th data-localize>Changes</th>
+                    </tr>
+                </thead>
+                <tbody data-id="fieldRows"></tbody>
+            </table>
+        </div>
 
-            <div class="flex row" style="align-items: center; gap: 8px;">
-                <div class="button mbzButton mbzHidden" data-id="btnApply" data-localize>Apply selected</div>
-                <label data-id="applyStatus" class="fill"></label>
-            </div>
+        <div class="flex row" style="align-items: center; gap: 8px;">
+            <div class="button mbzButton mbzHidden" data-id="btnApply" data-localize>Apply selected</div>
+            <label data-id="applyStatus" class="fill"></label>
+        </div>
 
-            <div data-id="tracks" class="scrollable fill mbzHidden" style="min-height: 160px;">
-                <table class="mbzTable">
-                    <thead>
-                        <tr>
-                            <th data-localize>Disc</th>
-                            <th data-localize>Track</th>
-                            <th data-localize>Title</th>
-                            <th data-localize>Length</th>
-                            <th data-localize>ISRC</th>
-                            <th data-localize>Recording ID</th>
-                        </tr>
-                    </thead>
-                    <tbody data-id="trackRows"></tbody>
-                </table>
-            </div>
+        <div data-id="tracks" class="scrollable fill mbzTrackScroll mbzHidden">
+            <table class="mbzTable">
+                <thead>
+                    <tr>
+                        <th data-localize>Disc</th>
+                        <th data-localize>Track</th>
+                        <th data-localize>Title</th>
+                        <th data-localize>Length</th>
+                        <th data-localize>ISRC</th>
+                        <th data-localize>Recording ID</th>
+                    </tr>
+                </thead>
+                <tbody data-id="trackRows"></tbody>
+            </table>
         </div>
 
         <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply.</label>
