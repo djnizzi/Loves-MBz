@@ -56,12 +56,14 @@ never by title.
 
 ### Checklist
 
-- [ ] `mbzFetch.js`: serialized queue (requests at least 1.1 s apart), a
+- [x] `mbzFetch.js`: serialized queue (requests at least 1.1 s apart), a
       descriptive `User-Agent`, `fmt=json`, backoff on 503, cancellation when
       the dialog closes, and no request at all for an album without `MBGID`.
-- [ ] Preview before writing: current value against fetched value per field,
-      one checkbox per field, nothing written until **Apply**. Albums with no
-      release ID are listed with the reason instead of being queried.
+- [x] Read-only preview: one album per dialog, the fetched values and the full
+      track list, nothing written. Albums with no release ID say why instead of
+      being queried.
+- [ ] Write step: current value against fetched value per field, one checkbox
+      per field, nothing written until **Apply**.
 - [ ] Native tags: artist, album artist, title, date, original date, genre,
       composer, lyricist, conductor, producer, publisher (label), copyright,
       language, ISRC, track and disc numbers.

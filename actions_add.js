@@ -131,6 +131,28 @@ actions.lovesMBzLinks = {
     }
 };
 
+/**
+ * Read-only: the dialog looks up the release behind the selected album's
+ * Albums.MBGID and displays it. It never writes, and an album without that ID
+ * is not looked up at all.
+ */
+actions.lovesMBzPreview = {
+    title: _('Preview MusicBrainz metadata') + '...',
+    hotkeyAble: true,
+    icon: 'musicBrainz',
+    disabled: uitools.notMediaListSelected,
+    execute: function () {
+        var ids = mbzSelectedIds();
+
+        uitools.openDialog('dlgMBzPreview', {
+            show: true,
+            modal: false,
+            title: _('MusicBrainz metadata preview'),
+            albumId: ids.albumId
+        });
+    }
+};
+
 // Needs to be unique so that it does not interfere with other addons.
 window._menuItems.editTags.action.submenu.push({
     action: actions.lovesMBzShowIds,
@@ -141,5 +163,11 @@ window._menuItems.editTags.action.submenu.push({
 window._menuItems.editTags.action.submenu.push({
     action: actions.lovesMBzLinks,
     order: 130,
+    grouporder: 10
+});
+
+window._menuItems.editTags.action.submenu.push({
+    action: actions.lovesMBzPreview,
+    order: 140,
     grouporder: 10
 });

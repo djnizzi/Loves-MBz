@@ -25,6 +25,12 @@ MusicBrainz extended tags that actually exist, and lets you edit them.
 Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
+**Preview MusicBrainz metadata…** reads the release behind the selected album's
+existing release ID and shows what MusicBrainz holds — artists, label, barcode,
+status, type, country, script and the full track list — without writing
+anything. An album without a release ID is skipped without a request; the
+add-on never searches MusicBrainz by name.
+
 Current version: **0.3.12**.
 
 ---
@@ -92,6 +98,27 @@ The column cache rebuilds itself when MediaMonkey commits a change — re-readin
 only the album rows, track links and artists that the event names — so releases
 and artists matched through MediaMonkey's own MusicBrainz lookup show up in the
 columns without a restart, even in a large library.
+
+### Previewing the release metadata
+
+**Edit → Tag Tools → Preview MusicBrainz metadata…** (also in the track list
+context menu) opens a read-only view of the release behind the first selected
+track's album: artist credit, date, country, status, type, label and catalogue
+number, barcode, script/language, and every medium's tracks with their number,
+title, length, ISRC and recording ID.
+
+The lookup is by release ID only. The album must already carry `Albums.MBGID`
+(set it in the IDs dialog, or let MediaMonkey match the release); when that is
+empty or `0` the dialog says so and **no request is made**. There is no search
+by artist or album name, no AcoustID and no disc-ID lookup, so the add-on
+cannot pick the wrong release. No API key is needed: the add-on identifies
+itself with a `User-Agent` and keeps requests at least 1.1 s apart. A busy
+server (`503`/`429`) is retried twice with a growing delay, and the parsed
+release is cached by ID for that dialog, so previewing the same album again
+does not call the API.
+
+Nothing is written — not the database, not tags, not files. Writing the
+fetched values is a separate step.
 
 ### Setting an ID
 
@@ -279,6 +306,14 @@ must support extended tags — formats such as WAV may discard them.
   GROUP BY s.ID
   ```
 
+- **Release preview** — `dialogs/dlgMBzPreview.js` asks `mbzFetch.js` for one
+  album. `releaseIdForAlbumAsync` reads `SELECT MBGID FROM Albums WHERE ID = ?`
+  and returns `''` without any HTTP request when the album has no ID;
+  `fetchReleaseAsync` validates the UUID, serializes lookups through a queue
+  (one request, then at least 1.1 s), sends a `User-Agent`, retries
+  `503`/`429` with backoff, stops once the dialog has closed, and caches the
+  parsed release by ID. The dialog renders the release and its track list as
+  text only.
 - **Writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in `mbzMbgid.js` run
   one validated `UPDATE` against `Albums` or `Artists`, then
   `app.db.clearCache()` and `uitools.refreshView()` so MediaMonkey does not keep
@@ -327,14 +362,14 @@ PowerShell:
 
 ```powershell
 # from this folder
-Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
+Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\mbzFetch.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
 Rename-Item .\LovesMBz.zip .\LovesMBz.mmip
 ```
 
 bash / Git Bash, if `zip` is available:
 
 ```bash
-zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialogs skin loves-mbz.png
+zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js actions_add.js controls dialogs skin loves-mbz.png
 ```
 
 ## Troubleshooting
@@ -375,6 +410,11 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialo
   the value from a MusicBrainz page to get a link.
 - **An extended-tag edit did not stick** — the file format may not support the
   tag, or Party Mode is on. Check the value after reopening Track Properties.
+- **The preview says the album has no release ID** — `Albums.MBGID` is empty or
+  `0`. Set it in the IDs dialog (or let MediaMonkey match the release); the
+  preview deliberately does not search by name.
+- **The preview reports that MusicBrainz is busy** — three requests in a row
+  were answered with `503`/`429`. Wait a minute and reopen the dialog.
 - **The MusicBrainz tab is missing** — `dialogs/dlgTrackProperties_add.js` did
   not load; check `debug.log` for lines starting with `Loves MBz:`, then
   reopen Track Properties.
@@ -385,10 +425,13 @@ zip -r LovesMBz.mmip info.json init.js mbzMbgid.js actions_add.js controls dialo
 info.json                          addon manifest (id, version, icon)
 init.js                            startup: loads the module, starts the cache
 mbzMbgid.js                        database access, ID lookup tables, writes
+mbzFetch.js                        throttled MusicBrainz release lookup
 actions_add.js                     Edit > Tag Tools and track-list menu actions
 controls/trackListView_add.js      the three track-list columns
 dialogs/dlgLovesMBz.html           dialog markup
 dialogs/dlgLovesMBz.js             dialog: view, copy, edit
+dialogs/dlgMBzPreview.html         preview dialog markup
+dialogs/dlgMBzPreview.js           preview: release and track list, read-only
 dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
 dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
 dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
