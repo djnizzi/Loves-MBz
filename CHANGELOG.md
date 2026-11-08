@@ -30,7 +30,10 @@ version, so `info.json` says `0.4.0` and the package is named
   24×24.
 - **Per-field selection** — Fill now lists every differing field with a
   checkbox. Apply selected stages only the ticked fields for one track, or
-  saves only those fields for a multi-track selection.
+  saves only those fields for a multi-track selection. The per-tag **All tracks**
+  boxes in the MusicBrainz tab use MediaMonkey's native Checkbox control, so
+  they match **Save MusicBrainz tags** instead of drawing a blue browser
+  checkbox.
 - **Credits and labels** — every label on the release is joined into
   `publisher` instead of only the first.
 - **Multi-value artist fields** — MediaMonkey's native Artist and Album Artist

@@ -52,6 +52,7 @@ var mbzExtGroupLookup = null;
 var mbzExtGroupArtists = null;
 var mbzExtFillPlanState = null;
 var mbzExtCountToken = 0;
+var mbzExtDialog = null;
 
 /**
  * A group edit rebuilds window.modified/window.tagModified from the checked
@@ -1208,11 +1209,11 @@ function mbzExtRenderRows(ui, readOnly) {
                 // The box belongs to the tag, not to one of its artists, so
                 // only the first of a split tag carries it.
                 if (first) {
-                    var apply = document.createElement('input');
-                    apply.type = 'checkbox';
+                    // Use MediaMonkey's own Checkbox control, the same one as
+                    // "Save MusicBrainz tags", instead of a browser checkbox.
+                    var apply = document.createElement('div');
                     apply.className = 'mbzExtApply';
-                    apply.checked = !row.isNew && row.missingCount === 0;
-                    apply.disabled = readOnly || row.isNew || row.missingCount === 0;
+                    apply.setAttribute('data-control-class', 'Checkbox');
                     apply.setAttribute('data-row', String(index));
                     apply.title = row.isNew
                         ? _('A new tag is written to every selected track.')
@@ -1222,6 +1223,13 @@ function mbzExtRenderRows(ui, readOnly) {
 
                     applyCell.appendChild(apply);
                     row.applyInput = apply;
+
+                    if (typeof initializeControl === 'function') initializeControl(apply);
+                    if (apply.controlClass) {
+                        apply.controlClass.checked = !row.isNew && row.missingCount === 0;
+                        apply.controlClass.disabled = readOnly || row.isNew || row.missingCount === 0;
+                        mbzExtListen(mbzExtDialog, apply, 'click', mbzExtOnApplyClick);
+                    }
                 }
 
                 tr.appendChild(applyCell);
@@ -1287,15 +1295,15 @@ function mbzExtRenderRows(ui, readOnly) {
     mbzExtRenderSuggestions(ui, readOnly);
 }
 
-function mbzExtOnApplyChange(event) {
-    var input = event && event.target;
-    if (!input || input.type !== 'checkbox' || !input.classList || !input.classList.contains('mbzExtApply')) return;
+function mbzExtOnApplyClick(event) {
+    var box = event && event.currentTarget;
+    if (!box || !box.controlClass) return;
 
-    var index = parseInt(input.getAttribute('data-row'), 10);
+    var index = parseInt(box.getAttribute('data-row'), 10);
     var row = mbzExtRows[index];
     if (!row) return;
 
-    row.applyToAll = !!input.checked;
+    row.applyToAll = !!box.controlClass.checked;
     mbzExtMarkChanged();
     mbzExtUpdateStatus();
 }
@@ -2022,6 +2030,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     };
 
     mbzExtUI = ui;
+    mbzExtDialog = dialog;
     mbzExtFillPlanState = null;
     mbzExtHideFillPlan(ui);
     mbzExtRows = [];
@@ -2066,7 +2075,6 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);
-    mbzExtListen(dialog, ui.rows, 'change', mbzExtOnApplyChange);
     mbzExtListen(dialog, ui.diverge, 'click', mbzExtOnDivergeClick);
 
     if (ui.diverge) ui.diverge.style.display = 'none';
