@@ -1263,7 +1263,7 @@ function mbzExtOnClick(event) {
 }
 
 function mbzExtCollectGroupSelection(dialog) {
-    var result = { trackCount: 0, songIds: [] };
+    var result = { trackCount: 0, songIds: [], tracks: [] };
     var tracks = dialog && (dialog.tracks || window.tracks);
     if (!tracks) return result;
 
@@ -1272,7 +1272,10 @@ function mbzExtCollectGroupSelection(dialog) {
         for (var i = 0; i < result.trackCount; i++) {
             var track = tracks.getValue(i);
             var id = track ? parseInt(track.id, 10) : 0;
-            if (id > 0 && result.songIds.indexOf(id) < 0) result.songIds.push(id);
+            if (id > 0 && result.songIds.indexOf(id) < 0) {
+                result.songIds.push(id);
+                result.tracks.push(track);
+            }
         }
     }
 
@@ -1419,6 +1422,193 @@ function mbzExtSaveGroupAsync(track, mbz) {
 }
 
 /**
+ * Builds the fill work for a multi-track selection. Every selected track is
+ * matched by disc and track number against the release behind its own album;
+ * albums are fetched once each and the fetch cache covers albums that share a
+ * release ID.
+ */
+async function mbzExtBuildGroupFillAsync(tracks) {
+    var fetch = window.mbzFetch;
+    var apply = window.mbzApply;
+    var albumIds = [];
+    var counts = { noAlbum: 0, noRelease: 0, unmatched: 0, same: 0 };
+
+    tracks.forEach(function (track) {
+        var albumId = parseInt(track && track.idalbum, 10);
+        if (!(albumId > 0)) {
+            counts.noAlbum++;
+            return;
+        }
+        if (albumIds.indexOf(albumId) === -1) albumIds.push(albumId);
+    });
+
+    var work = [];
+
+    for (var a = 0; a < albumIds.length; a++) {
+        if (window._cleanUpCalled) break;
+
+        var albumId = albumIds[a];
+        var albumTracks = tracks.filter(function (track) {
+            return parseInt(track && track.idalbum, 10) === albumId;
+        });
+        var result = await fetch.previewAsync(albumId);
+
+        if (window._cleanUpCalled) break;
+
+        if (result.skipped) {
+            counts.noRelease += albumTracks.length;
+            continue;
+        }
+
+        for (var i = 0; i < albumTracks.length; i++) {
+            var track = albumTracks[i];
+            var pending = await apply.buildPendingAsync(track, result.release);
+
+            if (window._cleanUpCalled) break;
+
+            if (!pending.matched) {
+                counts.unmatched++;
+                continue;
+            }
+
+            if (!pending.labels.length) {
+                counts.same++;
+                continue;
+            }
+
+            work.push({ track: track, pending: pending });
+        }
+    }
+
+    return { work: work, counts: counts };
+}
+
+function mbzExtGroupFillSkipText(counts) {
+    var parts = [];
+
+    if (counts.noAlbum) parts.push(sprintf(_('%d without an album'), counts.noAlbum));
+    if (counts.noRelease) parts.push(sprintf(_('%d with no release ID'), counts.noRelease));
+    if (counts.unmatched) parts.push(sprintf(_('%d with no matching disc/track'), counts.unmatched));
+    if (counts.same) parts.push(sprintf(_('%d already matching'), counts.same));
+
+    return parts.length ? ' ' + sprintf(_('Skipped: %s.'), parts.join(', ')) : '';
+}
+
+async function mbzExtCommitGroupFillAsync(work) {
+    var apply = window.mbzApply;
+    var written = 0;
+    var failed = [];
+
+    for (var i = 0; i < work.length; i++) {
+        if (window._cleanUpCalled) break;
+
+        try {
+            await apply.applyPendingAsync(work[i].track, work[i].pending);
+            if (work[i].track.commitAsync) await work[i].track.commitAsync();
+            written++;
+        } catch (error) {
+            failed.push({
+                title: work[i].track && work[i].track.title,
+                error: mbzExtErrorText(error)
+            });
+        }
+    }
+
+    try {
+        if (app.db.clearCache) app.db.clearCache();
+        if (typeof uitools !== 'undefined' && uitools.refreshView) uitools.refreshView();
+    } catch (e) {
+        // best effort; the writes above are already committed
+    }
+
+    return { written: written, failed: failed };
+}
+
+/**
+ * Fills every selected track from the release behind its album and saves the
+ * changed tracks immediately. Group Track Properties cannot commit native
+ * fields staged by a tab, so this path cannot leave the work to OK; the
+ * confirmation says so.
+ */
+function mbzExtFillGroupFromRelease(ui, dialog) {
+    var fetch = window.mbzFetch;
+    var apply = window.mbzApply;
+
+    if (!ui || !ui.fillButton) return;
+
+    if (!fetch || !apply) {
+        if (ui.fillStatus) {
+            ui.fillStatus.textContent = _('The MusicBrainz modules did not load. Check debug.log for lines starting with "Loves MBz:".');
+        }
+        return;
+    }
+
+    if (ui.fillButton.classList.contains('mbzExtBusy')) return;
+
+    var selection = mbzExtCollectGroupSelection(dialog);
+    if (!selection.tracks.length) {
+        if (ui.fillStatus) ui.fillStatus.textContent = _('No library tracks are selected.');
+        return;
+    }
+
+    function finish() {
+        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
+    }
+
+    ui.fillButton.classList.add('mbzExtBusy');
+    if (ui.fillStatus) ui.fillStatus.textContent = _('Reading the release...');
+
+    dialog.localPromise(mbzExtBuildGroupFillAsync(selection.tracks)).then(function (plan) {
+        if (window._cleanUpCalled) return;
+
+        if (!plan.work.length) {
+            if (ui.fillStatus) {
+                ui.fillStatus.textContent = _('Nothing to fill.') + mbzExtGroupFillSkipText(plan.counts);
+            }
+            return;
+        }
+
+        var fields = 0;
+        plan.work.forEach(function (item) { fields += item.pending.labels.length; });
+
+        messageDlg(
+            sprintf(_('Fill %d field(s) on %d selected track(s)?\n\nThese tracks are written and saved immediately; Cancel in Track Properties will not undo it.'), fields, plan.work.length),
+            _('MusicBrainz'),
+            ['btnYes', 'btnNo'],
+            { defaultButton: 'btnNo' },
+            function (choice) {
+                if (!choice || choice.btnID !== 'btnYes' || window._cleanUpCalled) return;
+
+                ui.fillButton.classList.add('mbzExtBusy');
+                if (ui.fillStatus) ui.fillStatus.textContent = _('Saving tracks...');
+
+                dialog.localPromise(mbzExtCommitGroupFillAsync(plan.work)).then(function (result) {
+                    if (window._cleanUpCalled) return;
+
+                    var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
+                        mbzExtGroupFillSkipText(plan.counts);
+
+                    if (result.failed.length) {
+                        text += ' ' + sprintf(_('%d track(s) failed: %s'),
+                            result.failed.length, result.failed[0].error);
+                    }
+
+                    if (ui.fillStatus) ui.fillStatus.textContent = text;
+                }, function (error) {
+                    if (window._cleanUpCalled) return;
+                    if (ui.fillStatus) {
+                        ui.fillStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
+                    }
+                }).then(finish, finish);
+            });
+    }, function (error) {
+        if (!window._cleanUpCalled && ui.fillStatus) {
+            ui.fillStatus.textContent = sprintf(_('Could not read the release: %s'), mbzExtErrorText(error));
+        }
+    }).then(finish, finish);
+}
+
+/**
  * Fills the open dialog's track from the release behind its album ID. The
  * fetched values are staged on the track: native fields are assigned and the
  * extended tags are merged into its current array, but nothing is committed.
@@ -1433,6 +1623,11 @@ function mbzExtFillFromRelease(ui, track, dialog) {
     var mbz = window.mbzMbgid;
 
     if (!ui || !ui.fillButton) return;
+
+    if (dialog && dialog.isGroup) {
+        mbzExtFillGroupFromRelease(ui, dialog);
+        return;
+    }
 
     if (!fetch || !apply || !mbz) {
         if (ui.fillStatus) {
@@ -1571,7 +1766,7 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     if (readOnly) ui.status.textContent = _('Read-only mode: links work, editing is disabled.');
     if (ui.applyBar) ui.applyBar.style.display = (dialog.isGroup && !readOnly) ? '' : 'none';
 
-    if (ui.fillBar) ui.fillBar.style.display = (dialog.isGroup || readOnly) ? 'none' : '';
+    if (ui.fillBar) ui.fillBar.style.display = readOnly ? 'none' : '';
     if (ui.fillStatus) ui.fillStatus.textContent = '';
     mbzExtListen(dialog, ui.fillButton, 'click', function () {
         mbzExtFillFromRelease(ui, track, dialog);

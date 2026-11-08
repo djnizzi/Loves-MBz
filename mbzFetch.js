@@ -12,8 +12,8 @@
  * here, behind a serialized queue, so no caller can bypass them.
  *
  * One `release/{mbid}` lookup asks for everything the add-on may need:
- * artist credits, labels, recordings, release groups, media, disc IDs, text
- * representation and ISRCs. The parsed release is cached by ID for the lifetime
+ * artist credits, labels, recordings, release groups, media, disc IDs and
+ * ISRCs. The parsed release is cached by ID for the lifetime
  * of this window, so previewing the same album twice costs one request.
  */
 
@@ -21,7 +21,7 @@
     var API_ROOT = 'https://musicbrainz.org/ws/2/';
     var USER_AGENT = 'LovesMBz ( https://github.com/djnizzi/Loves-MBz )';
     var INCLUDE = 'artist-credits+labels+recordings+release-groups+media+discids' +
-        '+text-representation+isrcs+url-rels';
+        '+isrcs+url-rels';
     var MIN_INTERVAL_MS = 1100;     // the API allows one request per second
     var REQUEST_TIMEOUT_MS = 20000;
     var MAX_ATTEMPTS = 3;
@@ -91,6 +91,21 @@
         return error.message ? error.message : String(error);
     }
 
+    /** The JSON error MusicBrainz sends with a 4xx, or a short plain-text body. */
+    function apiErrorDetail(body) {
+        var raw = String(body === undefined || body === null ? '' : body).trim();
+        if (!raw) return '';
+
+        try {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.error) return String(parsed.error).trim();
+        } catch (e) {
+            // not JSON: fall through to the text form
+        }
+
+        return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    }
+
     /**
      * The release ID MediaMonkey holds for an album, or '' when it has none.
      * This is the gate: an empty result must never lead to a request.
@@ -140,7 +155,9 @@
                 } else if (!xhr.status) {
                     fail(_('Could not reach musicbrainz.org.'));
                 } else {
-                    fail(_('MusicBrainz returned HTTP ') + xhr.status + '.');
+                    var detail = apiErrorDetail(xhr.responseText);
+                    fail(_('MusicBrainz returned HTTP ') + xhr.status +
+                        (detail ? ': ' + detail : '.'));
                 }
             };
 

@@ -10,6 +10,13 @@ Test build for the MusicBrainz metadata work — not published; install the
 version, so `info.json` says `0.4.0` and the package is named
 `LovesMBz-0.4.0-beta.mmip`; a numbered release follows live testing.
 
+- **Lookup fix** — the request no longer sends `text-representation`, which
+  MusicBrainz rejects for releases with HTTP 400. The release response still
+  carries script and language, so the `SCRIPT` tag is unaffected, and a failed
+  request now includes MusicBrainz's own error text instead of just the status.
+- **Multi-track fill** — selecting several files and pressing **Fill from
+  MusicBrainz** fills each matching disc/track and saves those tracks
+  immediately; the confirmation says so because Cancel cannot undo it.
 - **Metadata lookup by release ID** — the album's `Albums.MBGID` is the only
   input: one `release/{mbid}` request supplies IDs, credits, label, catalogue
   number, barcode, status, type, country, date, script, language, ISRCs and the

@@ -50,7 +50,7 @@ module rather than in a user setting. Nothing is ever written to MusicBrainz, so
 no account, token or secret is stored.
 
 One `release/{mbid}` lookup with
-`inc=artist-credits+labels+recordings+release-groups+media+discids+text-representation+isrcs`
+`inc=artist-credits+labels+recordings+release-groups+media+discids+isrcs+url-rels`
 supplies a whole album in a single request: the MBIDs, artist and album-artist
 credits, label and catalogue number, barcode, status, type, country, date,
 script and language, plus the track list with recording IDs, release-track IDs
@@ -70,6 +70,10 @@ never by title.
 - [x] Fill from MusicBrainz in the Track Properties tab: stages the release's
       native fields and extended tags on the open track, with OK as the save
       gate. The dialog's own inputs are not rewritten.
+- [x] Fill a multi-track selection: every selected file is matched by disc and
+      track number against its own album's release, and the changed tracks are
+      committed immediately because group Track Properties cannot commit native
+      fields staged by a tab. The confirmation says Cancel cannot undo it.
 - [x] Native tags for what the lookup returns: title, artist, album artist,
       date, original date, publisher (label), ISRC.
 - [ ] Relational native tags with real columns — genre, composer, lyricist,

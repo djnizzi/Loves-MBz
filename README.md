@@ -379,6 +379,12 @@ must support extended tags — formats such as WAV may discard them.
   merged with `mergeTags` through `setExtendedTagsAsync`. The dialog's OK button
   saves, and `mbzExtMarkChanged` marks the dialog dirty so the staged tags are
   included.
+- **Filling a selection** — with several tracks selected, the Fill button reads
+  each selected track's album, matches every file by disc and track, and
+  commits the changed tracks immediately, because group Track Properties cannot
+  commit native fields staged by a tab. The confirmation warns that Cancel will
+  not undo those writes; albums without a release ID and unmatched files are
+  reported and skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
