@@ -45,6 +45,7 @@ var mbzExtNative = null;
 var mbzExtArtists = [];
 var mbzExtGroupNative = null;
 var mbzExtGroupIds = [];
+var mbzExtFileSeparator = '; ';
 var mbzExtGroupLookup = null;
 var mbzExtGroupArtists = null;
 
@@ -815,9 +816,76 @@ function mbzExtUpdateStatus() {
         : '';
 }
 
+/**
+ * The separator a file uses for several artists: an MP3 keeps them in one
+ * ID3v2.3 frame joined with '/', other formats are written with the library's
+ * own separator.
+ */
+function mbzExtSeparatorForFile(path) {
+    var text = String(path || '').toLowerCase();
+    var dot = text.lastIndexOf('.');
+    var ext = dot >= 0 ? text.slice(dot + 1) : '';
+    return (ext === 'mp3') ? '/' : '; ';
+}
+
+/** Artist IDs are the tag names several rows legitimately share. */
+function mbzExtAppendsToExisting(title) {
+    var name = String(title || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return name === 'MUSICBRAINZARTISTID' || name === 'MUSICBRAINZALBUMARTISTID';
+}
+
 function mbzExtAddTagRow(ui, mbz, title, value) {
     if (!ui || !mbz || window.isReadOnly) return false;
     if (!title || !value) return false;
+
+    // Several artists share one MusicBrainz tag name, so adding another one
+    // appends to that tag instead of creating a second entry with the same
+    // name. Existing IDs keep their order and the new one goes last.
+    if (mbzExtAppendsToExisting(title)) {
+        var target = null;
+        var wanted = mbz.normalizeExtendedTagName(title);
+
+        mbzExtRows.forEach(function (row) {
+            if (!target && mbz.normalizeExtendedTagName(row.title) === wanted) target = row;
+        });
+
+        if (target) {
+            var current = mbzExtRowValue(target);
+            var parsedCurrent = mbz.extendedTagGuids(current);
+            var parsedAdd = mbz.extendedTagGuids(value);
+            var raw = String(target.originalValue || '');
+            var separator = target.partsSeparator
+                || (/[;,\/]/.test(raw) ? mbz.extendedTagSeparator(raw) : (mbzExtFileSeparator || '; '));
+
+            var ids = parsedCurrent.ids.slice();
+            var added = 0;
+
+            parsedAdd.ids.forEach(function (id) {
+                if (ids.indexOf(id) < 0) {
+                    ids.push(id);
+                    added++;
+                }
+            });
+
+            if (!added && !parsedAdd.invalid.length) {
+                ui.status.textContent = _('That ID is already in the tag.');
+                return false;
+            }
+
+            // Invalid text in either value is kept verbatim, so appending never
+            // silently drops a part of the tag.
+            target.pendingValue = (parsedCurrent.invalid.length || parsedAdd.invalid.length)
+                ? current + (current ? separator : '') + value
+                : ids.join(separator);
+
+            mbzExtMarkChanged();
+            mbzExtRenderRows(ui, false);
+            mbzExtUpdateSummary(ui);
+            mbzExtUpdateStatus();
+            mbzExtRenderDivergence(ui, false);
+            return true;
+        }
+    }
 
     var duplicate = false;
     mbzExtRows.forEach(function (row) {
@@ -1381,6 +1449,8 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     mbzExtGroupIds = [];
     mbzExtGroupLookup = null;
     var token = ++mbzExtLoadToken;
+
+    mbzExtFileSeparator = mbzExtSeparatorForFile(track && track.path);
 
     ui.intro.textContent = _('Only MusicBrainz tags stored in this track\'s ExtendedTags are listed here. The album and artist MBIDs are separate fields.');
     ui.summary.textContent = '';

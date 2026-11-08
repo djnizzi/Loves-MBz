@@ -178,6 +178,12 @@ row is marked *(not saved yet)* and is written when you click **OK**, under the
 canonical `MUSICBRAINZ_*` name. Clear the value of such a row before **OK** to
 discard it. Clearing a tag that already exists still removes it.
 
+Adding `MUSICBRAINZ_ARTISTID` or `MUSICBRAINZ_ALBUMARTISTID` to a tag that
+already holds IDs appends to that tag instead of creating a second entry with
+the same name: the existing IDs keep their order, the new one goes last, and the
+value keeps the separator the file uses (`/` for MP3, `; ` otherwise). Adding an
+ID the tag already has changes nothing.
+
 When the library already knows an ID, you do not have to paste it. The
 **From the library** suggestions above the picker offer the track's
 `Albums.MBGID`, `Albums.MBRGGID` and `Artists.MBGID` as one-click tags, so a
