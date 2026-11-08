@@ -22,8 +22,8 @@
 (function () {
     var NATIVE_FIELDS = [
         { key: 'albumArtist', label: _('Album artist'), scope: 'album', native: 'albumArtist' },
-        { key: 'date', label: _('Date'), scope: 'album', native: 'date' },
-        { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate' },
+        { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date' },
+        { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate', kind: 'date' },
         { key: 'publisher', label: _('Label'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
@@ -237,8 +237,31 @@
         return text(tags[def.tag]);
     }
 
+    /** MediaMonkey stores dates as YYYYMMDD, with 00 for an absent month or day. */
+    function isoFromMmDate(value) {
+        var digits = /^(\d{4})(\d{2})(\d{2})$/.exec(text(value));
+        if (!digits) return '';
+
+        var iso = digits[1];
+        if (digits[2] !== '00') iso += '-' + digits[2];
+        if (digits[2] !== '00' && digits[3] !== '00') iso += '-' + digits[3];
+
+        return iso;
+    }
+
+    function mmDateFromIso(value) {
+        var match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(text(value));
+        if (!match) return -1;
+
+        return parseInt(match[1] + (match[2] || '00') + (match[3] || '00'), 10);
+    }
+
     function currentValue(def, match) {
-        if (def.native) return text(match.track[def.native]);
+        if (def.native) {
+            var raw = text(match.track[def.native]);
+            return def.kind === 'date' ? isoFromMmDate(raw) : raw;
+        }
+
         return tagValue(match.tags, def.tag);
     }
 
@@ -348,6 +371,7 @@
                 scope: def.scope,
                 native: def.native || '',
                 tag: def.tag || '',
+                kind: def.kind || '',
                 value: same ? fetched[0] : '',
                 values: fetched,
                 current: summarise(currents),
@@ -428,7 +452,8 @@
                     nativeWrites.forEach(function (field) {
                         var value = field.scope === 'track' ? field.values[i] : field.value;
                         if (!value) return;
-                        track[field.native] = value;
+
+                        track[field.native] = field.kind === 'date' ? mmDateFromIso(value) : value;
                         touched = true;
                     });
 
