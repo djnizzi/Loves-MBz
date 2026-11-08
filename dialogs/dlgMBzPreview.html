@@ -8,8 +8,10 @@
         html.dialog, html.dialog body { height: 100%; }
         html.dialog body { margin: 0; overflow: hidden; }
         .mbzPreviewRoot { box-sizing: border-box; height: 100%; min-height: 0; overflow: hidden; }
+        .mbzPreviewRoot > * { flex: 0 0 auto; }
+        .mbzPreviewRoot > .mbzTrackScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+        .mbzPreviewRoot > [data-control-class="Buttons"] { min-height: 32px; }
         .mbzFieldScroll { flex: 0 0 auto; max-height: 14em; overflow-y: auto; }
-        .mbzTrackScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; }
         .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; }
         .mbzMetaTable th {
             text-align: left;
