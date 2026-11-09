@@ -1369,26 +1369,55 @@ function mbzExtOnClick(event) {
     }
 }
 
-function mbzExtCollectGroupSelection(dialog) {
-    var result = { trackCount: 0, songIds: [], tracks: [] };
-    var tracks = dialog && (dialog.tracks || window.tracks);
-    if (!tracks) return result;
+function mbzExtAddGroupSelectionTracks(tracks, result) {
+    if (!tracks) return;
 
     function collect() {
-        result.trackCount = tracks.count || 0;
-        for (var i = 0; i < result.trackCount; i++) {
+        var count = tracks.count || 0;
+        for (var i = 0; i < count; i++) {
             var track = tracks.getValue(i);
-            var id = track ? parseInt(track.id, 10) : 0;
-            if (id > 0 && result.songIds.indexOf(id) < 0) {
-                result.songIds.push(id);
-                result.tracks.push(track);
-            }
+            if (!track) continue;
+
+            var id = parseInt(track.id, 10);
+            if (!(id > 0)) continue;
+            if (result.songIds.indexOf(id) >= 0) continue;
+
+            result.songIds.push(id);
+            result.tracks.push(track);
         }
     }
 
     if (typeof tracks.locked === 'function') tracks.locked(collect);
     else collect();
+}
 
+/**
+ * All tracks in the group selection. The dialog's group tracklist can be a
+ * partial or representative list (it has been seen with only the first few
+ * selected tracks), so merge it with the main selected tracklist. Fill needs
+ * every real track here: Composer and Lyricist are staged per track, while the
+ * group tag patch already reaches the whole selection.
+ */
+function mbzExtCollectGroupSelection(dialog) {
+    var result = { trackCount: 0, songIds: [], tracks: [] };
+    var sources = [];
+
+    function addSource(tracks) {
+        if (tracks && sources.indexOf(tracks) < 0) sources.push(tracks);
+    }
+
+    addSource(dialog && dialog.tracks);
+
+    var tools = window.uitools || (typeof uitools !== 'undefined' ? uitools : null);
+    if (tools && typeof tools.getSelectedTracklist === 'function') {
+        addSource(tools.getSelectedTracklist());
+    }
+
+    sources.forEach(function (tracks) {
+        mbzExtAddGroupSelectionTracks(tracks, result);
+    });
+
+    result.trackCount = result.tracks.length;
     return result;
 }
 

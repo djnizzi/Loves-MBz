@@ -32,7 +32,7 @@ page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
-Current version: **0.4.2**.
+Current version: **0.4.3**.
 
 ---
 
@@ -118,10 +118,17 @@ written before that click.
 
 | Written to | Fields |
 |---|---|
-| Native track tags | title, artist, ISRC |
+| Native track tags | title, artist, composer, lyricist, ISRC |
 | Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
 | Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `discogs_url` |
-| Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS` |
+| Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS`, `WRITER`, `PRODUCER`, `REMIXER` |
+
+Composer and lyricist are native MediaMonkey fields; they come from the work
+linked to each recording. A work with only generic writer relationships fills
+Composer from those writers and also exposes them as the `WRITER` extended tag.
+Producer and remixer are extended tags because MediaMonkey has no native
+columns for them; they come from the release and recording relationships. All
+of these are multivalues: names are deduplicated and joined with `; `.
 
 Library tracks are matched to the release by disc and track number, never by
 title. A library track with no counterpart in the release is left alone, and a
@@ -231,9 +238,10 @@ field, which overwrites nothing and happens immediately.
 
 **Fill from MusicBrainz** above the list stages the release behind the album's
 `Albums.MBGID` onto the dialog's track: native fields (`; `-separated album
-artist and artist, date, year, original date, original year, every label joined
-into `publisher`, title, ISRC) and the extended tags, including the joined
-credit in `ARTISTS`/`ALBUMARTISTS`, `originaldate` and `discogs_url`. The
+artist and artist, composer, lyricist, date, year, original date, original
+year, every label joined into `publisher`, title, ISRC) and the extended tags,
+including the joined credit in `ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`,
+`REMIXER`, `originaldate` and `discogs_url`. The
 `originalyear` tag is deliberately not written, because a library can store a
 full `YYYY-MM-DD` date there and a four-digit year would replace it. It lists
 every differing field with a checkbox; tick the fields to write and click
@@ -362,8 +370,10 @@ must support extended tags — formats such as WAV may discard them.
   `fetchReleaseAsync` validates the UUID, serializes lookups through a queue
   (one request, then at least 1.1 s), sends a `User-Agent`, retries
   `503`/`429` with backoff, stops once the dialog has closed, and caches the
-  parsed release by ID. `url-rels` is part of the lookup, so the release's
-  Discogs page is available as `discogsUrls`. The dialog renders the release
+  parsed release by ID. `recording-level-rels`, `work-rels`, `work-level-rels`
+  and `artist-rels` are part of the lookup, so work composers and lyricists and
+  release/recording producers and remixers are available; `url-rels` supplies
+  the release's Discogs page as `discogsUrls`. The dialog renders the release
   and its track list, then asks `mbzApply.js` for the diff.
 - **Applying** — `mbzApply.js` describes the release (native values and the
   Picard extended tag names), loads the album's tracks with
@@ -387,16 +397,23 @@ must support extended tags — formats such as WAV may discard them.
   ticked fields; `applyPendingAsync` stages them without committing: native
   fields are assigned (dates converted to `YYYYMMDD`, years to numbers) and the
   extended tags are merged with `mergeTags` through `setExtendedTagsAsync`.
-  Native artist fields use `; `-separated names; the joined MusicBrainz credit
-  stays in `ARTISTS`/`ALBUMARTISTS`. The dialog's OK button saves, and
+  Native fields are staged before the extended tags, so a group save triggered
+  by the tag write already sees Composer and Lyricist. Native artist fields,
+  composer and lyricist use `; `-separated names; the joined MusicBrainz credit
+  stays in `ARTISTS`/`ALBUMARTISTS`. Generic writers are kept in `WRITER` and
+  fill Composer when no specific composer exists. Producers and remixers are
+  `; `-separated extended-tag values. The dialog's OK button saves, and
   `mbzExtMarkChanged` marks the dialog dirty so the staged tags are included.
 - **Filling a selection** — with several tracks selected, the Fill button reads
-  each selected track's album and matches every file by disc and track. After
-  the checkbox selection, OK stages the chosen fields on each selected track
-  and MediaMonkey's normal group save commits them; there is no separate
-  apply button. The checkbox list is the confirmation; Cancel discards the
-  pending fill. Albums without a release ID and unmatched files are reported
-  and skipped.
+  each selected track's album and matches every file by disc and track. It
+  merges the Properties dialog's group tracklist with the main selected
+  tracklist, because the dialog list can be shorter than the actual selection.
+  After the checkbox selection, OK stages the chosen fields on each selected
+  track and MediaMonkey's normal group save commits them; there is no separate
+  apply button. Native Composer and Lyricist are staged before the extended
+  tags so the group commit sees them. The checkbox list is the confirmation;
+  Cancel discards the pending fill. Albums without a release ID and unmatched
+  files are reported and skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links

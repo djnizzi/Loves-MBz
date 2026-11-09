@@ -12,8 +12,9 @@
  * here, behind a serialized queue, so no caller can bypass them.
  *
  * One `release/{mbid}` lookup asks for everything the add-on may need:
- * artist credits, labels, recordings, release groups, media, disc IDs and
- * ISRCs. The parsed release is cached by ID for the lifetime
+ * artist credits, labels, recordings, release groups, media, disc IDs,
+ * ISRCs, recording/work relationships and their artist credits. The parsed
+ * release is cached by ID for the lifetime
  * of this window, so previewing the same album twice costs one request.
  */
 
@@ -21,7 +22,7 @@
     var API_ROOT = 'https://musicbrainz.org/ws/2/';
     var USER_AGENT = 'LovesMBz ( https://github.com/djnizzi/Loves-MBz )';
     var INCLUDE = 'artist-credits+labels+recordings+release-groups+media+discids' +
-        '+isrcs+url-rels';
+        '+isrcs+url-rels+recording-level-rels+work-rels+work-level-rels+artist-rels';
     var MIN_INTERVAL_MS = 1100;     // the API allows one request per second
     var REQUEST_TIMEOUT_MS = 20000;
     var MAX_ATTEMPTS = 3;

@@ -30,6 +30,8 @@
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
         { key: 'discNumber', label: _('Disc #'), scope: 'track', native: 'discNumber', kind: 'int' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
+        { key: 'composer', label: _('Composer'), scope: 'track', native: 'composer' },
+        { key: 'lyricist', label: _('Lyricist'), scope: 'track', native: 'lyricist' },
         { key: 'isrc', label: _('ISRC'), scope: 'track', native: 'isrc' }
     ];
 
@@ -49,7 +51,10 @@
         { key: 'recordingid', label: _('MusicBrainz recording ID'), scope: 'track', tag: 'MUSICBRAINZ_TRACKID' },
         { key: 'releasetrackid', label: _('MusicBrainz release track ID'), scope: 'track', tag: 'MUSICBRAINZ_RELEASETRACKID' },
         { key: 'artistid', label: _('MusicBrainz artist ID'), scope: 'track', tag: 'MUSICBRAINZ_ARTISTID' },
-        { key: 'artists', label: _('Artists'), scope: 'track', tag: 'ARTISTS' }
+        { key: 'artists', label: _('Artists'), scope: 'track', tag: 'ARTISTS' },
+        { key: 'writer', label: _('Writer'), scope: 'track', tag: 'WRITER' },
+        { key: 'producer', label: _('Producer'), scope: 'track', tag: 'PRODUCER' },
+        { key: 'remixer', label: _('Remixer'), scope: 'track', tag: 'REMIXER' }
     ];
 
     function text(value) {
@@ -109,6 +114,57 @@
         });
 
         return ids;
+    }
+
+    /** Artist names from matching relationship types, without duplicates. */
+    function relationNames(relations, types) {
+        var names = [];
+
+        (relations || []).forEach(function (relation) {
+            if (!relation || types.indexOf(relation.type) === -1) return;
+
+            var name = text(relation.artist && relation.artist.name);
+            if (name && names.indexOf(name) === -1) names.push(name);
+        });
+
+        return names;
+    }
+
+    /**
+     * Composer, lyricist and generic writer are work credits, reached from the
+     * recording's performance relation. A direct recording relation is accepted too.
+     */
+    function workRelationNames(recording, types) {
+        var names = [];
+
+        function add(relation) {
+            if (!relation || types.indexOf(relation.type) === -1) return;
+
+            var name = text(relation.artist && relation.artist.name);
+            if (name && names.indexOf(name) === -1) names.push(name);
+        }
+
+        ((recording && recording.relations) || []).forEach(function (relation) {
+            if (!relation) return;
+
+            add(relation);
+
+            if (!relation.work) return;
+            (relation.work.relations || []).forEach(add);
+        });
+
+        return names;
+    }
+
+    /** Producer and remixer credits can be on the release or the recording. */
+    function trackRelationNames(release, recording, type) {
+        var names = relationNames(release && release.relations, [type]);
+
+        relationNames(recording && recording.relations, [type]).forEach(function (name) {
+            if (names.indexOf(name) === -1) names.push(name);
+        });
+
+        return names;
     }
 
     /** Every label on the release, in order, without duplicates. */
@@ -203,6 +259,8 @@
             (medium.tracks || []).forEach(function (item) {
                 var recording = item.recording || {};
                 var trackCredit = item['artist-credit'] || credit;
+                var composerNames = workRelationNames(recording, ['composer']);
+                var writerNames = workRelationNames(recording, ['writer']);
 
                 tracks.push({
                     disc: disc,
@@ -217,6 +275,10 @@
                         title: text(item.title || recording.title),
                         discNumber: disc ? String(disc) : '',
                         artist: creditNames(trackCredit),
+                        // A generic writer is the only author information on many
+                        // works. Fill Composer from it when no composer exists.
+                        composer: (composerNames.length ? composerNames : writerNames).join('; '),
+                        lyricist: workRelationNames(recording, ['lyricist']).join('; '),
                         isrc: text((recording.isrcs || [])[0])
                     },
                     albumTags: albumTags,
@@ -224,7 +286,10 @@
                         MUSICBRAINZ_TRACKID: text(recording.id),
                         MUSICBRAINZ_RELEASETRACKID: text(item.id),
                         MUSICBRAINZ_ARTISTID: creditIds(trackCredit).join('; '),
-                        ARTISTS: creditText(trackCredit)
+                        ARTISTS: creditText(trackCredit),
+                        WRITER: writerNames.join('; '),
+                        PRODUCER: trackRelationNames(release, recording, 'producer').join('; '),
+                        REMIXER: trackRelationNames(release, recording, 'remixer').join('; ')
                     }
                 });
             });
@@ -643,8 +708,12 @@
     async function applyPendingAsync(track, pending, tagsText) {
         if (!pending || !pending.matched) return 0;
 
+        // Set native fields before touching ExtendedTags. In a group save,
+        // setExtendedTagsAsync can trigger MediaMonkey's commit immediately;
+        // writing Composer/Lyricist afterwards raced that commit and left some
+        // tracks with only the tag write.
+        var written = applyNative(track, pending);
         var writes = pending.tags || [];
-        var written = 0;
 
         if (writes.length) {
             var tags = parseTags(tagsText === undefined
@@ -658,7 +727,6 @@
             written += writes.length;
         }
 
-        written += applyNative(track, pending);
         return written;
     }
 

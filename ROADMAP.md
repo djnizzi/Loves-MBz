@@ -50,12 +50,14 @@ module rather than in a user setting. Nothing is ever written to MusicBrainz, so
 no account, token or secret is stored.
 
 One `release/{mbid}` lookup with
-`inc=artist-credits+labels+recordings+release-groups+media+discids+isrcs+url-rels`
+`inc=artist-credits+labels+recordings+release-groups+media+discids+isrcs+url-rels+recording-level-rels+work-rels+work-level-rels+artist-rels`
 supplies a whole album in a single request: the MBIDs, artist and album-artist
 credits, label and catalogue number, barcode, status, type, country, date,
 script and language, plus the track list with recording IDs, release-track IDs
-and ISRCs. Library songs are matched to the release by disc and track number,
-never by title.
+and ISRCs. The relationship includes supply composers and lyricists from each
+recording's work, and producers and remixers from the release and recording.
+Library songs are matched to the release by disc and track number, never by
+title.
 
 ### Checklist
 
@@ -79,21 +81,24 @@ never by title.
 - [x] Native tags for what the lookup returns: title, artist and album artist
       as `; `-separated names, date, year, original date, original year, every
       label joined into publisher, ISRC.
-- [ ] Relational native tags with real columns — genre, composer, lyricist,
-      conductor, copyright, language — need extra includes (artist/work
-      relations, genres) and are not fetched yet. Producer and remix credits
-      have no native column; see **Nice to have**.
+- [x] Relational native tags — composer and lyricist from work relations;
+      generic writer relations fill Composer when no composer exists. Producer
+      and remixer extended tags come from release/recording relations. All are
+      multivalues joined with `; `.
+- [ ] Other relational native tags — genre, conductor, copyright and language
+      still need their own includes and mappings.
 - [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
-      `originaldate`, album type/status/country,
+      `WRITER`, `PRODUCER`, `REMIXER`, `originaldate`, album type/status/country,
       `CATALOGNUMBER`, and
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
 - [x] Single-track and preview writes go through `track.commitAsync()`; Fill
-      in group Track Properties uses the dialog's normal group save. The album
-      and artist ID columns are never written, so a fetched ID cannot silently
-      overwrite the library value the lookup came from.
+      in group Track Properties stages native fields before extended tags and
+      uses the dialog's normal group save. The album and artist ID columns are
+      never written, so a fetched ID cannot silently overwrite the library
+      value the lookup came from.
 - [ ] Keep the fetched-release cache across dialog openings; it currently lives
       as long as the dialog.
 
@@ -105,10 +110,8 @@ never by title.
 
 ## Nice to have
 
-- Composer, lyricist, conductor and other relational credits, fetched from
+- Conductor, genre, copyright and other relational credits, fetched from
   artist/work relations and genres; these have native columns to write to.
-- Producer and remix credits — MediaMonkey has no native columns for either, so
-  they would be extended tags rather than native fields.
 
 ## Backlog
 

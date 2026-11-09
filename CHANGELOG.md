@@ -3,6 +3,26 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.3 (2026-11-09)
+
+- **Composer and lyricist** — Fill now reads the work linked to each
+  recording and writes MediaMonkey's native Composer and Lyricist columns.
+  Multiple names are deduplicated and joined with `; `.
+- **Generic writers** — works that only use MusicBrainz's generic `writer`
+  relationship now fill Composer and are also written to the `WRITER` extended
+  tag. Specific composer relationships win when both exist.
+- **Producer and remixer** — Fill now reads release and recording
+  relationships and writes `PRODUCER` and `REMIXER` extended tags. Multiple
+  names are deduplicated and joined with `; `.
+- **Group Fill native fields** — Composer and Lyricist are staged before the
+  extended tags. MediaMonkey's normal group save then commits the native
+  fields with the same model as the rest of Fill; there is no per-track
+  commit loop.
+- **Full group selection** — group Fill now merges the Properties dialog's
+  group tracklist with the main selected tracklist. The dialog list can be
+  shorter than the selection, which previously staged Composer on only the
+  first few tracks while the group tag patch reached all of them.
+
 ## 0.4.2 (2026-11-09)
 
 - **No new duplicate tag aliases** — saving a tag that already exists under
