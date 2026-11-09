@@ -933,63 +933,70 @@ function mbzExtAddTagRow(ui, mbz, title, value) {
     if (!ui || !mbz || window.isReadOnly) return false;
     if (!title || !value) return false;
 
+    var wanted = mbz.normalizeExtendedTagName(title);
+    var target = null;
+
+    mbzExtRows.forEach(function (row) {
+        if (!target && mbz.normalizeExtendedTagName(row.title) === wanted) target = row;
+    });
+
     // Several artists share one MusicBrainz tag name, so adding another one
     // appends to that tag instead of creating a second entry with the same
     // name. Existing IDs keep their order and the new one goes last.
-    if (mbzExtAppendsToExisting(title)) {
-        var target = null;
-        var wanted = mbz.normalizeExtendedTagName(title);
+    if (target && mbzExtAppendsToExisting(title)) {
+        var current = mbzExtRowValue(target);
+        var parsedCurrent = mbz.extendedTagGuids(current);
+        var parsedAdd = mbz.extendedTagGuids(value);
+        var raw = String(target.originalValue || '');
+        var separator = target.partsSeparator
+            || (/[;,\/]/.test(raw) ? mbz.extendedTagSeparator(raw) : (mbzExtFileSeparator || '; '));
 
-        mbzExtRows.forEach(function (row) {
-            if (!target && mbz.normalizeExtendedTagName(row.title) === wanted) target = row;
+        var ids = parsedCurrent.ids.slice();
+        var added = 0;
+
+        parsedAdd.ids.forEach(function (id) {
+            if (ids.indexOf(id) < 0) {
+                ids.push(id);
+                added++;
+            }
         });
 
-        if (target) {
-            var current = mbzExtRowValue(target);
-            var parsedCurrent = mbz.extendedTagGuids(current);
-            var parsedAdd = mbz.extendedTagGuids(value);
-            var raw = String(target.originalValue || '');
-            var separator = target.partsSeparator
-                || (/[;,\/]/.test(raw) ? mbz.extendedTagSeparator(raw) : (mbzExtFileSeparator || '; '));
-
-            var ids = parsedCurrent.ids.slice();
-            var added = 0;
-
-            parsedAdd.ids.forEach(function (id) {
-                if (ids.indexOf(id) < 0) {
-                    ids.push(id);
-                    added++;
-                }
-            });
-
-            if (!added && !parsedAdd.invalid.length) {
-                ui.status.textContent = _('That ID is already in the tag.');
-                return false;
-            }
-
-            // Invalid text in either value is kept verbatim, so appending never
-            // silently drops a part of the tag.
-            target.pendingValue = (parsedCurrent.invalid.length || parsedAdd.invalid.length)
-                ? current + (current ? separator : '') + value
-                : ids.join(separator);
-
-            mbzExtMarkChanged();
-            mbzExtRenderRows(ui, false);
-            mbzExtUpdateSummary(ui);
-            mbzExtUpdateStatus();
-            mbzExtRenderDivergence(ui, false);
-            return true;
+        if (!added && !parsedAdd.invalid.length) {
+            ui.status.textContent = _('That ID is already in the tag.');
+            return false;
         }
+
+        // Invalid text in either value is kept verbatim, so appending never
+        // silently drops a part of the tag.
+        target.pendingValue = (parsedCurrent.invalid.length || parsedAdd.invalid.length)
+            ? current + (current ? separator : '') + value
+            : ids.join(separator);
+
+        mbzExtMarkChanged();
+        mbzExtRenderRows(ui, false);
+        mbzExtUpdateSummary(ui);
+        mbzExtUpdateStatus();
+        mbzExtRenderDivergence(ui, false);
+        return true;
     }
 
-    var duplicate = false;
-    mbzExtRows.forEach(function (row) {
-        if (row.title === title && String(mbzExtRowValue(row)) === value) duplicate = true;
-    });
+    // An existing entry may use another file-format spelling, such as Picard's
+    // "MusicBrainz Album Id" in an MP3. Update that entry and keep its raw
+    // title instead of appending a second uppercase MUSICBRAINZ_* alias.
+    if (target) {
+        var currentValue = mbzExtRowValue(target);
+        if (currentValue === value) {
+            ui.status.textContent = _('That tag and value are already listed.');
+            return false;
+        }
 
-    if (duplicate) {
-        ui.status.textContent = _('That tag and value are already listed.');
-        return false;
+        target.pendingValue = value;
+        mbzExtMarkChanged();
+        mbzExtRenderRows(ui, false);
+        mbzExtUpdateSummary(ui);
+        mbzExtUpdateStatus();
+        mbzExtRenderDivergence(ui, false);
+        return true;
     }
 
     mbzExtRows.push({
@@ -1487,11 +1494,13 @@ function mbzExtSaveGroupAsync(track, mbz) {
     if (hasDeleted) window.extendedTagsDeleted = true;
 
     return (async function () {
-        // The group track holds a deletion-aware patch, not a full replacement.
-        // Merge with whatever the built-in Custom tab queued before us.
-        var currentText = await track.getExtendedTagsAsync();
-        var merged = mbz.mergeExtendedTagPatch(currentText, patch);
-        await track.setExtendedTagsAsync(JSON.stringify(merged));
+        // Do not read the group proxy's ExtendedTags: its getExtendedTagsAsync()
+        // never completes. Its ExtendedTags is the deletion-aware patch that
+        // MediaMonkey applies to every selected track, so set it directly.
+        await mbzExtWithTimeout(
+            track.setExtendedTagsAsync(JSON.stringify(patch)),
+            10000,
+            _('Saving the extended tags took too long.'));
 
         patch.forEach(function (entry) {
             mbzExtRows.forEach(function (row) {
@@ -1791,7 +1800,10 @@ async function mbzExtStageFillOnSaveAsync(dialog) {
                 : '';
         }
 
-        await apply.applyPendingAsync(track, work[i].pending, tagsText);
+        await mbzExtWithTimeout(
+            apply.applyPendingAsync(track, work[i].pending, tagsText),
+            10000,
+            _('Saving the filled fields took too long.'));
     }
 }
 
@@ -2116,14 +2128,20 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
         // tabCustom is registered before this tab, so MediaMonkey has already
         // queued its setExtendedTagsAsync. Reading now merges its changes
         // instead of overwriting them with the array loaded when the tab opened.
-        var text = await track.getExtendedTagsAsync();
+        var text = await mbzExtWithTimeout(
+            track.getExtendedTagsAsync(),
+            10000,
+            _('Reading the extended tags took too long.'));
         var tags = mbz.parseExtendedTags(text);
         if (tags === null) throw new Error(_('The extended tags could not be read as JSON.'));
 
         var result = mbz.applyExtendedTagEdits(tags, edits);
         if (!result.applied) return;
 
-        await track.setExtendedTagsAsync(result.tags.length ? JSON.stringify(result.tags) : '');
+        await mbzExtWithTimeout(
+            track.setExtendedTagsAsync(result.tags.length ? JSON.stringify(result.tags) : ''),
+            10000,
+            _('Saving the extended tags took too long.'));
 
         // Record exactly what was written, so a later save does not treat
         // canonicalized or removed values as dirty again.

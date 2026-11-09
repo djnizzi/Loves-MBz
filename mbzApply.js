@@ -446,9 +446,10 @@
     }
 
     /**
-     * Merges canonical tags into an existing array. A tag that is already
-     * present (under any file-format name) is replaced in place; new tags are
-     * appended. Unrelated tags keep their order.
+     * Merges canonical tags into an existing array. A tag already present under
+     * any file-format name keeps that raw title, and duplicate aliases collapse
+     * into the first entry; new tags are appended. Unrelated tags keep their
+     * order.
      */
     function mergeTags(tags, writes) {
         var result = Array.isArray(tags) ? tags.slice() : [];
@@ -459,22 +460,27 @@
             if (!title || !value) return;
 
             var wanted = normalizeTagName(title);
-            var replaced = false;
+            var matchIndex = -1;
+            var matchTitle = '';
 
             for (var i = 0; i < result.length; i++) {
                 if (!result[i]) continue;
                 if (normalizeTagName(result[i].title) !== wanted) continue;
 
-                if (!replaced) {
-                    result[i] = { title: title, value: value };
-                    replaced = true;
+                if (matchIndex < 0) {
+                    matchIndex = i;
+                    matchTitle = String(result[i].title || title);
                 } else {
                     result.splice(i, 1);
                     i--;
                 }
             }
 
-            if (!replaced) result.push({ title: title, value: value });
+            if (matchIndex < 0) {
+                result.push({ title: title, value: value });
+            } else {
+                result[matchIndex] = { title: matchTitle, value: value };
+            }
         });
 
         return result;

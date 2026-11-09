@@ -3,6 +3,18 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.2 (2026-11-09)
+
+- **No new duplicate tag aliases** — saving a tag that already exists under
+  another file-format spelling now updates that entry and keeps its raw title,
+  instead of appending an uppercase `MUSICBRAINZ_*` copy. Add tag follows the
+  same rule, and Fill's merge collapses aliases when it writes the field.
+- **Group OK cannot hang** — group saves no longer read extended tags from the
+  group proxy, whose promise never completes. The deletion-aware patch is set
+  directly on the group track, and tag reads, writes and Fill stages have
+  bounded waits so OK can finish or report an error instead of leaving the
+  modal open.
+
 ## 0.4.1 (2026-11-09)
 
 - **Fill saves with Track Properties OK** — the separate **Apply selected**

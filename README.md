@@ -32,7 +32,7 @@ page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
-Current version: **0.4.1**.
+Current version: **0.4.2**.
 
 ---
 
@@ -371,7 +371,8 @@ must support extended tags — formats such as WAV may discard them.
   them by disc and track number. `buildPlanAsync` returns one entry per field
   whose fetched value differs, reading current values from the track and its
   `ExtendedTags`. `applyAsync` writes only the ticked fields, merges tags with
-  `mergeTags` (replace in place by normalized name, append the rest), calls
+  `mergeTags` (replace in place by normalized name, keeping the existing raw
+  title, append the rest), calls
   `track.commitAsync()`, then `app.db.clearCache()` and `uitools.refreshView()`.
 - **Writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in `mbzMbgid.js` run
   one validated `UPDATE` against `Albums` or `Artists`, then
@@ -406,8 +407,9 @@ must support extended tags — formats such as WAV may discard them.
   so a repeated artist ID becomes repeated fields in FLAC and one `/`-joined
   value in an ID3v2.3 MP3. In
   group mode it reads each selected song's row, shows only tags with one
-  identical stored name and value across the selection, and sends a
-  deletion-aware patch through the group track.
+  identical stored name and value across the selection, and sets a
+  deletion-aware patch on the group track without reading the group proxy's
+  never-completing extended-tags promise.
 - **Lifecycle** — the dialog uses `window.localPromise` / `window.localListen`,
   long loops check `window._cleanUpCalled`, and the cache is only built in the
   main window (`init.js`). Settings are not stored.
