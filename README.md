@@ -32,7 +32,7 @@ page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
-Current version: **0.4.0 "Foundation"**.
+Current version: **0.4.1**.
 
 ---
 
@@ -235,16 +235,16 @@ artist and artist, date, year, original date, original year, every label joined
 into `publisher`, title, ISRC) and the extended tags, including the joined
 credit in `ARTISTS`/`ALBUMARTISTS`, `originaldate` and `discogs_url`. The
 `originalyear` tag is deliberately not written, because a library can store a
-full `YYYY-MM-DD` date there and a four-digit year would replace it. It lists every differing field with a checkbox; **Apply
-selected** stages only those fields. Values that already match are skipped,
-and the track is matched to the release by disc and track number. Nothing is
-saved until you click **OK** in Track Properties, which is what commits the
-staged values. With several tracks selected the same checkboxes filter the
-fill, but those tracks are saved immediately when **Apply selected** is
-clicked, because group Track Properties cannot commit native fields from a
-tab; the checkbox list is the confirmation, and Cancel will not undo that
-write. An album without a release ID is reported without a request,
-and the button is hidden only in Party Mode.
+full `YYYY-MM-DD` date there and a four-digit year would replace it. It lists
+every differing field with a checkbox; tick the fields to write and click
+**OK** in Track Properties. Values that already match are skipped, and the
+track is matched to the release by disc and track number. Nothing is saved
+until **OK**, which is also the only save button for a multi-track
+selection. The same checkboxes choose the fields for every matched track; OK
+stages them on each track and MediaMonkey's normal group save commits them.
+There is no separate **Apply selected** button. Cancel in Track Properties
+discards the pending fill. An album without a release ID is reported without a
+request, and the button is hidden only in Party Mode.
 
 The dialog's built-in fields are not rewritten, so the Year box can keep showing
 the old value until the dialog is reopened; the staged date is what OK saves.
@@ -390,11 +390,12 @@ must support extended tags — formats such as WAV may discard them.
   stays in `ARTISTS`/`ALBUMARTISTS`. The dialog's OK button saves, and
   `mbzExtMarkChanged` marks the dialog dirty so the staged tags are included.
 - **Filling a selection** — with several tracks selected, the Fill button reads
-  each selected track's album, matches every file by disc and track, and after
-  the checkbox selection commits the changed tracks immediately, because group
-  Track Properties cannot commit native fields staged by a tab. The checkbox
-  list is the confirmation; Cancel will not undo those writes. Albums without a
-  release ID and unmatched files are reported and skipped.
+  each selected track's album and matches every file by disc and track. After
+  the checkbox selection, OK stages the chosen fields on each selected track
+  and MediaMonkey's normal group save commits them; there is no separate
+  apply button. The checkbox list is the confirmation; Cancel discards the
+  pending fill. Albums without a release ID and unmatched files are reported
+  and skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links

@@ -3,6 +3,16 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.1 (2026-11-09)
+
+- **Fill saves with Track Properties OK** — the separate **Apply selected**
+  button is gone. Multi-track Fill now stages the selected fields on the
+  selected tracks and lets MediaMonkey's global OK commit them through the
+  normal group save, so a slow track is no longer reported as a 15-second
+  timeout. Opening the Fill plan marks the group dialog dirty and ticks
+  **Save MusicBrainz tags**, so global OK schedules the save reliably. Cancel
+  discards the pending fill.
+
 ## 0.4.0 "Foundation" (2026-11-08)
 
 The first release of the MusicBrainz metadata work. MediaMonkey requires a

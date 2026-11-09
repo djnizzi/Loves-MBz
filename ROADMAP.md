@@ -71,12 +71,11 @@ never by title.
       native fields and extended tags on the open track, with OK as the save
       gate. The dialog's own inputs are not rewritten.
 - [x] Fill a multi-track selection: every selected file is matched by disc and
-      track number against its own album's release, and the changed tracks are
-      committed immediately because group Track Properties cannot commit native
-      fields staged by a tab. The checkbox list is the confirmation; Cancel
-      cannot undo it.
+      track number against its own album's release, the chosen fields are
+      staged on each track, and MediaMonkey's normal group save commits them
+      with OK. The checkbox list is the confirmation; Cancel discards the fill.
 - [x] Per-field checkboxes in Fill: only the ticked fields are staged for one
-      track or saved for a multi-track selection.
+      track or for a multi-track selection, then saved by OK.
 - [x] Native tags for what the lookup returns: title, artist and album artist
       as `; `-separated names, date, year, original date, original year, every
       label joined into publisher, ISRC.
@@ -91,9 +90,10 @@ never by title.
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
-- [x] Writes go through `track.commitAsync()`; the album and artist ID columns
-      are never written, so a fetched ID cannot silently overwrite the library
-      value the lookup came from.
+- [x] Single-track and preview writes go through `track.commitAsync()`; Fill
+      in group Track Properties uses the dialog's normal group save. The album
+      and artist ID columns are never written, so a fetched ID cannot silently
+      overwrite the library value the lookup came from.
 - [ ] Keep the fetched-release cache across dialog openings; it currently lives
       as long as the dialog.
 

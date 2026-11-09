@@ -75,6 +75,14 @@ function mbzExtErrorText(error) {
     return error.message ? error.message : String(error);
 }
 
+function mbzExtReportSaveError(error) {
+    if (typeof messageDlg === 'function') {
+        messageDlg(
+            sprintf(_('Could not save the MusicBrainz extended tags: %s'), mbzExtErrorText(error)),
+            'Error', ['btnOK'], { defaultButton: 'btnOK' });
+    }
+}
+
 /** Fails a group operation instead of leaving the fill button disabled forever. */
 function mbzExtWithTimeout(promise, ms, message) {
     return new Promise(function (resolve, reject) {
@@ -1625,45 +1633,6 @@ function mbzExtGroupFillSkipText(counts) {
     return parts.length ? ' ' + sprintf(_('Skipped: %s.'), parts.join(', ')) : '';
 }
 
-async function mbzExtCommitGroupFillAsync(work, tagsById) {
-    var apply = window.mbzApply;
-    var written = 0;
-    var failed = [];
-
-    for (var i = 0; i < work.length; i++) {
-        if (window._cleanUpCalled) break;
-
-        try {
-            var trackId = parseInt(work[i].track && work[i].track.id, 10);
-            var tagsText = tagsById && tagsById.has(trackId) ? tagsById.get(trackId) : '';
-
-            await mbzExtWithTimeout(
-                apply.applyPendingAsync(work[i].track, work[i].pending, tagsText),
-                15000,
-                _('Timed out saving this track.'));
-            if (work[i].track.commitAsync) {
-                await mbzExtWithTimeout(work[i].track.commitAsync(), 15000,
-                    _('Timed out saving this track.'));
-            }
-            written++;
-        } catch (error) {
-            failed.push({
-                title: work[i].track && work[i].track.title,
-                error: mbzExtErrorText(error)
-            });
-        }
-    }
-
-    try {
-        if (app.db.clearCache) app.db.clearCache();
-        if (typeof uitools !== 'undefined' && uitools.refreshView) uitools.refreshView();
-    } catch (e) {
-        // best effort; the writes above are already committed
-    }
-
-    return { written: written, failed: failed };
-}
-
 function mbzExtFillAggregateFields(work) {
     var byKey = {};
     var order = [];
@@ -1726,6 +1695,17 @@ function mbzExtShowFillPlan(ui, state) {
         if (typeof initializeControl === 'function') initializeControl(box);
         if (box.controlClass) box.controlClass.checked = true;
     });
+
+    // The checked fields are the confirmation; MediaMonkey's global OK is the
+    // save gate, so there is no separate Apply button in this plan. A group
+    // dialog rebuilds modified/tagModified from checked native Checkbox
+    // controls when OK is pressed, so mark the dialog now and tick the group's
+    // "Save MusicBrainz tags" box. Doing this only in saveAsync is too late:
+    // OK decides whether to call saveAsync before that function can run.
+    mbzExtMarkChanged();
+    if (ui.fillPlanStatus) {
+        ui.fillPlanStatus.textContent = _('Click OK to save the selected fields.');
+    }
 }
 
 function mbzExtHideFillPlan(ui) {
@@ -1757,94 +1737,68 @@ function mbzExtFillSelectedKeys(ui) {
     return keys;
 }
 
-function mbzExtApplyFillPlan(ui, dialog) {
-    var state = mbzExtFillPlanState;
+/** The selected fill fields, narrowed for each track that will receive them. */
+function mbzExtFillWorkForSave(state, keys) {
     var apply = window.mbzApply;
-    if (!ui || !state || !apply) return;
-
-    var keys = mbzExtFillSelectedKeys(ui);
-    if (!keys.length) {
-        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Tick at least one field.');
-        return;
-    }
+    if (!state || !apply || !keys.length) return [];
 
     if (state.mode === 'single') {
         var pending = apply.filterPending(state.pending, keys);
-        if (!pending || !pending.fields.length) {
-            if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Nothing selected.');
-            return;
-        }
-
-        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Staging...');
-
-        dialog.localPromise(apply.applyPendingAsync(state.track, pending)).then(function (written) {
-            if (window._cleanUpCalled) return;
-
-            mbzExtMarkChanged();
-            mbzExtHideFillPlan(ui);
-
-            if (ui.fillStatus) {
-                ui.fillStatus.textContent = sprintf(_('Staged %d field(s). Click OK to save.'), written);
-            }
-
-            return state.track.getExtendedTagsAsync().then(function (text) {
-                var tags = window.mbzMbgid.parseExtendedTags(text);
-                if (tags) mbzExtRender(ui, tags, false, window.mbzMbgid);
-            });
-        }, function (error) {
-            if (window._cleanUpCalled) return;
-            if (ui.fillPlanStatus) {
-                ui.fillPlanStatus.textContent = sprintf(_('Could not stage the release: %s'), mbzExtErrorText(error));
-            }
-        });
-        return;
+        if (!pending || !pending.fields.length) return [];
+        return [{ track: state.track, pending: pending }];
     }
 
     var work = [];
-    state.work.forEach(function (item) {
+    (state.work || []).forEach(function (item) {
         var filtered = apply.filterPending(item.pending, keys);
-        if (filtered && filtered.fields.length) work.push({ track: item.track, pending: filtered });
-    });
-
-    if (!work.length) {
-        if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Nothing selected applies to these tracks.');
-        return;
-    }
-
-    if (ui.fillButton) ui.fillButton.classList.add('mbzExtBusy');
-    if (ui.fillPlanStatus) ui.fillPlanStatus.textContent = _('Saving tracks...');
-
-    dialog.localPromise(mbzExtCommitGroupFillAsync(work, state.tagsById)).then(function (result) {
-        if (window._cleanUpCalled) return;
-
-        mbzExtHideFillPlan(ui);
-
-        var text = sprintf(_('Filled and saved %d track(s).'), result.written) +
-            mbzExtGroupFillSkipText(state.counts);
-
-        if (result.failed.length) {
-            text += ' ' + sprintf(_('%d track(s) failed: %s'),
-                result.failed.length, result.failed[0].error);
+        if (filtered && filtered.fields.length) {
+            work.push({ track: item.track, pending: filtered });
         }
-
-        if (ui.fillStatus) ui.fillStatus.textContent = text;
-    }, function (error) {
-        if (window._cleanUpCalled) return;
-        if (ui.fillPlanStatus) {
-            ui.fillPlanStatus.textContent = sprintf(_('Could not fill the selected tracks: %s'), mbzExtErrorText(error));
-        }
-    }).then(function () {
-        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
-    }, function () {
-        if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
     });
+    return work;
 }
 
 /**
- * Fills every selected track from the release behind its album and saves the
- * changed tracks immediately. Group Track Properties cannot commit native
- * fields staged by a tab, so this path cannot leave the work to OK; the
- * checkbox list is the confirmation.
+ * Stages the selected Fill fields on each track. Nothing is committed here:
+ * MediaMonkey's OK saves the staged values with the rest of the dialog. For a
+ * group selection this is what lets OK use the normal group save instead of
+ * a separate per-track commit.
+ */
+async function mbzExtStageFillOnSaveAsync(dialog) {
+    var state = mbzExtFillPlanState;
+    var apply = window.mbzApply;
+    if (!state || !apply || window.isReadOnly) return;
+
+    var keys = mbzExtFillSelectedKeys(mbzExtUI);
+    if (!keys.length) return;
+
+    var work = mbzExtFillWorkForSave(state, keys);
+    if (!work.length) return;
+
+    // The fill plan is the confirmation. This also checks the group tab's
+    // "Save MusicBrainz tags" box, which is what makes MediaMonkey write the
+    // staged values to the files.
+    mbzExtMarkChanged();
+
+    for (var i = 0; i < work.length; i++) {
+        var track = work[i].track;
+        var tagsText;
+
+        if (dialog && dialog.isGroup) {
+            var trackId = parseInt(track && track.id, 10);
+            tagsText = state.tagsById && state.tagsById.has(trackId)
+                ? state.tagsById.get(trackId)
+                : '';
+        }
+
+        await apply.applyPendingAsync(track, work[i].pending, tagsText);
+    }
+}
+
+/**
+ * Fills every selected track from the release behind its album. The checkbox
+ * list chooses fields; MediaMonkey's OK stages and saves them through the
+ * normal group save. Cancel in Track Properties discards the pending fill.
  */
 function mbzExtFillGroupFromRelease(ui, dialog) {
     var fetch = window.mbzFetch;
@@ -1904,10 +1858,10 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
             counts: plan.counts,
             fields: mbzExtFillAggregateFields(plan.work),
             tagsById: plan.tagsById,
-            title: sprintf(_('Choose what to overwrite on %d selected track(s). Applying saves them immediately.'), plan.work.length)
+            title: sprintf(_('Choose what to overwrite on %d selected track(s). Click OK to save.'), plan.work.length)
         });
         if (ui.fillStatus) {
-            ui.fillStatus.textContent = _('Choose the fields, then click Apply selected. Cancel in Track Properties will not undo the save.');
+            ui.fillStatus.textContent = _('Choose the fields, then click OK. Cancel in Track Properties discards the fill.');
         }
     }, function (error) {
         if (!window._cleanUpCalled && ui.fillStatus) {
@@ -1987,7 +1941,7 @@ function mbzExtFillFromRelease(ui, track, dialog) {
                 title: sprintf(_('Choose what to overwrite on this track from "%s". Nothing is saved until OK.'), pending.releaseTitle || '')
             });
             if (ui.fillStatus) {
-                ui.fillStatus.textContent = _('Choose the fields, then click Apply selected.');
+                ui.fillStatus.textContent = _('Choose the fields, then click OK.');
             }
         });
     }, function (error) {
@@ -2015,7 +1969,6 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         fillPlan: qeid(main, 'mbzExtFillPlan'),
         fillPlanTitle: qeid(main, 'mbzExtFillPlanTitle'),
         fillFields: qeid(main, 'mbzExtFillFields'),
-        fillApply: qeid(main, 'mbzExtFillApply'),
         fillCancel: qeid(main, 'mbzExtFillCancel'),
         fillPlanStatus: qeid(main, 'mbzExtFillPlanStatus'),
         addBar: qeid(main, 'mbzExtAddBar'),
@@ -2065,9 +2018,6 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
     if (ui.fillStatus) ui.fillStatus.textContent = '';
     mbzExtListen(dialog, ui.fillButton, 'click', function () {
         mbzExtFillFromRelease(ui, track, dialog);
-    });
-    mbzExtListen(dialog, ui.fillApply, 'click', function () {
-        mbzExtApplyFillPlan(ui, dialog);
     });
     mbzExtListen(dialog, ui.fillCancel, 'click', function () {
         mbzExtHideFillPlan(ui);
@@ -2132,12 +2082,14 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
 propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
     var mbz = window.mbzMbgid;
-    if (!mbz || !mbzExtRows.length || window.isReadOnly) {
+    if (!mbz || window.isReadOnly || (!mbzExtRows.length && !mbzExtFillPlanState)) {
         return Promise.resolve();
     }
 
     if (dialog && dialog.isGroup) {
-        return mbzExtSaveGroupAsync(track, mbz);
+        return mbzExtStageFillOnSaveAsync(dialog).then(function () {
+            return mbzExtSaveGroupAsync(track, mbz);
+        }).catch(mbzExtReportSaveError);
     }
 
     var edits = [];
@@ -2157,9 +2109,10 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
         edits.push({ title: row.title, occurrence: row.occurrence, value: value });
     });
 
-    if (!edits.length) return Promise.resolve();
+    return mbzExtStageFillOnSaveAsync(dialog).then(function () {
+        if (!edits.length) return;
 
-    return (async function () {
+        return (async function () {
         // tabCustom is registered before this tab, so MediaMonkey has already
         // queued its setExtendedTagsAsync. Reading now merges its changes
         // instead of overwriting them with the array loaded when the tab opened.
@@ -2203,13 +2156,6 @@ propertiesTabs.tabLovesMBz.saveAsync = function (track, dialog) {
             mbzExtRenderRows(mbzExtUI, false);
             mbzExtUpdateStatus();
         }
-    })().catch(function (error) {
-        // The properties dialog has no rejection path for saveAsync. Report the
-        // failure and resolve so the modal cannot be left in a stuck state.
-        if (typeof messageDlg === 'function') {
-            messageDlg(
-                sprintf(_('Could not save the MusicBrainz extended tags: %s'), mbzExtErrorText(error)),
-                'Error', ['btnOK'], { defaultButton: 'btnOK' });
-        }
-    });
+        })();
+    }).catch(mbzExtReportSaveError);
 };
