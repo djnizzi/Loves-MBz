@@ -3,6 +3,28 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.5 (2026-11-11)
+
+- **Search MusicBrainz from the no-ID state** — when an album has no
+  `Albums.MBGID`, the preview and the Track Properties tab now offer **Search
+  MusicBrainz**. It opens the website's release search with `release:"Album"
+  AND artist:"Artist"`; the add-on still makes no metadata request and does not
+  choose a release. The tab checks the album's release ID as it loads — and
+  each distinct album in a group selection — so the button appears before Fill
+  even while the ID cache is still filling. The preview reads the loaded
+  selection through `getAllValues` so it appears even when MediaMonkey has not
+  exposed `firstSelected` yet.
+
+- **Discogs URL from release groups** — a master Discogs page is usually linked
+  from the release group, not the release. The fetch now follows one
+  `release-group/{id}?inc=url-rels` lookup when the release itself has no
+  Discogs URL, and `discogs_url` reads either level.
+- **Disc # writes through the integer property** — Fill and Preview now stage
+  `discNumberInt` instead of the string `discNumber`. The string property can
+  trigger a group commit as soon as it is assigned, which saved only part of a
+  multi-track Fill; the integer property writes the same value through the
+  normal native-field staging.
+
 ## 0.4.4 (2026-11-10)
 
 - **Release fields no longer duplicate** — Fill treats Picard's

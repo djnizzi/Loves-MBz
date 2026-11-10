@@ -30,9 +30,10 @@ existing release ID, shows what MusicBrainz holds — artists, label, barcode,
 status, type, country, script, the full track list and the release's Discogs
 page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
-add-on never searches MusicBrainz by name.
+preview offers a button that opens the MusicBrainz website search by album and
+artist, but the add-on itself never searches by name.
 
-Current version: **0.4.4**.
+Current version: **0.4.5**.
 
 ---
 
@@ -105,10 +106,11 @@ columns without a restart, even in a large library.
 **Edit → Tag Tools → Preview MusicBrainz metadata…** (also in the track list
 context menu) opens the release behind the first selected track's album: artist
 credit, date, country, status, type, label and catalogue number, barcode, the
-Discogs page when the release links one, script/language, and every medium's
-tracks with their number, title, length, ISRC and recording ID. The Discogs link
-is MusicBrainz's URL relationship for the release; it is the value Picard stores
-as `discogs_url`.
+Discogs page when the release or its release group links one, script/language,
+and every medium's tracks with their number, title, length, ISRC and recording
+ID. The Discogs link is MusicBrainz's URL relationship; a master page usually
+lives on the release group. Either way it is the value Picard stores as
+`discogs_url`.
 
 Below that, **Fields to write** lists only the fields whose MusicBrainz value
 differs from the library, one row and one checkbox each, with the current value,
@@ -118,7 +120,7 @@ written before that click.
 
 | Written to | Fields |
 |---|---|
-| Native track tags | title, artist, composer, lyricist, ISRC |
+| Native track tags | title, artist, composer, lyricist, ISRC, disc number |
 | Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
 | Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `originaldate`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS`, `WRITER`, `PRODUCER`, `REMIXER` |
@@ -155,9 +157,12 @@ works, but the fields and **Apply** are hidden.
 
 The lookup is by release ID only. The album must already carry `Albums.MBGID`
 (set it in the IDs dialog, or let MediaMonkey match the release); when that is
-empty or `0` the dialog says so and **no request is made**. There is no search
-by artist or album name, no AcoustID and no disc-ID lookup, so the add-on
-cannot pick the wrong release. No API key is needed: the add-on identifies
+empty or `0` the dialog says so and **no request is made**. It also offers
+**Search MusicBrainz**, which opens the website release search with
+`release:"Album" AND artist:"Artist"`; the add-on does not choose a release or
+write an ID from that search. There is no API search by artist or album name,
+no AcoustID and no disc-ID lookup, so the add-on cannot pick the wrong release.
+No API key is needed: the add-on identifies
 itself with a `User-Agent` and keeps requests at least 1.1 s apart. A busy
 server (`503`/`429`) is retried twice with a growing delay, and the parsed
 release is cached by ID for that dialog, so previewing the same album again
@@ -245,7 +250,8 @@ field, which overwrites nothing and happens immediately.
 **Fill from MusicBrainz** above the list stages the release behind the album's
 `Albums.MBGID` onto the dialog's track: native fields (`; `-separated album
 artist and artist, composer, lyricist, date, year, original date, original
-year, every label joined into `publisher`, title, ISRC) and the extended tags,
+year, every label joined into `publisher`, title, ISRC, disc number) and the
+extended tags,
 including the joined credit in `ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`,
 `REMIXER`, `originaldate` and `discogs_url`. The
 `originalyear` tag is deliberately not written, because a library can store a
@@ -374,13 +380,16 @@ must support extended tags — formats such as WAV may discard them.
   album. `releaseIdForAlbumAsync` reads `SELECT MBGID FROM Albums WHERE ID = ?`
   and returns `''` without any HTTP request when the album has no ID;
   `fetchReleaseAsync` validates the UUID, serializes lookups through a queue
-  (one request, then at least 1.1 s), sends a `User-Agent`, retries
-  `503`/`429` with backoff, stops once the dialog has closed, and caches the
-  parsed release by ID. `recording-level-rels`, `work-rels`, `work-level-rels`
-  and `artist-rels` are part of the lookup, so work composers and lyricists and
+  (at least 1.1 s apart), sends a `User-Agent`, retries `503`/`429` with
+  backoff, stops once the dialog has closed, and caches the parsed release by
+  ID. `recording-level-rels`, `work-rels`, `work-level-rels` and `artist-rels`
+  are part of the lookup, so work composers and lyricists and
   release/recording producers and remixers are available; `url-rels` supplies
-  the release's Discogs page as `discogsUrls`. The dialog renders the release
-  and its track list, then asks `mbzApply.js` for the diff.
+  the release's Discogs page. When the release has none, `fetchReleaseAsync`
+  makes one `release-group/{id}?inc=url-rels` follow-up for the group's Discogs
+  master page and attaches it to the cached release; `discogsUrls` reads both.
+  The dialog renders the release and its track list, then asks `mbzApply.js`
+  for the diff.
 - **Applying** — `mbzApply.js` describes the release (native values and the
   Picard extended tag names), loads the album's tracks with
   `app.db.getTracklist('SELECT * FROM Songs WHERE IDAlbum = …')`, and matches
@@ -420,7 +429,8 @@ must support extended tags — formats such as WAV may discard them.
   extended tags so the group commit sees them. The checkbox list is the
   confirmation;
   Cancel discards the pending fill. Albums without a release ID and unmatched
-  files are reported and skipped.
+  files are reported and skipped; a **Search MusicBrainz** button opens the
+  website's release search for the first album without an ID.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
   `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
   `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
@@ -528,8 +538,9 @@ passes. The contract is in [AGENTS.md](AGENTS.md).
   the release. The dialog counts them; fix the numbering or apply to the release
   that matches.
 - **The preview says the album has no release ID** — `Albums.MBGID` is empty or
-  `0`. Set it in the IDs dialog (or let MediaMonkey match the release); the
-  preview deliberately does not search by name.
+  `0`. Set it in the IDs dialog (or let MediaMonkey match the release). The
+  preview's **Search MusicBrainz** button opens a web search by album and
+  artist, but does not choose a release or write an ID.
 - **The preview reports that MusicBrainz is busy** — three requests in a row
   were answered with `503`/`429`. Wait a minute and reopen the dialog.
 - **The MusicBrainz tab is missing** — `dialogs/dlgTrackProperties_add.js` did

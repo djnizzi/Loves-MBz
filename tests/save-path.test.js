@@ -142,6 +142,16 @@ assert.doesNotMatch(
     /tag:\s*'SCRIPT'/,
     'Fill must not offer or write a SCRIPT tag'
 );
+assert.match(
+    applySource,
+    /key:\s*'discNumber'[^}]*native:\s*'discNumberInt'[^}]*kind:\s*'int'/,
+    'Disc # must stage the integer discNumberInt property'
+);
+assert.doesNotMatch(
+    applySource,
+    /native:\s*'discNumber'/,
+    'Disc # must not write the string discNumber property'
+);
 
 // Behavior check: a track stages native fields, then reads and writes tags.
 global.window = {};
@@ -198,6 +208,29 @@ function makeTrack(label, log, tags) {
 }
 
 (async () => {
+    const discPending = await apply.buildPendingAsync({
+        discNumber: '',
+        discNumberInt: 0,
+        trackNumber: '3',
+        title: '',
+        getExtendedTagsAsync() {
+            return Promise.resolve('[]');
+        },
+        setExtendedTagsAsync() {
+            return Promise.resolve();
+        }
+    }, {
+        title: 'Disc release',
+        media: [{
+            position: '1',
+            tracks: [{ number: '3', title: 'Song', recording: {} }]
+        }]
+    }, '[]');
+
+    assert.strictEqual(discPending.matched, true);
+    assert.strictEqual(discPending.native.discNumberInt, 1);
+    assert.strictEqual('discNumber' in discPending.native, false);
+
     const log = [];
     const tags = {
         value: JSON.stringify([{ title: 'RELEASECOUNTRY', value: 'GB' }])

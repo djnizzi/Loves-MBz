@@ -25,6 +25,9 @@ Keep these rules:
 4. Field work belongs in `buildPendingAsync`, `filterPending`, `mergeTags`, or
    `tagValue`. Fix field problems there; do not change when or how the dialog
    stages or commits values.
+5. Disc # must write `discNumberInt` with `kind: 'int'`, not the string
+   `discNumber`. Setting the string property can trigger the same early group
+   commit.
 
 The 0.4.3 implementations of those two functions are the reference. If you
 change either, diff it against `v0.4.3` and explain why the contract still

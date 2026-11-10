@@ -37,9 +37,11 @@ account; **Agent** work is repo and documentation.
 
 The first release that talks to the MusicBrainz web service instead of only
 reading IDs the library already holds. **Lookup is by release ID only**: an
-album must already carry `Albums.MBGID`. When that is empty there is no search,
-no name matching and no request — the album is skipped and reported as skipped,
-so the add-on never guesses which release is meant.
+album must already carry `Albums.MBGID`. When that is empty there is no
+automatic search, no name matching and no request — the album is skipped and
+reported as skipped, so the add-on never guesses which release is meant. The
+preview offers a manual **Search MusicBrainz** button that opens the website's
+release search; the add-on still does not choose a release or write an ID.
 
 0.4.0 "Foundation" is tagged and pushed; the GitHub release carries the
 installable `.mmip`.
@@ -51,13 +53,14 @@ no account, token or secret is stored.
 
 One `release/{mbid}` lookup with
 `inc=artist-credits+labels+recordings+release-groups+media+discids+isrcs+url-rels+recording-level-rels+work-rels+work-level-rels+artist-rels`
-supplies a whole album in a single request: the MBIDs, artist and album-artist
-credits, label and catalogue number, barcode, status, type, country, date,
-script and language, plus the track list with recording IDs, release-track IDs
-and ISRCs. The relationship includes supply composers and lyricists from each
-recording's work, and producers and remixers from the release and recording.
-Library songs are matched to the release by disc and track number, never by
-title.
+supplies a whole album: the MBIDs, artist and album-artist credits, label and
+catalogue number, barcode, status, type, country, date, script and language,
+plus the track list with recording IDs, release-track IDs and ISRCs. The
+relationship includes supply composers and lyricists from each recording's
+work, and producers and remixers from the release and recording. If the release
+has no Discogs URL, one `release-group/{id}?inc=url-rels` follow-up supplies the
+group's Discogs master page. Library songs are matched to the release by disc
+and track number, never by title.
 
 ### Checklist
 
@@ -66,7 +69,7 @@ title.
       the dialog closes, and no request at all for an album without `MBGID`.
 - [x] Read-only preview: one album per dialog, the fetched values and the full
       track list, nothing written. Albums with no release ID say why instead of
-      being queried.
+      being queried, and offer a manual MusicBrainz web search.
 - [x] Write step: current value against fetched value per field, one checkbox
       per field, nothing written until **Apply**.
 - [x] Fill from MusicBrainz in the Track Properties tab: stages the release's
@@ -91,7 +94,8 @@ title.
       `MUSICBRAINZ_*` IDs, `BARCODE`, `ARTISTS`, `ALBUMARTISTS`,
       `WRITER`, `PRODUCER`, `REMIXER`, `originaldate`, album type/status/country,
       `CATALOGNUMBER`, and
-      `discogs_url` from the release's Discogs URL relationship. `discogs_url`
+      `discogs_url` from the release's or release group's Discogs URL
+      relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
 - [x] Single-track and preview writes go through `track.commitAsync()`; Fill

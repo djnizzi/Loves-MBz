@@ -75,6 +75,202 @@ function mbzExtErrorText(error) {
     return error.message ? error.message : String(error);
 }
 
+/** Escapes a value for the quoted Lucene phrase used by the MB web search. */
+function mbzExtSearchEscape(value) {
+    var text = String(value === undefined || value === null ? '' : value);
+    var slash = String.fromCharCode(92);
+    return text.split(slash).join(slash + slash).split('"').join(slash + '"');
+}
+
+function mbzExtSearchUrl(album, artist) {
+    var title = String(album === undefined || album === null ? '' : album).trim();
+    var credit = String(artist === undefined || artist === null ? '' : artist).trim();
+    var parts = [];
+
+    credit = credit.split(';')[0].trim();
+
+    if (title) parts.push('release:"' + mbzExtSearchEscape(title) + '"');
+    if (credit) parts.push('artist:"' + mbzExtSearchEscape(credit) + '"');
+    if (!parts.length) return '';
+
+    return 'https://musicbrainz.org/search?query=' +
+        encodeURIComponent(parts.join(' AND ')) +
+        '&type=release&method=advanced';
+}
+
+function mbzExtHideSearch(ui) {
+    if (!ui) return;
+    if (ui.searchBar) ui.searchBar.style.display = 'none';
+    if (ui.searchButton) {
+        ui.searchButton.removeAttribute('data-url');
+        ui.searchButton.removeAttribute('title');
+    }
+    if (ui.searchStatus) ui.searchStatus.textContent = '';
+}
+
+function mbzExtShowSearch(ui, track) {
+    if (!ui || !ui.searchBar || !ui.searchButton || !track) return;
+
+    var album = String(track.album === undefined || track.album === null ? '' : track.album).trim();
+    var artist = String(track.albumArtist || track.artist || '').trim();
+    var url = mbzExtSearchUrl(album, artist);
+
+    if (!url) {
+        mbzExtHideSearch(ui);
+        return;
+    }
+
+    ui.searchButton.setAttribute('data-url', url);
+    ui.searchButton.setAttribute('title', url);
+    ui.searchBar.style.display = '';
+    if (ui.searchStatus) {
+        ui.searchStatus.textContent = _('Search MusicBrainz for this album, then add its release ID.');
+    }
+}
+
+function mbzExtOpenSearch(ui) {
+    var url = ui && ui.searchButton ? ui.searchButton.getAttribute('data-url') : '';
+    if (!url) return;
+
+    if (window.uitools && typeof window.uitools.openWeb === 'function') {
+        window.uitools.openWeb(url);
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+/**
+ * Shows the search button when an album in the selection has no release ID.
+ * Single tracks use the album row; group selections check each distinct album
+ * and use the first one that has no ID, matching Fill's report.
+ */
+function mbzExtSyncSearch(ui, track, dialog) {
+    if (!ui || !track) return;
+
+    if (dialog && dialog.isGroup) {
+        mbzExtSyncGroupSearch(ui, dialog);
+        return;
+    }
+
+    var albumId = parseInt(track.idalbum, 10);
+    if (!(albumId > 0)) {
+        mbzExtHideSearch(ui);
+        return;
+    }
+
+    var mbz = window.mbzMbgid;
+    var token = mbzExtLoadToken;
+
+    if (mbz && typeof mbz.releaseIdForAlbum === 'function' &&
+        typeof mbz.getState === 'function' && mbz.getState().loaded) {
+        if (mbz.releaseIdForAlbum(albumId)) mbzExtHideSearch(ui);
+        else mbzExtShowSearch(ui, track);
+        return;
+    }
+
+    var fetch = window.mbzFetch;
+    if (!fetch || typeof fetch.releaseIdForAlbumAsync !== 'function') return;
+
+    function apply(releaseId) {
+        if (window._cleanUpCalled || token !== mbzExtLoadToken || mbzExtUI !== ui) return;
+        if (releaseId) mbzExtHideSearch(ui);
+        else mbzExtShowSearch(ui, track);
+    }
+
+    var check = fetch.releaseIdForAlbumAsync(albumId);
+    if (dialog && typeof dialog.localPromise === 'function') check = dialog.localPromise(check);
+
+    check.then(apply, function (error) {
+        if (typeof ODS === 'function') {
+            ODS('Loves MBz: could not check the album release ID when the tab opened: ' +
+                mbzExtErrorText(error));
+        }
+    });
+}
+
+/**
+ * Group load-time check: one representative track per album, queried in
+ * selection order. The first album without an ID gets the search button.
+ */
+function mbzExtSyncGroupSearch(ui, dialog) {
+    var selection = mbzExtCollectGroupSelection(dialog);
+    var albums = [];
+    var seen = {};
+
+    selection.tracks.forEach(function (candidate) {
+        var albumId = parseInt(candidate && candidate.idalbum, 10);
+        if (!(albumId > 0) || seen[albumId]) return;
+        seen[albumId] = true;
+        albums.push({ albumId: albumId, track: candidate });
+    });
+
+    if (!albums.length) {
+        mbzExtHideSearch(ui);
+        return;
+    }
+
+    var mbz = window.mbzMbgid;
+    var token = mbzExtLoadToken;
+
+    function stale() {
+        return window._cleanUpCalled || token !== mbzExtLoadToken || mbzExtUI !== ui;
+    }
+
+    if (mbz && typeof mbz.releaseIdForAlbum === 'function' &&
+        typeof mbz.getState === 'function' && mbz.getState().loaded) {
+        for (var i = 0; i < albums.length; i++) {
+            if (!mbz.releaseIdForAlbum(albums[i].albumId)) {
+                mbzExtShowSearch(ui, albums[i].track);
+                return;
+            }
+        }
+        mbzExtHideSearch(ui);
+        return;
+    }
+
+    var fetch = window.mbzFetch;
+    if (!fetch || typeof fetch.releaseIdForAlbumAsync !== 'function') return;
+
+    function next(index) {
+        if (stale()) return;
+        if (index >= albums.length) {
+            mbzExtHideSearch(ui);
+            return;
+        }
+
+        var entry = albums[index];
+
+        // The cache may already hold this album's ID while its artist half is
+        // still loading, so use a cached hit instead of querying the row again.
+        if (mbz && typeof mbz.releaseIdForAlbum === 'function' &&
+            mbz.releaseIdForAlbum(entry.albumId)) {
+            next(index + 1);
+            return;
+        }
+
+        var check = fetch.releaseIdForAlbumAsync(entry.albumId);
+        if (dialog && typeof dialog.localPromise === 'function') check = dialog.localPromise(check);
+
+        check.then(function (releaseId) {
+            if (stale()) return;
+            if (!releaseId) {
+                mbzExtShowSearch(ui, entry.track);
+                return;
+            }
+            next(index + 1);
+        }, function (error) {
+            if (stale()) return;
+            if (typeof ODS === 'function') {
+                ODS('Loves MBz: could not check a release ID in the group selection: ' +
+                    mbzExtErrorText(error));
+            }
+            mbzExtHideSearch(ui);
+        });
+    }
+
+    next(0);
+}
+
 function mbzExtReportSaveError(error) {
     if (typeof messageDlg === 'function') {
         messageDlg(
@@ -1576,7 +1772,7 @@ async function mbzExtBuildGroupFillAsync(tracks, onProgress) {
     var apply = window.mbzApply;
     var mbz = window.mbzMbgid;
     var albumIds = [];
-    var counts = { noAlbum: 0, noRelease: 0, unmatched: 0, same: 0 };
+    var counts = { noAlbum: 0, noRelease: 0, unmatched: 0, same: 0, firstNoReleaseTrack: null };
 
     function report(phase, current, total) {
         if (typeof onProgress !== 'function') return;
@@ -1636,6 +1832,7 @@ async function mbzExtBuildGroupFillAsync(tracks, onProgress) {
 
         if (result.skipped) {
             counts.noRelease += albumTracks.length;
+            if (!counts.firstNoReleaseTrack) counts.firstNoReleaseTrack = albumTracks[0] || null;
             continue;
         }
 
@@ -1868,6 +2065,8 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
         return;
     }
 
+    mbzExtHideSearch(ui);
+
     function finish() {
         if (ui.fillButton) ui.fillButton.classList.remove('mbzExtBusy');
     }
@@ -1891,6 +2090,12 @@ function mbzExtFillGroupFromRelease(ui, dialog) {
         _('Reading the release took too long. Try again.')
     )).then(function (plan) {
         if (window._cleanUpCalled) return;
+
+        if (plan.counts.noRelease && plan.counts.firstNoReleaseTrack) {
+            mbzExtShowSearch(ui, plan.counts.firstNoReleaseTrack);
+        } else {
+            mbzExtHideSearch(ui);
+        }
 
         if (!plan.work.length) {
             if (ui.fillStatus) {
@@ -1945,6 +2150,8 @@ function mbzExtFillFromRelease(ui, track, dialog) {
         return;
     }
 
+    mbzExtHideSearch(ui);
+
     if (ui.fillButton.classList.contains('mbzExtBusy')) return;
     ui.fillButton.classList.add('mbzExtBusy');
     if (ui.fillStatus) ui.fillStatus.textContent = _('Reading the release...');
@@ -1964,6 +2171,8 @@ function mbzExtFillFromRelease(ui, track, dialog) {
                     ? _('This track has no album, so there is nothing to look up.')
                     : _('This album has no MusicBrainz release ID. Nothing was requested.');
             }
+            if (result.reason === 'no-album') mbzExtHideSearch(ui);
+            else mbzExtShowSearch(ui, track);
             return;
         }
 
@@ -2013,6 +2222,9 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
         fillBar: qeid(main, 'mbzExtFillBar'),
         fillButton: qeid(main, 'mbzExtFillButton'),
         fillStatus: qeid(main, 'mbzExtFillStatus'),
+        searchBar: qeid(main, 'mbzExtSearchBar'),
+        searchButton: qeid(main, 'mbzExtSearchButton'),
+        searchStatus: qeid(main, 'mbzExtSearchStatus'),
         fillPlan: qeid(main, 'mbzExtFillPlan'),
         fillPlanTitle: qeid(main, 'mbzExtFillPlanTitle'),
         fillFields: qeid(main, 'mbzExtFillFields'),
@@ -2063,12 +2275,17 @@ propertiesTabs.tabLovesMBz.load = function (track, dialog) {
 
     if (ui.fillBar) ui.fillBar.style.display = readOnly ? 'none' : '';
     if (ui.fillStatus) ui.fillStatus.textContent = '';
+    mbzExtHideSearch(ui);
     mbzExtListen(dialog, ui.fillButton, 'click', function () {
         mbzExtFillFromRelease(ui, track, dialog);
     });
     mbzExtListen(dialog, ui.fillCancel, 'click', function () {
         mbzExtHideFillPlan(ui);
     });
+    mbzExtListen(dialog, ui.searchButton, 'click', function () {
+        mbzExtOpenSearch(ui);
+    });
+    mbzExtSyncSearch(ui, track, dialog);
 
     mbzExtListen(dialog, ui.rows, 'input', mbzExtOnInput);
     mbzExtListen(dialog, ui.rows, 'click', mbzExtOnClick);

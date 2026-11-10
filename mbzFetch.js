@@ -11,11 +11,13 @@
  * User-Agent and no more than one request per second per client. Both live
  * here, behind a serialized queue, so no caller can bypass them.
  *
- * One `release/{mbid}` lookup asks for everything the add-on may need:
- * artist credits, labels, recordings, release groups, media, disc IDs,
- * ISRCs, recording/work relationships and their artist credits. The parsed
- * release is cached by ID for the lifetime
- * of this window, so previewing the same album twice costs one request.
+ * A `release/{mbid}` lookup asks for the release and its artist credits,
+ * labels, recordings, release groups, media, disc IDs, ISRCs and
+ * recording/work relationships. When that release has no Discogs URL, one
+ * `release-group/{id}` URL lookup follows, because MusicBrainz keeps the
+ * Discogs master page on the release group. The parsed release is cached by
+ * ID for the lifetime of this window, so previewing the same album twice
+ * costs one release request and at most one group lookup.
  */
 
 (function () {
@@ -61,15 +63,7 @@
         return GUID_RE.test(id) ? id : '';
     }
 
-    /**
-     * Discogs pages linked from a release. MusicBrainz stores these as URL
-     * relationships; Picard's `discogs_url` extended tag holds the same value.
-     * Returns [] when the release has no Discogs link.
-     */
-    function discogsUrls(release) {
-        var relations = (release && release.relations) ? release.relations : [];
-        var urls = [];
-
+    function collectDiscogsUrls(relations, urls) {
         for (var i = 0; i < relations.length; i++) {
             var relation = relations[i] || {};
             var resource = (relation.url && relation.url.resource)
@@ -83,6 +77,21 @@
 
             if (isDiscogs && urls.indexOf(resource) === -1) urls.push(resource);
         }
+    }
+
+    /**
+     * Discogs pages linked from a release or its release group. MusicBrainz
+     * stores these as URL relationships; a master Discogs page usually lives on
+     * the release group. Picard's `discogs_url` extended tag holds the same
+     * value. Returns [] when neither has a Discogs link.
+     */
+    function discogsUrls(release) {
+        var urls = [];
+
+        collectDiscogsUrls((release && release.relations) || [], urls);
+
+        var group = release && release['release-group'];
+        collectDiscogsUrls((group && group.relations) || [], urls);
 
         return urls;
     }
@@ -214,6 +223,53 @@
         }
     }
 
+    /** One JSON request, retrying only the API's busy responses. */
+    async function fetchJsonWithRetriesAsync(url) {
+        var delay = RETRY_DELAY_MS;
+
+        for (var attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            var data = await sendAsync(url);
+            if (data) return data;
+
+            if (attempt < MAX_ATTEMPTS) {
+                await wait(delay);
+                delay *= 2;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A release lookup does not include the release group's URL relationships.
+     * Fetch them only when the release itself has no Discogs link; a failed
+     * optional request leaves the rest of the release usable.
+     */
+    async function attachReleaseGroupUrlRelationsAsync(release) {
+        var group = release && release['release-group'];
+        if (!group || !group.id) return;
+
+        // Some responses already carry URL relations on the group. Do not spend
+        // another request when those relations are present.
+        if (Array.isArray(group.relations) && group.relations.some(function (relation) {
+            return relation && relation.url;
+        })) return;
+
+        // A release-level Discogs page is already enough.
+        if (discogsUrls(release).length) return;
+
+        var url = API_ROOT + 'release-group/' + encodeURIComponent(group.id) +
+            '?inc=url-rels&fmt=json';
+
+        try {
+            var data = await fetchJsonWithRetriesAsync(url);
+            if (data && Array.isArray(data.relations)) group.relations = data.relations;
+        } catch (e) {
+            // Discogs is optional metadata. A failed group lookup must not hide
+            // the release metadata that did load.
+        }
+    }
+
     async function fetchReleaseAsync(releaseId) {
         var id = normalizeReleaseId(releaseId);
         if (!id) throw new Error(_('There is no MusicBrainz release ID to look up.'));
@@ -225,22 +281,15 @@
 
             var url = API_ROOT + 'release/' + encodeURIComponent(id) +
                 '?inc=' + INCLUDE + '&fmt=json';
-            var delay = RETRY_DELAY_MS;
+            var release = await fetchJsonWithRetriesAsync(url);
 
-            for (var attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                var release = await sendAsync(url);
-                if (release) {
-                    cache.set(id, release);
-                    return release;
-                }
-
-                if (attempt < MAX_ATTEMPTS) {
-                    await wait(delay);
-                    delay *= 2;
-                }
+            if (!release) {
+                throw new Error(_('MusicBrainz is busy right now. Try again in a moment.'));
             }
 
-            throw new Error(_('MusicBrainz is busy right now. Try again in a moment.'));
+            await attachReleaseGroupUrlRelationsAsync(release);
+            cache.set(id, release);
+            return release;
         });
     }
 

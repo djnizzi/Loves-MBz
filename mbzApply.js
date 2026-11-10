@@ -28,7 +28,10 @@
         { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
         { key: 'publisher', label: _('Labels'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
-        { key: 'discNumber', label: _('Disc #'), scope: 'track', native: 'discNumber', kind: 'int' },
+        // Write the integer property. Assigning the string discNumber during
+        // group staging can make MediaMonkey commit the dialog early, before
+        // the later tracks have their native fields and tags staged.
+        { key: 'discNumber', label: _('Disc #'), scope: 'track', native: 'discNumberInt', kind: 'int' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
         { key: 'composer', label: _('Composer'), scope: 'track', native: 'composer' },
         { key: 'lyricist', label: _('Lyricist'), scope: 'track', native: 'lyricist' },
