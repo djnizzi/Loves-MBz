@@ -801,6 +801,7 @@
         MUSICBRAINZALBUMTYPE: { entity: '', label: 'Album type' },
         MUSICBRAINZRELEASETYPE: { entity: '', label: 'Release type' },
         MUSICBRAINZALBUMCOUNTRY: { entity: '', label: 'Album country' },
+        MUSICBRAINZALBUMRELEASECOUNTRY: { entity: '', label: 'Release country' },
         MUSICBRAINZRELEASECOUNTRY: { entity: '', label: 'Release country' },
         MUSICBRAINZALBUMRELEASEDATE: { entity: '', label: 'Album release date' },
         MUSICBRAINZRELEASEDATE: { entity: '', label: 'Release date' },

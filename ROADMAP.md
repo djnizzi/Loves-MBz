@@ -88,17 +88,17 @@ title.
 - [ ] Other relational native tags — genre, conductor, copyright and language
       still need their own includes and mappings.
 - [x] Extended tags for values with no column, under Picard's names:
-      `MUSICBRAINZ_*` IDs, `BARCODE`, `SCRIPT`, `ARTISTS`, `ALBUMARTISTS`,
+      `MUSICBRAINZ_*` IDs, `BARCODE`, `ARTISTS`, `ALBUMARTISTS`,
       `WRITER`, `PRODUCER`, `REMIXER`, `originaldate`, album type/status/country,
       `CATALOGNUMBER`, and
       `discogs_url` from the release's Discogs URL relationship. `discogs_url`
       is a plain extended tag, so it stays out of the add-on tab and shows in
       MediaMonkey's built-in Custom tab.
 - [x] Single-track and preview writes go through `track.commitAsync()`; Fill
-      in group Track Properties stages native fields before extended tags and
-      uses the dialog's normal group save. The album and artist ID columns are
-      never written, so a fetched ID cannot silently overwrite the library
-      value the lookup came from.
+      in group Track Properties stages each track's native fields before its
+      extended tags and uses the dialog's normal group save. The album and
+      artist ID columns are never written, so a fetched ID cannot silently
+      overwrite the library value the lookup came from.
 - [ ] Keep the fetched-release cache across dialog openings; it currently lives
       as long as the dialog.
 

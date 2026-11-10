@@ -45,7 +45,6 @@
         { key: 'type', label: _('Release type'), scope: 'album', tag: 'RELEASETYPE' },
         { key: 'country', label: _('Release country'), scope: 'album', tag: 'RELEASECOUNTRY' },
         { key: 'catalognumber', label: _('Catalogue number'), scope: 'album', tag: 'CATALOGNUMBER' },
-        { key: 'script', label: _('Script'), scope: 'album', tag: 'SCRIPT' },
         { key: 'discogs', label: _('Discogs URL'), scope: 'album', tag: 'discogs_url' },
         { key: 'originaldate', label: _('Original date (tag)'), scope: 'album', tag: 'originaldate' },
         { key: 'recordingid', label: _('MusicBrainz recording ID'), scope: 'track', tag: 'MUSICBRAINZ_TRACKID' },
@@ -69,6 +68,38 @@
         return String(name === undefined || name === null ? '' : name)
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '');
+    }
+
+    /**
+     * Picard writes release status, type and country under different names for
+     * different file formats. They describe the same value, so Fill must treat
+     * them as one field; otherwise writing RELEASECOUNTRY beside an existing
+     * "MusicBrainz Album Release Country" creates a duplicate tag.
+     */
+    var TAG_ALIASES = {
+        releasecountry: [
+            'musicbrainzalbumcountry',
+            'musicbrainzalbumreleasecountry',
+            'musicbrainzreleasecountry'
+        ],
+        releasestatus: [
+            'musicbrainzalbumstatus',
+            'musicbrainzreleasestatus'
+        ],
+        releasetype: [
+            'musicbrainzalbumtype',
+            'musicbrainzreleasetype'
+        ]
+    };
+
+    function tagNames(name) {
+        var wanted = normalizeTagName(name);
+        var aliases = TAG_ALIASES[wanted];
+        return aliases ? [wanted].concat(aliases) : [wanted];
+    }
+
+    function tagMatches(name, wanted) {
+        return tagNames(wanted).indexOf(normalizeTagName(name)) !== -1;
     }
 
     function leadingInt(value) {
@@ -205,11 +236,6 @@
         return types.join(' + ');
     }
 
-    function releaseScript(release) {
-        var representation = (release && release['text-representation']) || {};
-        return text(representation.script);
-    }
-
     function yearOf(date) {
         var match = /^(\d{4})/.exec(text(date));
         return match ? match[1] : '';
@@ -245,7 +271,6 @@
             RELEASETYPE: releaseType(release),
             RELEASECOUNTRY: text(release.country),
             CATALOGNUMBER: catalogNumbers(release),
-            SCRIPT: releaseScript(release),
             discogs_url: discogsUrls(release).join(', '),
             originaldate: origDate
         };
@@ -318,13 +343,20 @@
     function tagValue(tags, name) {
         if (!Array.isArray(tags)) return '';
 
-        var wanted = normalizeTagName(name);
+        var matches = [];
         for (var i = 0; i < tags.length; i++) {
             if (!tags[i]) continue;
-            if (normalizeTagName(tags[i].title) === wanted) return text(tags[i].value);
+            if (tagMatches(tags[i].title, name)) matches.push(tags[i]);
         }
 
-        return '';
+        if (!matches.length) return '';
+
+        // One entry is the current value, whichever spelling the file uses.
+        // Several spellings of a release field are the duplicate this module
+        // has to repair, so report no current value and let Fill offer the
+        // field again. Repeated entries of other tags are left as they were.
+        if (matches.length > 1 && tagNames(name).length > 1) return '';
+        return text(matches[0].value);
     }
 
     function fetchValue(def, match) {
@@ -524,13 +556,12 @@
             var title = text(write && write.title);
             if (!title || !value) return;
 
-            var wanted = normalizeTagName(title);
             var matchIndex = -1;
             var matchTitle = '';
 
             for (var i = 0; i < result.length; i++) {
                 if (!result[i]) continue;
-                if (normalizeTagName(result[i].title) !== wanted) continue;
+                if (!tagMatches(result[i].title, title)) continue;
 
                 if (matchIndex < 0) {
                     matchIndex = i;
@@ -818,6 +849,7 @@
         applyNative: applyNative,
         applyAsync: applyAsync,
         mergeTags: mergeTags,
-        parseTags: parseTags
+        parseTags: parseTags,
+        tagNameMatches: tagMatches
     };
 })();

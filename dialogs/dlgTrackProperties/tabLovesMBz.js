@@ -180,14 +180,21 @@ function mbzExtShortGuid(value) {
     return text.length > 14 ? text.slice(0, 8) + '\u2026' : text;
 }
 
-function mbzExtTagPresent(title) {
-    var mbz = window.mbzMbgid;
-    if (!mbz) return false;
+function mbzExtSameTagName(name, wanted) {
+    var apply = window.mbzApply;
+    if (apply && typeof apply.tagNameMatches === 'function') {
+        return apply.tagNameMatches(name, wanted);
+    }
 
-    var name = mbz.normalizeExtendedTagName(title);
+    var mbz = window.mbzMbgid;
+    return !!mbz && mbz.normalizeExtendedTagName(name) === mbz.normalizeExtendedTagName(wanted);
+}
+
+function mbzExtTagPresent(title) {
+    if (!window.mbzMbgid) return false;
 
     for (var i = 0; i < mbzExtRows.length; i++) {
-        if (mbz.normalizeExtendedTagName(mbzExtRows[i].title) === name) return true;
+        if (mbzExtSameTagName(mbzExtRows[i].title, title)) return true;
     }
 
     return false;
@@ -933,11 +940,10 @@ function mbzExtAddTagRow(ui, mbz, title, value) {
     if (!ui || !mbz || window.isReadOnly) return false;
     if (!title || !value) return false;
 
-    var wanted = mbz.normalizeExtendedTagName(title);
     var target = null;
 
     mbzExtRows.forEach(function (row) {
-        if (!target && mbz.normalizeExtendedTagName(row.title) === wanted) target = row;
+        if (!target && mbzExtSameTagName(row.title, title)) target = row;
     });
 
     // Several artists share one MusicBrainz tag name, so adding another one

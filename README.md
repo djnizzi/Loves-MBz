@@ -32,7 +32,7 @@ page — and lets you tick fields to write back. Nothing is written until
 **Apply**. An album without a release ID is skipped without a request; the
 add-on never searches MusicBrainz by name.
 
-Current version: **0.4.3**.
+Current version: **0.4.4**.
 
 ---
 
@@ -120,8 +120,14 @@ written before that click.
 |---|---|
 | Native track tags | title, artist, composer, lyricist, ISRC |
 | Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
-| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `SCRIPT`, `originaldate`, `discogs_url` |
+| Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `originaldate`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS`, `WRITER`, `PRODUCER`, `REMIXER` |
+
+Release status, type and country are matched across Picard's format-specific
+names: `RELEASECOUNTRY` / `MusicBrainz Album Release Country`, `RELEASESTATUS`
+/ `MusicBrainz Album Status`, and `RELEASETYPE` / `MusicBrainz Album Type`. Fill
+updates the spelling the track already has and collapses duplicates instead of
+adding a second copy.
 
 Composer and lyricist are native MediaMonkey fields; they come from the work
 linked to each recording. A work with only generic writer relationships fills
@@ -396,9 +402,9 @@ must support extended tags — formats such as WAV may discard them.
   this disc/track as a field list. `filterPending` narrows that list to the
   ticked fields; `applyPendingAsync` stages them without committing: native
   fields are assigned (dates converted to `YYYYMMDD`, years to numbers) and the
-  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`.
-  Native fields are staged before the extended tags, so a group save triggered
-  by the tag write already sees Composer and Lyricist. Native artist fields,
+  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`. It
+  stages each track's native fields before that track's extended tags, the same
+  order 0.4.3 uses. Native artist fields,
   composer and lyricist use `; `-separated names; the joined MusicBrainz credit
   stays in `ARTISTS`/`ALBUMARTISTS`. Generic writers are kept in `WRITER` and
   fill Composer when no specific composer exists. Producers and remixers are
@@ -410,8 +416,9 @@ must support extended tags — formats such as WAV may discard them.
   tracklist, because the dialog list can be shorter than the actual selection.
   After the checkbox selection, OK stages the chosen fields on each selected
   track and MediaMonkey's normal group save commits them; there is no separate
-  apply button. Native Composer and Lyricist are staged before the extended
-  tags so the group commit sees them. The checkbox list is the confirmation;
+  apply button. Native Composer and Lyricist are staged before each track's
+  extended tags so the group commit sees them. The checkbox list is the
+  confirmation;
   Cancel discards the pending fill. Albums without a release ID and unmatched
   files are reported and skipped.
 - **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
@@ -465,6 +472,16 @@ bash / Git Bash, if `zip` is available:
 ```bash
 zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js mbzApply.js actions_add.js controls dialogs skin loves-mbz.png
 ```
+
+Before packaging, run the save-path regression test:
+
+```bash
+node tests/save-path.test.js
+```
+
+It guards the 0.4.3 group Fill order: each track's native fields are staged
+before its extended tags, and the group loop does not split those into separate
+passes. The contract is in [AGENTS.md](AGENTS.md).
 
 ## Troubleshooting
 
@@ -538,6 +555,8 @@ dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
 dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
 loves-mbz.png                      add-on icon (info.json)
 skin/icon/lovesMBz.svg             menu icon
+AGENTS.md                          save-path contract for future changes
+tests/save-path.test.js            regression guard for group Fill order
 ```
 
 ## Changelog

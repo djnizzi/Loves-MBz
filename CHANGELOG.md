@@ -3,6 +3,22 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.4.4 (2026-11-10)
+
+- **Release fields no longer duplicate** — Fill treats Picard's
+  `MusicBrainz Album Release Country`, `MusicBrainz Album Status` and
+  `MusicBrainz Album Type` as the same fields as `RELEASECOUNTRY`,
+  `RELEASESTATUS` and `RELEASETYPE`. It updates the spelling already in the
+  track, and collapses existing duplicate spellings when the field is next
+  written, instead of adding a second copy. Add tag uses the same matching.
+- **Script is no longer written** — Fill no longer offers or writes the
+  `SCRIPT` extended tag. Existing values are left in place; the preview still
+  shows the release's script as read-only metadata.
+- **Group Fill save path unchanged** — 0.4.4 leaves the 0.4.3 per-track save
+  order alone: each track's native fields are staged before its extended tags,
+  and MediaMonkey's normal group save commits them. The duplicate repair changed
+  only which tags Fill writes, not how the dialog saves.
+
 ## 0.4.3 (2026-11-09)
 
 - **Composer and lyricist** — Fill now reads the work linked to each
