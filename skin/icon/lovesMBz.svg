@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 595.3 841.9">
-    <!-- No fill of its own: MediaMonkey colours menu icons from the skin, so
-         the path inherits the theme's icon colour (white on dark skins). -->
-    <path d="M289,182.9L84.9,301.9v238.1L289,659.1V182.9z M306,182.9l204.1,119.1v238.1L306,659.1V182.9z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="84.9 182.9 425.2 476.2">
+    <!-- The "textColor" class lets the skin colour the icon, exactly as it
+         colours MediaMonkey's own toolbar icons. The viewBox is cropped to the
+         glyph, so it fills a square tool button instead of a portrait canvas. -->
+    <path class="textColor" d="M289,182.9L84.9,301.9v238.1L289,659.1V182.9z M306,182.9l204.1,119.1v238.1L306,659.1V182.9z"/>
 </svg>

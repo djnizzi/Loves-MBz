@@ -4,10 +4,31 @@
  * Loves MBz — menu actions.
  *
  * Registered in Edit > Tag Tools and, because track lists share that menu
- * branch, in the track list context menu as well. The column cache refreshes
- * itself on MediaMonkey's change events (see init.js), so there is no manual
- * reload action here.
+ * branch, in the track list context menu as well. The same action is what the
+ * toolbar button runs (see init.js). The column cache refreshes itself on
+ * MediaMonkey's change events, so there is no manual reload action here.
  */
+
+/*
+ * The toolbar button (init.js) runs in another script context, so it can see
+ * neither this module's functions nor the action registry. Publish the one
+ * entry point it needs: the same scope prompt and window the menu action uses.
+ */
+window.mbzOpenTagSelection = function (list) {
+    list = list || (uitools.getSelectedTracklist ? uitools.getSelectedTracklist() : null);
+    if (!list) {
+        if (typeof ODS === 'function') ODS('Loves MBz: no track list to open the window on.');
+        return false;
+    }
+
+    mbzTagScopeAsync(list).then(function (scope) {
+        if (scope) mbzOpenTagDialog(scope);
+    }, function (error) {
+        if (typeof ODS === 'function') ODS('Loves MBz: could not open the window: ' + error);
+    });
+
+    return true;
+};
 
 actions.lovesMBzShowIds = {
     title: _('MusicBrainz IDs') + '...',
@@ -76,28 +97,6 @@ function mbzSelectedIdsFromList(list) {
 
 function mbzSelectedIds() {
     return mbzSelectedIdsFromList(uitools.getSelectedTracklist());
-}
-
-/**
- * Selected tracklists are returned before they are populated. Waiting for
- * whenLoaded() prevents the preview from opening with albumId 0 on a selection
- * that is still being delivered.
- */
-function mbzSelectedIdsAsync(list) {
-    if (!list) return Promise.resolve({ songId: 0, albumId: 0 });
-
-    var loaded = null;
-    try {
-        if (typeof list.whenLoaded === 'function') loaded = list.whenLoaded();
-    } catch (e) {
-        loaded = null;
-    }
-
-    return Promise.resolve(loaded).then(function (loadedList) {
-        return mbzSelectedIdsFromList(loadedList || list);
-    }, function () {
-        return mbzSelectedIdsFromList(list);
-    });
 }
 
 /**
@@ -180,12 +179,60 @@ actions.lovesMBzLinks = {
 };
 
 /**
- * Read-only: the dialog looks up the release behind the selected album's
- * Albums.MBGID and displays it. It never writes, and an album without that ID
- * is not looked up at all.
+ * One album at a time is the guardrail, and the rule itself lives in
+ * mbzApply.resolveTagScope so the action and the window cannot disagree. This
+ * only asks the user what to do with a multi-album selection.
+ *
+ * @returns {Promise<Object|null>} the scope, or null when the user cancelled
  */
-actions.lovesMBzPreview = {
-    title: _('Preview MusicBrainz metadata') + '...',
+function mbzTagScopeAsync(scope) {
+    if (!scope || !scope.multiAlbum) return Promise.resolve(scope);
+    if (typeof messageDlg !== 'function') return Promise.resolve(null);
+
+    var message = sprintf(
+        _('This selection spans %d albums. Tag from MusicBrainz works on one album at a time. Continue and treat the selection as one release?'),
+        scope.albumIds.length);
+
+    if (scope.sharedRelease) {
+        message += '<br><br>' + sprintf(
+            _('These albums share release %s.'), scope.sharedRelease);
+    }
+
+    return new Promise(function (resolve) {
+        messageDlg(message, 'Confirmation', ['btnYes', 'btnNo'],
+            { defaultButton: 'btnNo', title: _('Loves MBz') },
+            function (result) {
+                if (!result || result.btnID !== 'btnYes') {
+                    resolve(null);
+                    return;
+                }
+
+                resolve(Object.assign({}, scope, { forced: true }));
+            });
+    });
+}
+
+function mbzOpenTagDialog(list, forced) {
+    uitools.openDialog('dlgMBzTag', {
+        show: true,
+        modal: false,
+        title: _('Tag from MusicBrainz'),
+        tracks: list,
+        treatAsOneRelease: !!forced
+    });
+}
+
+/**
+ * Tag from MusicBrainz — the one window that does the tagging. It opens on the
+ * current selection and writes only what the user ticks there.
+ *
+ * Do not call localRequirejs here. MediaMonkey concatenates this file into its
+ * own `actions` module, so that loader has no script context and aborts the
+ * host with "mbzApply.js can't be loaded! (NOT FOUND)". init.js loads the write
+ * engine at startup from the add-on folder; the window loads its own modules.
+ */
+actions.lovesMBzTag = {
+    title: _('Tag from MusicBrainz') + '...',
     hotkeyAble: true,
     icon: 'lovesMBz',
     disabled: uitools.notMediaListSelected,
@@ -193,15 +240,32 @@ actions.lovesMBzPreview = {
         var list = uitools.getSelectedTracklist();
         if (!list) return;
 
-        mbzSelectedIdsAsync(list).then(function (ids) {
-            uitools.openDialog('dlgMBzPreview', {
-                show: true,
-                modal: false,
-                title: _('MusicBrainz metadata preview'),
-                albumId: ids.albumId,
-                tracks: list
-            });
-        });
+        var apply = window.mbzApply;
+        if (!apply) {
+            // The engine did not load at start-up; the window can still try.
+            mbzOpenTagDialog(list, false);
+            return;
+        }
+
+        try {
+            Promise.resolve(apply.resolveTagScope(list))
+                .then(mbzTagScopeAsync)
+                .then(function (scope) {
+                    if (!scope) return;
+                    mbzOpenTagDialog(list, scope.forced);
+                })
+                .catch(function (error) {
+                    if (typeof ODS === 'function') {
+                        ODS('Loves MBz: could not resolve the selection: ' + error);
+                    }
+                    mbzOpenTagDialog(list, false);
+                });
+        } catch (error) {
+            if (typeof ODS === 'function') {
+                ODS('Loves MBz: could not open Tag from MusicBrainz: ' + error);
+            }
+            mbzOpenTagDialog(list, false);
+        }
     }
 };
 
@@ -219,7 +283,7 @@ window._menuItems.editTags.action.submenu.push({
 });
 
 window._menuItems.editTags.action.submenu.push({
-    action: actions.lovesMBzPreview,
+    action: actions.lovesMBzTag,
     order: 140,
     grouporder: 10
 });

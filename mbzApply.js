@@ -3,20 +3,20 @@
 /*
  * Loves MBz — turn a MusicBrainz release into library writes.
  *
- * The dialog stays read-only until the user ticks fields and presses Apply.
- * This module owns the mapping and the writes:
+ * 0.5.0 contract: this module is the only write path. The Tag from
+ * MusicBrainz window stages nothing inside MediaMonkey's dialogs and never
+ * relies on the group save. applySelectionAsync writes each selected track
+ * itself, in this order:
  *
- *   - library tracks are matched to the release by disc and track number,
- *     never by title, because titles are exactly what is being changed
- *   - only fields whose fetched value differs from the library are offered
- *   - native fields go on the track; extended tags are merged into the track's
- *     existing ExtendedTags JSON so unrelated tags and the Custom tab survive
- *   - every touched track is committed with commitAsync, then MediaMonkey's DB
- *     cache and the current view are refreshed
+ *   1. the selected native fields
+ *   2. one read of Songs.ExtendedTags, one merged write (fill tags and tag
+ *      edits together)
+ *   3. one commitAsync() per track
  *
- * Albums.MBGID and the artist rows are never written here: the release ID is
- * the input, not an output, so a fetched ID cannot overwrite the library value
- * the lookup came from.
+ * Library tracks are matched to the release by disc and track number, never by
+ * title, because titles are exactly what is being changed. Albums.MBGID and the
+ * artist rows are never written here: the release ID is the input, not an
+ * output.
  */
 
 (function () {
@@ -28,9 +28,9 @@
         { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
         { key: 'publisher', label: _('Labels'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
-        // Write the integer property. Assigning the string discNumber during
-        // group staging can make MediaMonkey commit the dialog early, before
-        // the later tracks have their native fields and tags staged.
+        // Write the integer property. Assigning the string discNumber used to
+        // make MediaMonkey commit a dialog early, before the later tracks had
+        // their fields staged.
         { key: 'discNumber', label: _('Disc #'), scope: 'track', native: 'discNumberInt', kind: 'int' },
         { key: 'artist', label: _('Artist'), scope: 'track', native: 'artist' },
         { key: 'composer', label: _('Composer'), scope: 'track', native: 'composer' },
@@ -75,8 +75,8 @@
 
     /**
      * Picard writes release status, type and country under different names for
-     * different file formats. They describe the same value, so Fill must treat
-     * them as one field; otherwise writing RELEASECOUNTRY beside an existing
+     * different file formats. They describe the same value, so they are one
+     * field; otherwise writing RELEASECOUNTRY beside an existing
      * "MusicBrainz Album Release Country" creates a duplicate tag.
      */
     var TAG_ALIASES = {
@@ -166,7 +166,8 @@
 
     /**
      * Composer, lyricist and generic writer are work credits, reached from the
-     * recording's performance relation. A direct recording relation is accepted too.
+     * recording's performance relation. A direct recording relation is accepted
+     * too.
      */
     function workRelationNames(recording, types) {
         var names = [];
@@ -301,6 +302,8 @@
                         origYear: yearOf(origDate),
                         publisher: labelText(release),
                         title: text(item.title || recording.title),
+                        // Read-only metadata for the track table.
+                        length: text(item.length),
                         discNumber: disc ? String(disc) : '',
                         artist: creditNames(trackCredit),
                         // A generic writer is the only author information on many
@@ -324,6 +327,9 @@
         });
 
         return {
+            id: text(release.id),
+            title: text(release.title),
+            artist: creditText(credit),
             albumTags: albumTags,
             tracks: tracks,
             mediaCount: media.length,
@@ -356,8 +362,8 @@
 
         // One entry is the current value, whichever spelling the file uses.
         // Several spellings of a release field are the duplicate this module
-        // has to repair, so report no current value and let Fill offer the
-        // field again. Repeated entries of other tags are left as they were.
+        // has to repair, so report no current value and offer the field again.
+        // Repeated entries of other tags are left as they were.
         if (matches.length > 1 && tagNames(name).length > 1) return '';
         return text(matches[0].value);
     }
@@ -394,7 +400,7 @@
 
             if (def.kind === 'date') return isoFromMmDate(raw);
 
-            if (def.kind === 'int') {
+            if (def.kind === 'int' || def.kind === 'year') {
                 var number = parseInt(raw, 10);
                 return number > 0 ? String(number) : '';
             }
@@ -420,24 +426,12 @@
         return _('Mixed');
     }
 
-    function loadAlbumTracksAsync(albumId) {
-        var list = app.db.getTracklist(
-            'SELECT * FROM Songs WHERE IDAlbum = ' + albumId +
-            ' ORDER BY DiscNumber, TrackNumber, ID', -1);
-
-        if (list && list.whenLoaded) {
-            return list.whenLoaded().then(function () { return list; });
-        }
-
-        return Promise.resolve(list);
-    }
-
     function collectTracks(list) {
         var tracks = [];
         if (!list) return tracks;
 
         // SharedList.getValue() requires a read lock; without one MediaMonkey
-        // raises "Read lock not acquired!" and the preview never loads a plan.
+        // raises "Read lock not acquired!" and the window never loads.
         function collect() {
             var count = list.count || 0;
 
@@ -454,94 +448,333 @@
     }
 
     /**
-     * @returns {Promise<{albumId: number, matches: Array, fields: Array,
-     *   libraryCount: number, unmatched: number}>}
+     * The selected tracks as a plain array. A shared tracklist is returned
+     * before it is populated, so wait for whenLoaded() first and copy the
+     * values under a read lock.
      */
-    async function buildPlanAsync(albumId, release) {
-        var id = parseInt(albumId, 10);
-        var described = describeRelease(release);
+    async function collectSelectionAsync(source) {
+        if (Array.isArray(source)) return source.filter(function (track) { return !!track; });
 
-        if (!(id > 0)) {
-            return { albumId: 0, matches: [], fields: [], libraryCount: 0, unmatched: 0 };
-        }
-
-        var list = await loadAlbumTracksAsync(id);
-        var byKey = {};
-
-        collectTracks(list).forEach(function (track) {
-            var key = leadingInt(track.discNumber) + ':' + leadingInt(track.trackNumber);
-            if (key !== '0:0' && !byKey[key]) byKey[key] = track;
-        });
-
-        var matches = [];
-
-        described.tracks.forEach(function (item) {
-            var track = byKey[item.disc + ':' + item.track];
-
-            // A library Disc# of null/0 means the first disc. Match it to the
-            // first release medium so preview can offer the missing Disc#.
-            if (!track && item.disc === described.firstDisc) {
-                track = byKey['0:' + item.track];
-            }
-
-            if (!track) return;
-
-            matches.push({
-                key: item.disc + ':' + item.track,
-                track: track,
-                values: item.values,
-                albumTags: item.albumTags,
-                trackTags: item.trackTags,
-                tags: null
-            });
-        });
-
-        for (var i = 0; i < matches.length; i++) {
+        var list = source;
+        if (list && typeof list.whenLoaded === 'function') {
             try {
-                matches[i].tags = parseTags(await matches[i].track.getExtendedTagsAsync());
+                list = (await list.whenLoaded()) || list;
             } catch (e) {
-                matches[i].tags = null;
+                // keep the list we were given
             }
         }
 
-        var fields = [];
+        return collectTracks(list);
+    }
 
-        NATIVE_FIELDS.concat(TAG_FIELDS).forEach(function (def) {
-            var fetched = matches.map(function (match) { return fetchValue(def, match); });
-            if (!fetched.some(function (value) { return !!value; })) return;
+    function albumReleaseIdAsync(albumId) {
+        var id = parseInt(albumId, 10);
+        if (!(id > 0)) return Promise.resolve('');
 
-            var currents = matches.map(function (match) { return currentValue(def, match); });
-            var changes = 0;
+        var mbz = window.mbzMbgid;
+        if (mbz && typeof mbz.releaseIdForAlbum === 'function') {
+            var cached = text(mbz.releaseIdForAlbum(id));
+            if (cached) return Promise.resolve(cached);
+        }
 
-            fetched.forEach(function (value, index) {
-                if (normalizeText(value) !== normalizeText(currents[index])) changes++;
-            });
+        if (typeof app === 'undefined' || !app.db || !app.db.getQueryResultAsync) {
+            return Promise.resolve('');
+        }
 
-            if (!changes && !def.force) return;
-
-            var same = fetched.every(function (value) { return value === fetched[0]; });
-
-            fields.push({
-                key: def.key,
-                label: def.label,
-                scope: def.scope,
-                native: def.native || '',
-                tag: def.tag || '',
-                kind: def.kind || '',
-                value: same ? fetched[0] : '',
-                values: fetched,
-                current: summarise(currents),
-                changes: changes,
-                total: matches.length
-            });
+        return Promise.resolve(app.db.getQueryResultAsync(
+            'SELECT MBGID FROM Albums WHERE ID = ' + id
+        )).then(function (res) {
+            var value = res && !res.eof ? text(res.fields.getValue(0)) : '';
+            return value === '0' ? '' : value;
+        }, function () {
+            return '';
         });
+    }
+
+    /**
+     * The one place that decides what Tag from MusicBrainz works on. The entry
+     * point and the window both call it, so they cannot disagree.
+     *
+     * @param {Object|Array} source selected tracklist or an array of tracks
+     * @returns {Promise<{tracks: Array, songIds: number[], albumIds: number[],
+     *   albumId: number, releaseIds: Object, releaseId: string,
+     *   sharedRelease: boolean, multiAlbum: boolean}>}
+     */
+    async function resolveTagScope(source) {
+        var tracks = await collectSelectionAsync(source);
+        var albumIds = [];
+        var songIds = [];
+
+        tracks.forEach(function (track) {
+            var albumId = parseInt(track && track.idalbum, 10);
+            if (albumId > 0 && albumIds.indexOf(albumId) === -1) albumIds.push(albumId);
+
+            var songId = parseInt(track && track.id, 10);
+            if (songId > 0 && songIds.indexOf(songId) === -1) songIds.push(songId);
+        });
+
+        var releaseIds = {};
+        var unique = [];
+
+        for (var i = 0; i < albumIds.length; i++) {
+            var releaseId = await albumReleaseIdAsync(albumIds[i]);
+            releaseIds[albumIds[i]] = releaseId;
+            if (releaseId && unique.indexOf(releaseId) === -1) unique.push(releaseId);
+        }
 
         return {
-            albumId: id,
-            matches: matches,
-            fields: fields,
-            libraryCount: collectTracks(list).length,
-            unmatched: Math.max(0, described.tracks.length - matches.length)
+            tracks: tracks,
+            songIds: songIds,
+            albumIds: albumIds,
+            albumId: albumIds.length ? albumIds[0] : 0,
+            releaseIds: releaseIds,
+            releaseId: unique.length === 1 ? unique[0] : '',
+            sharedRelease: unique.length === 1 && !!unique[0],
+            multiAlbum: albumIds.length > 1
+        };
+    }
+
+    /**
+     * The values to write for one track, before anything is saved. Matched by
+     * disc and track number; values that already match are left out, and each
+     * field reports the library's current value beside the fetched one.
+     *
+     * @returns {Promise<{matched: boolean, releaseTitle: string,
+     *   matchedByNumberOnly: boolean, release: Object, native: Object,
+     *   tags: Array<{title: string, value: string}>, labels: string[],
+     *   fields: Array}>}
+     */
+    async function buildPendingAsync(track, release, tagsText) {
+        var described = describeRelease(release);
+        var disc = leadingInt(track.discNumber);
+        var number = leadingInt(track.trackNumber);
+
+        function findTrack(wantedDisc, wantedNumber) {
+            for (var i = 0; i < described.tracks.length; i++) {
+                if (described.tracks[i].disc === wantedDisc &&
+                    described.tracks[i].track === wantedNumber) {
+                    return described.tracks[i];
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Number-only matching, for files with no disc tag: MediaMonkey keeps
+         * one album row per disc, and per-disc rips often carry no DISC tag. The
+         * number has to belong to exactly one medium, so a 2-CD release cannot
+         * silently match the wrong disc.
+         */
+        function findByNumber(wantedNumber) {
+            var found = null;
+
+            for (var i = 0; i < described.tracks.length; i++) {
+                var candidate = described.tracks[i];
+                if (candidate.track !== wantedNumber) continue;
+                if (found && found.disc !== candidate.disc) return null;
+                found = candidate;
+            }
+
+            return found;
+        }
+
+        var item = findTrack(disc, number);
+
+        if (!item && !disc) item = findByNumber(number);
+        if (!item && described.mediaCount === 1) item = findTrack(described.firstDisc, number);
+
+        var result = {
+            matched: !!item,
+            releaseTitle: text(release && release.title),
+            matchedByNumberOnly: !!item && !(item.disc > 0 && item.disc === disc),
+            release: item ? {
+                disc: item.disc,
+                track: item.track,
+                title: text(item.values.title),
+                length: text(item.values.length),
+                isrc: text(item.values.isrc),
+                recordingId: text(item.trackTags.MUSICBRAINZ_TRACKID)
+            } : null,
+            native: {},
+            tags: [],
+            labels: [],
+            fields: []
+        };
+
+        if (!item) return result;
+
+        var tags = [];
+        try {
+            var currentTags = tagsText === undefined
+                ? await track.getExtendedTagsAsync()
+                : tagsText;
+            tags = parseTags(currentTags) || [];
+        } catch (e) {
+            tags = [];
+        }
+
+        function addField(def, kind, value, current) {
+            result.labels.push(def.label + ': ' + value);
+            result.fields.push({
+                key: def.key,
+                label: def.label,
+                kind: kind,
+                native: def.native || '',
+                tag: def.tag || '',
+                value: value,
+                display: value,
+                current: current
+            });
+        }
+
+        NATIVE_FIELDS.forEach(function (def) {
+            var value = text(item.values[def.key]);
+            if (!value) return;
+
+            var current = currentValue(def, { track: track, tags: tags });
+            if (normalizeText(value) === normalizeText(current)) return;
+
+            result.native[def.native] = def.kind === 'date'
+                ? mmDateFromIso(value)
+                : (def.kind === 'year' || def.kind === 'int') ? parseInt(value, 10) : value;
+            addField(def, 'native', value, current);
+        });
+
+        TAG_FIELDS.forEach(function (def) {
+            var value = text(def.scope === 'album' ? item.albumTags[def.tag] : item.trackTags[def.tag]);
+            if (!value) return;
+
+            var current = tagValue(tags, def.tag);
+            if (normalizeText(value) === normalizeText(current)) return;
+
+            result.tags.push({ title: def.tag, value: value });
+            addField(def, 'tag', value, current);
+        });
+
+        return result;
+    }
+
+    /**
+     * The field rows for a whole selection: one row per field, with values that
+     * differ per track collapsed instead of one row per value.
+     *
+     * @param {Array<{pending: Object}>} work
+     * @returns {Array<{key: string, label: string, kind: string, value: string,
+     *   perTrack: boolean, currentText: string, changes: number, total: number}>}
+     */
+    function aggregateFields(work) {
+        var order = [];
+        var byKey = {};
+
+        (work || []).forEach(function (item) {
+            var pending = item && item.pending;
+            if (!pending) return;
+
+            (pending.fields || []).forEach(function (field) {
+                var entry = byKey[field.key];
+
+                if (!entry) {
+                    entry = byKey[field.key] = {
+                        key: field.key,
+                        label: field.label,
+                        kind: field.kind,
+                        native: field.native || '',
+                        tag: field.tag || '',
+                        values: [],
+                        currents: [],
+                        changes: 0,
+                        total: (work || []).length
+                    };
+                    order.push(entry);
+                }
+
+                entry.changes++;
+                if (entry.values.indexOf(field.display) === -1) entry.values.push(field.display);
+                if (entry.currents.indexOf(field.current) === -1) entry.currents.push(field.current);
+            });
+        });
+
+        order.forEach(function (entry) {
+            entry.perTrack = entry.values.length > 1;
+            entry.value = entry.perTrack ? '' : entry.values[0];
+            entry.currentText = summarise(entry.currents);
+        });
+
+        return order;
+    }
+
+    /**
+     * Builds the work for the selected tracks. Each track is matched against
+     * the release by disc and track number; tracks without a library song or
+     * without a match are counted, not written.
+     *
+     * @param {Array} tracks
+     * @param {Object|null} release
+     * @param {Map<number, string>|null} tagsById
+     * @returns {Promise<Object>}
+     */
+    async function buildSelectionPlanAsync(tracks, release, tagsById) {
+        var described = describeRelease(release);
+        var list = (tracks || []).filter(function (track) { return !!track; });
+        var entries = [];
+        var work = [];
+        var skipped = { noLibrary: 0, noAlbum: 0, unmatched: 0, same: 0 };
+
+        for (var i = 0; i < list.length; i++) {
+            var track = list[i];
+            var songId = parseInt(track && track.id, 10) || 0;
+            var albumId = parseInt(track && track.idalbum, 10) || 0;
+
+            if (!(songId > 0)) {
+                skipped.noLibrary++;
+                continue;
+            }
+
+            if (!(albumId > 0)) skipped.noAlbum++;
+
+            var tagsText;
+            if (tagsById && typeof tagsById.has === 'function' && tagsById.has(songId)) {
+                tagsText = tagsById.get(songId);
+            }
+
+            var pending = await buildPendingAsync(track, release, tagsText);
+            var entry = {
+                track: track,
+                songId: songId,
+                albumId: albumId,
+                disc: leadingInt(track.discNumber),
+                number: leadingInt(track.trackNumber),
+                title: text(track.title),
+                pending: pending,
+                matched: !!pending.matched,
+                changes: pending.matched ? (pending.fields || []).length : 0,
+                changed: !!(pending.matched && pending.fields && pending.fields.length)
+            };
+
+            entries.push(entry);
+
+            if (!pending.matched) {
+                skipped.unmatched++;
+                continue;
+            }
+
+            if (!entry.changed) skipped.same++;
+            else work.push(entry);
+        }
+
+        return {
+            release: {
+                id: described.id,
+                title: described.title,
+                artist: described.artist,
+                trackCount: described.tracks.length
+            },
+            entries: entries,
+            work: work,
+            fields: aggregateFields(work),
+            skipped: skipped,
+            total: entries.length
         };
     }
 
@@ -586,272 +819,212 @@
     }
 
     /**
-     * The values the Track Properties dialog should stage for one track, before
-     * anything is saved. Matched by disc and track number like the album plan;
-     * values that already match are left out.
-     *
-     * @returns {Promise<{matched: boolean, releaseTitle: string,
-     *   native: Object, tags: Array<{title: string, value: string}>,
-     *   labels: string[]}>}
+     * Applies the tag table's edits to one track's array: an edit addresses the
+     * stored title and occurrence, an empty value removes that tag, and an add
+     * appends the value only when the track does not already carry that tag.
      */
-    async function buildPendingAsync(track, release, tagsText) {
-        var described = describeRelease(release);
-        var disc = leadingInt(track.discNumber);
-        var number = leadingInt(track.trackNumber);
+    function applyTagEdits(tags, edits) {
+        var source = Array.isArray(tags) ? tags.slice() : [];
+        var positions = {};
+        var removed = {};
+        var added = [];
+        var applied = 0;
 
-        function findTrack(wantedDisc, wantedNumber) {
-            for (var i = 0; i < described.tracks.length; i++) {
-                if (described.tracks[i].disc === wantedDisc &&
-                    described.tracks[i].track === wantedNumber) {
-                    return described.tracks[i];
+        source.forEach(function (tag, index) {
+            var title = text(tag && tag.title);
+            if (!positions[title]) positions[title] = [];
+            positions[title].push(index);
+        });
+
+        function existingIndex(title) {
+            var indexes = positions[title];
+            if (!indexes) return -1;
+
+            for (var i = 0; i < indexes.length; i++) {
+                if (!removed[indexes[i]]) return indexes[i];
+            }
+
+            return -1;
+        }
+
+        (edits || []).forEach(function (edit) {
+            var title = text(edit && edit.title);
+            if (!title) return;
+
+            var value = edit && edit.deleted ? '' : text(edit && edit.value);
+
+            if (edit && edit.add) {
+                // A cleared pending row is a cancelled add, not a deletion.
+                if (!value) return;
+
+                var index = existingIndex(title);
+                if (index >= 0) {
+                    if (text(source[index].value) === value) return;
+                    source[index] = Object.assign({}, source[index], { value: value });
+                    applied++;
+                    return;
                 }
+
+                added.push({ title: title, value: value });
+                applied++;
+                return;
             }
 
-            return null;
-        }
+            var occurrence = parseInt(edit && edit.occurrence, 10);
+            if (!(occurrence >= 0)) return;
 
-        var item = findTrack(disc, number);
+            var indexes = positions[title];
+            var target = indexes ? indexes[occurrence] : undefined;
+            if (target === undefined) return;
 
-        // A file with no disc tag means the first disc. A single-medium
-        // release cannot disagree about the disc, so match the number alone.
-        if (!item && !disc) item = findTrack(described.firstDisc, number);
-        if (!item && described.mediaCount === 1) item = findTrack(described.firstDisc, number);
-
-        var result = {
-            matched: !!item,
-            releaseTitle: text(release && release.title),
-            native: {},
-            tags: [],
-            labels: [],
-            fields: []
-        };
-
-        if (!item) return result;
-
-        var tags = [];
-        try {
-            // Group editing passes the tags it already read from the database;
-            // the group proxy track has no per-track extended-tag array of its own.
-            var currentTags = tagsText === undefined
-                ? await track.getExtendedTagsAsync()
-                : tagsText;
-            tags = parseTags(currentTags) || [];
-        } catch (e) {
-            tags = [];
-        }
-
-        NATIVE_FIELDS.forEach(function (def) {
-            var value = text(item.values[def.key]);
-            if (!value) return;
-
-            var current = def.kind === 'date'
-                ? isoFromMmDate(track[def.native])
-                : def.kind === 'int'
-                    ? (leadingInt(track[def.native]) ? String(leadingInt(track[def.native])) : '')
-                    : text(track[def.native]);
-
-            if (normalizeText(value) === normalizeText(current)) return;
-
-            result.native[def.native] = def.kind === 'date'
-                ? mmDateFromIso(value)
-                : (def.kind === 'year' || def.kind === 'int') ? parseInt(value, 10) : value;
-            result.labels.push(def.label + ': ' + value);
-            result.fields.push({
-                key: def.key,
-                label: def.label,
-                kind: 'native',
-                native: def.native,
-                value: value,
-                display: value
-            });
-        });
-
-        TAG_FIELDS.forEach(function (def) {
-            var value = text(def.scope === 'album' ? item.albumTags[def.tag] : item.trackTags[def.tag]);
-            if (!value) return;
-            if (normalizeText(value) === normalizeText(tagValue(tags, def.tag))) return;
-
-            result.tags.push({ title: def.tag, value: value });
-            result.labels.push(def.label + ': ' + value);
-            result.fields.push({
-                key: def.key,
-                label: def.label,
-                kind: 'tag',
-                tag: def.tag,
-                value: value,
-                display: value
-            });
-        });
-
-        return result;
-    }
-
-    /**
-     * Narrows a pending fill to the fields the user ticked. A key that is not
-     * present on a track is simply ignored for that track.
-     */
-    function filterPending(pending, keys) {
-        if (!pending || !Array.isArray(pending.fields) || !Array.isArray(keys)) return pending;
-
-        var wanted = {};
-        keys.forEach(function (key) { wanted[key] = true; });
-
-        var selected = pending.fields.filter(function (field) {
-            return !!wanted[field.key];
-        });
-        var native = {};
-        var tags = [];
-
-        selected.forEach(function (field) {
-            if (field.kind === 'native') {
-                native[field.native] = pending.native[field.native];
-            } else if (field.kind === 'tag') {
-                tags.push({ title: field.tag, value: field.value });
+            if (!value) {
+                removed[target] = true;
+                applied++;
+                return;
             }
+
+            if (text(source[target].value) === value) return;
+            source[target] = Object.assign({}, source[target], { value: value });
+            applied++;
         });
 
         return {
-            matched: pending.matched,
-            releaseTitle: pending.releaseTitle,
-            native: native,
-            tags: tags,
-            labels: selected.map(function (field) { return field.label + ': ' + field.display; }),
-            fields: selected
+            tags: source.filter(function (tag, index) { return !removed[index]; }).concat(added),
+            applied: applied
         };
     }
 
-    /** Stages native fields on the track; Track Properties commits them on OK. */
-    function applyNative(track, pending) {
-        var props = Object.keys((pending && pending.native) || {});
-        if (!props.length) return 0;
-
-        if (track.beginUpdate) track.beginUpdate();
-        props.forEach(function (prop) {
-            track[prop] = pending.native[prop];
-        });
-        if (track.endUpdate) track.endUpdate();
-
-        return props.length;
-    }
-
-    /**
-     * Stages a track's values on the dialog's track without committing: native
-     * properties plus a merge into its extended tags. The Track Properties OK
-     * button performs the save.
-     */
-    async function applyPendingAsync(track, pending, tagsText) {
-        if (!pending || !pending.matched) return 0;
-
-        // Set native fields before touching ExtendedTags. In a group save,
-        // setExtendedTagsAsync can trigger MediaMonkey's commit immediately;
-        // writing Composer/Lyricist afterwards raced that commit and left some
-        // tracks with only the tag write.
-        var written = applyNative(track, pending);
-        var writes = pending.tags || [];
-
-        if (writes.length) {
-            var tags = parseTags(tagsText === undefined
-                ? await track.getExtendedTagsAsync()
-                : tagsText);
-            if (!Array.isArray(tags)) {
-                throw new Error(_('The extended tags of this track could not be read as JSON.'));
-            }
-
-            await track.setExtendedTagsAsync(JSON.stringify(mergeTags(tags, writes)));
-            written += writes.length;
+    function refreshLibrary() {
+        try {
+            if (typeof app !== 'undefined' && app.db && app.db.clearCache) app.db.clearCache();
+            if (typeof uitools !== 'undefined' && uitools.refreshView) uitools.refreshView();
+        } catch (e) {
+            // refreshing is best effort; the writes are already committed
         }
-
-        return written;
     }
 
     /**
-     * Writes the ticked fields to every matched track.
+     * The only write path. For every selected track: the ticked native fields,
+     * then one read and one merged ExtendedTags write (fill tags and tag edits
+     * together), then commitAsync(). A failing track is reported and the rest
+     * still commit.
      *
-     * @returns {Promise<{tracks: number, failed: Array<{title: string, error: string}>}>}
+     * @param {Object} plan buildSelectionPlanAsync result; may be the empty
+     *   plan of an album without a release when only tags are edited
+     * @param {string[]} keys field keys to fill
+     * @param {Array<{title: string, occurrence?: number, value: string,
+     *   add?: boolean, deleted?: boolean}>} tagEdits tag table edits
+     * @returns {Promise<{total: number, updated: number, skipped: number,
+     *   noMatch: number, unchanged: number, tagWrites: number,
+     *   failed: Array<{title: string, error: string}>}>}
      */
-    async function applyAsync(plan, keys) {
-        var selected = (plan && plan.fields ? plan.fields : []).filter(function (field) {
-            return (keys || []).indexOf(field.key) !== -1;
-        });
+    async function applySelectionAsync(plan, keys, tagEdits) {
+        var wanted = {};
+        (keys || []).forEach(function (key) { wanted[key] = true; });
 
-        var result = { tracks: 0, failed: [] };
-        if (!plan || !selected.length) return result;
+        var edits = (tagEdits || []).filter(function (edit) { return !!(edit && edit.title); });
+        var entries = (plan && (plan.entries || plan.work)) || [];
+        var result = {
+            total: entries.length,
+            updated: 0,
+            skipped: 0,
+            noMatch: 0,
+            unchanged: 0,
+            tagWrites: 0,
+            failed: []
+        };
 
-        for (var i = 0; i < plan.matches.length; i++) {
-            var match = plan.matches[i];
-            var track = match.track;
+        for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i];
+            var track = entry && entry.track;
+            var pending = (entry && entry.pending) || { matched: false, fields: [], native: {} };
+            var touched = false;
+            var tagsWritten = false;
 
             try {
-                var nativeWrites = selected.filter(function (field) { return !!field.native; });
-                var tagWrites = selected.filter(function (field) { return !!field.tag; });
-                var touched = false;
+                if (!track) throw new Error(_('This track is not in the library.'));
 
-                if (nativeWrites.length) {
+                var nativeFields = (pending.fields || []).filter(function (field) {
+                    return field.kind === 'native' && wanted[field.key];
+                });
+
+                if (nativeFields.length) {
                     if (track.beginUpdate) track.beginUpdate();
 
-                    nativeWrites.forEach(function (field) {
-                        var value = field.scope === 'track' ? field.values[i] : field.value;
-                        if (!value) return;
+                    nativeFields.forEach(function (field) {
+                        var value = pending.native ? pending.native[field.native] : undefined;
+                        if (value === undefined || value === '') return;
 
-                        track[field.native] = field.kind === 'date'
-                            ? mmDateFromIso(value)
-                            : (field.kind === 'year' || field.kind === 'int') ? parseInt(value, 10) : value;
+                        track[field.native] = value;
                         touched = true;
                     });
 
                     if (track.endUpdate) track.endUpdate();
                 }
 
-                if (tagWrites.length) {
+                var writes = (pending.fields || []).filter(function (field) {
+                    return field.kind === 'tag' && wanted[field.key] && !!text(field.value);
+                }).map(function (field) {
+                    return { title: field.tag, value: text(field.value) };
+                });
+
+                if (writes.length || edits.length) {
                     var current = parseTags(await track.getExtendedTagsAsync());
                     if (!Array.isArray(current)) {
                         throw new Error(_('The extended tags of this track could not be read as JSON.'));
                     }
 
-                    var writes = [];
+                    // One array, one write: the fill tags and the tag table
+                    // edits are merged together even when they touch the same
+                    // track.
+                    var merged = mergeTags(current, writes);
+                    var applied = 0;
 
-                    tagWrites.forEach(function (field) {
-                        var value = field.scope === 'track' ? field.values[i] : field.value;
-                        if (value) writes.push({ title: field.tag, value: value });
-                    });
+                    if (edits.length) {
+                        var edited = applyTagEdits(merged, edits);
+                        merged = edited.tags;
+                        applied = edited.applied;
+                    }
 
-                    if (writes.length) {
-                        await track.setExtendedTagsAsync(JSON.stringify(mergeTags(current, writes)));
+                    if (writes.length || applied) {
+                        await track.setExtendedTagsAsync(merged.length ? JSON.stringify(merged) : '');
                         touched = true;
+                        tagsWritten = true;
                     }
                 }
 
                 if (touched) {
                     if (track.commitAsync) await track.commitAsync();
-                    result.tracks++;
+                    result.updated++;
+                    if (tagsWritten) result.tagWrites++;
+                } else {
+                    result.skipped++;
+                    if (!pending.matched) result.noMatch++;
+                    else result.unchanged++;
                 }
             } catch (error) {
                 result.failed.push({
-                    title: text(track.title),
+                    title: text(track && track.title) || ('#' + ((entry && entry.songId) || 0)),
                     error: error && error.message ? error.message : String(error)
                 });
             }
         }
 
-        try {
-            if (app.db.clearCache) app.db.clearCache();
-            if (typeof uitools !== 'undefined' && uitools.refreshView) uitools.refreshView();
-        } catch (e) {
-            // refreshing is best effort; the writes are already committed
-        }
-
+        refreshLibrary();
         return result;
     }
 
     window.mbzApply = {
         describeRelease: describeRelease,
-        buildPlanAsync: buildPlanAsync,
+        collectTracks: collectTracks,
+        collectSelectionAsync: collectSelectionAsync,
+        resolveTagScope: resolveTagScope,
         buildPendingAsync: buildPendingAsync,
-        filterPending: filterPending,
-        applyPendingAsync: applyPendingAsync,
-        applyNative: applyNative,
-        applyAsync: applyAsync,
+        buildSelectionPlanAsync: buildSelectionPlanAsync,
+        aggregateFields: aggregateFields,
+        applySelectionAsync: applySelectionAsync,
         mergeTags: mergeTags,
+        applyTagEdits: applyTagEdits,
         parseTags: parseTags,
         tagNameMatches: tagMatches
     };

@@ -1,0 +1,268 @@
+<html class="dialog">
+
+<head>
+    <title>Tag from MusicBrainz</title>
+    <script src="file:///mminit.js"></script>
+    <script src="dlgMBzTag.js"></script>
+    <!-- Registers the skinned Edit and Dropdown controls every dialog uses. -->
+    <script type="module" src="file:///commonControls.js"></script>
+    <style type="text/css">
+        html.dialog, html.dialog body { height: 100%; }
+        html.dialog body {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            overflow: hidden;
+        }
+        .mbzTagRoot {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 0;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .mbzTagRoot > * { flex: 0 0 auto; }
+
+        /* One scrolling column: the header and the Apply footer stay put.
+           The parent-qualified selector outranks `.mbzTagRoot > *`. The cap is
+           in pixels on purpose: the host sizes the dialog to its content, so a
+           viewport-relative cap resolves to the content height and never
+           limits anything. */
+        .mbzTagRoot > .mbzTagScroll {
+            flex: 1 1 0;
+            min-height: 8em;
+            overflow-y: auto !important;
+            overflow-x: hidden;
+            padding-right: 4px;
+        }
+        .mbzSection { padding-top: 10px; }
+        .mbzSectionTitle {
+            font-weight: bold;
+            padding: 2px 0 4px 0;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+            margin-bottom: 6px;
+        }
+
+        .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; width: 100%; }
+        .mbzMetaTable th {
+            /* The skin centres `th`; the label column must stay flush left. */
+            text-align: left !important;
+            padding: 2px 12px 2px 0;
+            font-weight: normal;
+            opacity: 0.7;
+            white-space: nowrap;
+            vertical-align: top;
+            width: 1%;
+        }
+        .mbzMetaTable td { padding: 2px 24px 2px 0; user-select: text; word-break: break-word; }
+        .mbzIdRow { align-items: center; column-gap: 8px; row-gap: 6px; padding: 2px 0 6px 0; flex-wrap: wrap; }
+        /* Fields are MediaMonkey's own Edit and Dropdown controls (see the
+           markup): they already carry the skin's normal sizing. A native input
+           or select takes the browser's oversized generic styling instead, and
+           no stylesheet beats it. */
+        /* A GUID is 36 characters: let the field take the room the row has.
+           The skin's own `.edit` / `.inline` rules size these containers, so
+           the qualified selectors are needed to win, and the inner input is
+           sized separately because it keeps its own width otherwise. */
+        html.dialog .mbzTagRoot .mbzIdInput {
+            display: flex !important;
+            align-items: center;
+            flex: 1 1 34em;
+            min-width: 30em;
+        }
+        html.dialog .mbzTagRoot .mbzIdInput input {
+            align-self: center;
+            min-width: 0;
+            width: 100% !important;
+            font-family: monospace;
+        }
+        html.dialog .mbzTagRoot .mbzAddValue {
+            display: flex !important;
+            align-items: center;
+        }
+        html.dialog .mbzTagRoot .mbzAddValue input {
+            align-self: center;
+            min-width: 0;
+            width: 100% !important;
+        }
+        .mbzStamp {
+            margin-left: auto;
+            font-size: 0.9em;
+            opacity: 0.65;
+            white-space: nowrap;
+        }
+        /* Same construction as the tag-row links above: the host's `hotlink`
+           class does the colouring, and `.mbzLinks a` the spacing. */
+        .mbzLinks { padding: 2px 0 4px 0; }
+        .mbzLinks a { cursor: pointer; }
+
+        .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        .mbzTable th {
+            text-align: left;
+            padding: 4px 8px;
+            font-weight: bold;
+            white-space: nowrap;
+            background: var(--backgroundColor, rgba(128, 128, 128, 0.15));
+            border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+        }
+        .mbzTable td {
+            padding: 3px 8px;
+            vertical-align: top;
+            border-top: 1px solid rgba(128, 128, 128, 0.2);
+        }
+        .mbzTable td.mbzGuid { font-family: monospace; white-space: nowrap; user-select: text; }
+        .mbzTable td.mbzNowrap { white-space: nowrap; }
+        .mbzTable tr.mbzChanged td { font-weight: bold; }
+        .mbzTable tr.mbzNew td { border-top: 1px dashed rgba(128, 128, 128, 0.55); }
+
+        .mbzValue {
+            width: 100%;
+            min-width: 16em;
+            box-sizing: border-box;
+            padding: 2px 5px;
+        }
+        .mbzValue.mbzInvalid { outline: 1px solid #d9534f; }
+        .mbzLinks { white-space: nowrap; }
+        .mbzLinks a { margin-right: 10px; }
+
+        .mbzNote { opacity: 0.7; }
+        /* The same weight as the meta table's labels. */
+        .mbzLabel { opacity: 0.7; font-size: 0.95em; }
+        .mbzWarning { color: #d9534f; white-space: normal; }
+        .mbzHidden { display: none !important; }
+        .mbzDisabled { opacity: 0.5; pointer-events: none; }
+        .mbzButton { padding: 0 14px; line-height: 24px; white-space: nowrap; }
+
+        .mbzSuggest, .mbzAdd { flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 6px; padding-top: 6px; }
+        .mbzChip { cursor: pointer; padding: 0 10px; line-height: 22px; }
+        .mbzAddTag { flex: 0 1 auto; min-width: 14em; max-width: 26em; }
+        .mbzAddValue { flex: 1 1 16em; min-width: 12em; }
+
+        .mbzDiverge {
+            gap: 4px;
+            margin-top: 4px;
+            padding: 6px 8px;
+            border: 1px solid rgba(217, 161, 59, 0.65);
+            border-radius: 4px;
+            background-color: rgba(217, 161, 59, 0.12);
+            white-space: normal;
+        }
+        .mbzDivergeItem { align-items: center; gap: 8px; flex-wrap: wrap; }
+        .mbzDivergeText { flex: 1; min-width: 14em; }
+        .mbzDiverge .button { white-space: nowrap; }
+
+        .mbzFooter {
+            align-items: center;
+            gap: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(128, 128, 128, 0.35);
+        }
+    </style>
+</head>
+
+<body data-posSaveName="dlgMBzTag" data-defaultSize="1200,960">
+    <div class="flex column fill padding mbzTagRoot" style="gap: 10px;">
+
+        <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
+        <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
+
+        <div class="flex row" data-id="searchRow" style="display: none; align-items: center; gap: 8px;">
+            <div class="button mbzButton" data-id="btnSearch" data-localize>Search MusicBrainz</div>
+            <label data-id="searchStatus" class="mbzNote"></label>
+        </div>
+
+        <div class="mbzLinks mbzHidden" data-id="linksBar"></div>            <div class="mbzTagScroll" data-id="scrollColumn">
+            <div data-id="metaScroll" class="mbzHidden">
+                <table data-id="meta" class="mbzMetaTable">
+                    <tbody data-id="metaRows"></tbody>
+                </table>
+            </div>
+
+            <!-- The lookup key itself: the album's Albums.MBGID. -->
+            <div class="flex row mbzIdRow mbzHidden" data-id="albumIdRow">
+                <label class="mbzLabel" data-localize>Album release ID</label>
+                <div data-id="albumIdValue" class="mbzIdInput" data-control-class="Edit"></div>
+                <div class="button mbzButton" data-id="btnSaveAlbumId" data-localize>Save ID</div>
+                <label data-id="albumIdStatus" class="mbzNote fill"></label>
+            </div>
+
+            <div class="mbzSection mbzHidden" data-id="fieldsSection">
+                <div class="mbzSectionTitle" data-localize>Fields to write</div>
+                <table class="mbzTable">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th data-localize>Field</th>
+                            <th data-localize>Current</th>
+                            <th data-localize>MusicBrainz</th>
+                            <th data-localize>Changes</th>
+                        </tr>
+                    </thead>
+                    <tbody data-id="fieldRows"></tbody>
+                </table>
+            </div>
+
+            <div class="mbzSection" data-id="trackSection">
+                <div class="mbzSectionTitle" data-localize>Selected tracks</div>
+                <table class="mbzTable">
+                    <thead>
+                        <tr>
+                            <th data-localize>Disc</th>
+                            <th data-localize>Track</th>
+                            <th data-localize>Library title</th>
+                            <th data-localize>Release title</th>
+                            <th data-localize>Length</th>
+                            <th data-localize>ISRC</th>
+                            <th data-localize>Recording ID</th>
+                            <th data-localize>Changes</th>
+                        </tr>
+                    </thead>
+                    <tbody data-id="trackRows"></tbody>
+                </table>
+            </div>
+
+            <div class="mbzSection">
+                <div class="mbzSectionTitle" data-localize>MusicBrainz tags</div>
+                <label data-id="tagSummary"></label>
+
+                <table class="mbzTable" data-id="tagTable">
+                    <thead>
+                        <tr>
+                            <th data-localize>Tag</th>
+                            <th data-localize>Value</th>
+                            <th data-localize>Open</th>
+                        </tr>
+                    </thead>
+                    <tbody data-id="tagRows"></tbody>
+                </table>
+
+                <label data-id="tagEmpty" class="mbzNote"></label>
+
+                <div class="flex column mbzDiverge mbzHidden" data-id="divergeBar"></div>
+                <div class="flex row mbzSuggest mbzHidden" data-id="suggestBar"></div>
+
+                <div class="flex row mbzAdd" data-id="addBar">
+                    <label class="mbzLabel" data-localize>Add tag</label>
+                    <div data-id="addTag" class="mbzAddTag" data-control-class="Dropdown"
+                        data-init-params="{readOnly: true}"></div>
+                    <div data-id="addValue" class="mbzAddValue fill" data-control-class="Edit"></div>
+                    <div class="button mbzButton" data-id="addButton" data-localize>Add</div>
+                </div>
+
+                <label data-id="tagStatus" class="mbzNote"></label>
+            </div>
+
+            <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply. Closing the window writes nothing.</label>
+        </div>
+
+        <div class="flex row mbzFooter">
+            <div class="button mbzButton" data-id="btnApply" data-localize>Apply</div>
+            <label data-id="applyStatus" class="fill"></label>
+            <label data-id="buildStamp" class="mbzStamp"></label>
+        </div>
+    </div>
+</body>
+
+</html>

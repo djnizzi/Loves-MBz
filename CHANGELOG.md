@@ -3,6 +3,77 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
+## 0.5.1 (2026-11-11)
+
+Fixes and additions on top of the first 0.5.0 build.
+
+- **`mbzApply.js can't be loaded! (NOT FOUND)` on Tag from MusicBrainz.** The
+  action called `localRequirejs` from inside `script://actions`, where the loader
+  resolves paths against MediaMonkey's own script and aborted before the window
+  opened. The engine is loaded by `init.js` at start-up instead; if it is
+  missing, the action now opens the window and logs the reason.
+- **The toolbar button sits with the other tool icons.** 0.5.1 appended the
+  action to `toolbarItems`, the *custom* toolbar, which drew it on a row of its
+  own. It is now added to `righttoolbuttons` with `uitools.addToolButton`, on
+  start-up, and a stale `toolbarItems` entry is removed. The one-time offer
+  prompt is gone: the button is always there.
+- **The window scrolls.** One scrolling column, with the summary block and the
+  **Apply** footer pinned, instead of a dialog that grew past its own footer.
+- **Album, release group and album artist links** — **Open in MusicBrainz**
+  under the release title opens the release, its release group and the album
+  artist, from the fetched release or, when the album has no release ID, from
+  the library rows.
+- **The album's release ID is editable in the window.** **Album release ID**
+  validates the value as a MusicBrainz UUID, confirms before replacing an
+  existing ID (naming the album and the number of tracks it covers), writes
+  `Albums.MBGID` through `mbzMbgid.setAlbumGuidAsync`, and reloads the window on
+  the new release. An empty value clears the ID and shows the no-ID state. The
+  write never goes through `applySelectionAsync`.
+- **Version and build stamp.** The window footer shows `Loves MBz` with the
+  version and the time the package was built, so two builds of the same version
+  can be told apart. `node tools/build-mmip.js` writes the time in as it
+  packages; the version half is checked against `info.json` by the regression
+  test. The packager runs that test first and refuses to build when it fails.
+
+## 0.5.0 "Tag from MusicBrainz" (2026-11-11)
+
+- **One window does the tagging.** **Edit → Tag Tools → Tag from
+  MusicBrainz…**, the track-list context menu and a toolbar button all open the
+  same window on the current selection. It shows the release, the selected
+  tracks with the release row each one matched, the differing fields with one
+  checkbox each, and the selection's MusicBrainz extended tags. Nothing is
+  written until **Apply**; closing the window writes nothing.
+- **The Track Properties tab is gone.** 0.4.x staged values inside
+  MediaMonkey's dialog and relied on its group save, which rebuilds
+  `modified`/`tagModified` from its own checkboxes and commits a proxy holding
+  one value per field. Per-track titles, composers, disc numbers and recording
+  IDs could not be expressed, and an abort could leave the selection half
+  written. The add-on registers no `propertiesTabs` tab any more.
+- **Per-track writes.** `mbzApply.applySelectionAsync` is the only write path:
+  each track gets its native fields, then one read and one merged
+  `ExtendedTags` write (fill tags and tag edits together), then one
+  `commitAsync()`. A failing track is reported and the rest still commit, and
+  the status line reads `Updated X of N tracks. Skipped S. F failed.`
+- **Toolbar button.** The action is `hotkeyAble` with the add-on icon, so it is
+  available under Options → Layout → Toolbar and can be hotkeyed. The add-on
+  offers to add it to the toolbar once, remembers the answer, and never injects
+  a DOM button into MediaMonkey's toolbar container, which is rebuilt from
+  `toolbarItems` on every settings change.
+- **One album at a time.** A selection spanning more than one album ID is
+  refused unless the user confirms a prompt that names the album count and the
+  shared release ID when there is one. Then the first album's release is used
+  and every selected track is matched by disc and track number.
+- **Tag table in the window.** The MusicBrainz extended-tag editor moved out of
+  Track Properties: view, edit, add, delete, one row per ID for slash-joined
+  artist IDs, musicbrainz.org links, **From the library** suggestions and the
+  tag-vs-library disagreement strip. Every tag change is written per track by
+  **Apply**.
+- **Kept from 0.4.x** — lookup by release ID only with no name search, the
+  website search button when an album has no ID, `discNumberInt` for Disc #, no
+  `SCRIPT` write, alias collapse for release status/type/country, the Discogs
+  URL from the release or its release group, and library-side ID writes only
+  where they already were.
+
 ## 0.4.5 (2026-11-11)
 
 - **Search MusicBrainz from the no-ID state** — when an album has no

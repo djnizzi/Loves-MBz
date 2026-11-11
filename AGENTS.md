@@ -1,50 +1,78 @@
 # Loves MBz — project guardrails
 
-These notes are for anyone, human or agent, changing Fill, Track Properties
-saves, or extended-tag handling.
+These notes are for anyone, human or agent, changing Tag from MusicBrainz, the
+write engine, or extended-tag handling.
 
-## The 0.4.3 group-save order is a hard contract
+## 0.5.0: one write path, nothing inside MediaMonkey's dialogs
 
-Track Properties Fill only stages values; MediaMonkey's OK commits them.
-`setExtendedTagsAsync` can trigger the group commit as soon as a track's
-extended tags are set. If one track's tags are written before another track's
-native fields, the commit can save a partial selection. This is the regression
-that 0.4.3 fixed.
+0.4.x wrote through MediaMonkey's Track Properties dialog and relied on its
+group save. That does not work: in group mode `btnOkPressed` rebuilds `modified`
+and `tagModified` from its own checked controls, the group save commits a proxy
+that holds one value per field, and each track was flushed as the loop walked
+it. Per-track titles, composers, disc numbers and recording IDs could not be
+expressed at all, and an abort could leave the selection half written.
 
-Keep these rules:
+0.5.0 removed the tab and moved the whole job into `dialogs/dlgMBzTag.js`.
 
-1. `mbzExtStageFillOnSaveAsync` in
-   `dialogs/dlgTrackProperties/tabLovesMBz.js` must call
-   `apply.applyPendingAsync(track, work[i].pending, tagsText)` once per track
-   inside the `work` loop.
-2. Do not split native and extended-tag staging into two passes. Do not add an
-   `applyPendingTagsAsync` helper, call `applyNative` from the group loop, use
-   `Promise.all`, or add a per-track `commitAsync` loop.
-3. `applyPendingAsync` in `mbzApply.js` must set that track's native properties
-   first, then read, merge, and write its `ExtendedTags`.
-4. Field work belongs in `buildPendingAsync`, `filterPending`, `mergeTags`, or
-   `tagValue`. Fix field problems there; do not change when or how the dialog
-   stages or commits values.
-5. Disc # must write `discNumberInt` with `kind: 'int'`, not the string
-   `discNumber`. Setting the string property can trigger the same early group
-   commit.
+The contract:
 
-The 0.4.3 implementations of those two functions are the reference. If you
-change either, diff it against `v0.4.3` and explain why the contract still
-holds.
+1. **One write path.** Every write goes through
+   `mbzApply.applySelectionAsync`. No other module writes tags or native fields,
+   and the window never calls `commitAsync` or `setExtendedTagsAsync` itself.
+2. **Stage, then commit.** Per track: native fields, then one read and one
+   merged `ExtendedTags` write, then `commitAsync()`. One commit per track, and
+   the tag write happens once even when a fill and a tag edit touch the same
+   track.
+3. **Nothing runs inside MediaMonkey's dialogs.** The add-on registers no
+   `propertiesTabs` tab, never stages values into a MediaMonkey dialog, and
+   never relies on MediaMonkey's group save.
+4. **One album at a time.** `resolveTagScope` is the only place that decides the
+   scope. A selection spanning more than one album ID is refused unless the user
+   insists; then the first album's release is used and tracks are matched by
+   disc and track number.
+5. **Field work belongs in the engine.** Fix field problems in
+   `buildPendingAsync`, `aggregateFields`, `mergeTags` or `tagValue` — never in
+   the dialog.
+6. Disc # is written as `discNumberInt` with `kind: 'int'`, and `SCRIPT` is
+   never offered or written.
+
+Keep `applySelectionAsync` in that order. The failure handling is per track, so
+one bad track is reported and the rest still commit. Do not add a second
+`setExtendedTagsAsync` call, a per-field commit loop, or a `Promise.all` over
+tracks.
 
 ## Run the guard
 
 ```bash
-node tests/save-path.test.js
+node tests/tag-path.test.js
 ```
 
-The test checks the source shape, the real native-before-tags call order,
-duplicate alias collapse, and that `SCRIPT` is not written. Run it before
-building an `.mmip`.
+The test checks the source shape (one write path, no `propertiesTabs`, the
+action and toolbar wiring), scope resolution, field aggregation, the native →
+tags → commit order, one tag write per track, per-track failure isolation, tag
+edits, and the 0.4.x invariants (`discNumberInt`, no `SCRIPT`, alias collapse).
+The packager runs it before building, and refuses to package when it fails.
 
-## Other 0.4.4 invariants
+## Build the package
+
+```bash
+node tools/build-mmip.js
+```
+
+The packager runs `tests/tag-path.test.js` first and stops when it fails, then
+copies the sources into a temporary folder, fills the `BUILD_TIME` slot in
+`dialogs/dlgMBzTag.js` (in the copy and in the source, so a copied dialog reports
+the same build), and writes `LovesMBz.mmip` with `info.json` at the archive
+root. Use it instead of zipping by hand: a hand-made archive has no build time,
+and the version alone cannot tell two builds apart.
+
+## Other invariants kept from 0.4.x
 
 - Release country, status, and type are one logical field across Picard and
   canonical spellings; update the existing spelling and collapse duplicates.
 - Fill does not offer or write `SCRIPT`. Existing values stay untouched.
+- Library-side writes (`Albums.MBGID`, `Artists.MBGID`) never go through
+  `applySelectionAsync`. The window's **Album release ID** field, the
+  divergence strip's **Update library** and the **MusicBrainz IDs…** dialog all
+  call `mbzMbgid.setAlbumGuidAsync` / `setArtistGuidAsync` directly, after their
+  own confirmation. The field is a lookup key: write it, then reload.

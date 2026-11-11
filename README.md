@@ -18,22 +18,22 @@ Three read-only track-list columns:
 
 Plus an **Edit → Tag Tools → MusicBrainz IDs…** dialog that lists the IDs for
 the selected tracks, copies them as a tab-separated table, and can set them on
-the album or artist behind the selected track. A **MusicBrainz** tab in
-**Track Properties** reads the track's `Songs.ExtendedTags` JSON, links the
-MusicBrainz extended tags that actually exist, and lets you edit them.
+the album or artist behind the selected track.
 
 Right-click a track — or use **Edit → Tag Tools** — and pick **MusicBrainz
 links** to open its release, release group or artist page on musicbrainz.org.
 
-**Preview MusicBrainz metadata…** reads the release behind the selected album's
-existing release ID, shows what MusicBrainz holds — artists, label, barcode,
-status, type, country, script, the full track list and the release's Discogs
-page — and lets you tick fields to write back. Nothing is written until
-**Apply**. An album without a release ID is skipped without a request; the
-preview offers a button that opens the MusicBrainz website search by album and
-artist, but the add-on itself never searches by name.
+**Tag from MusicBrainz…** is the one window that does the tagging: it reads the
+release behind the selected album's existing release ID, shows what MusicBrainz
+holds — artists, label, barcode, status, type, country, script, the full track
+list and the release's Discogs page — and lets you tick the fields to write. The
+same window lists and edits the selection's MusicBrainz extended tags, so Track
+Properties is not involved at all. Nothing is written until **Apply**. An album
+without a release ID is skipped without a request; the window offers a button
+that opens the MusicBrainz website search by album and artist, but the add-on
+itself never searches by name.
 
-Current version: **0.4.5**.
+Current version: **0.5.1**.
 
 ---
 
@@ -94,29 +94,60 @@ as empty.
 The dialog queries `Albums` and `Artists` directly every time, so it is never
 stale. Artist cells list every artist MBID for the track, separated by `; `.
 This dialog shows the native MBGID columns, not `Songs.ExtendedTags`; use
-**Track Properties → MusicBrainz** for the per-track extended tags.
+**Tag from MusicBrainz** for the per-track extended tags.
 
 The column cache rebuilds itself when MediaMonkey commits a change — re-reading
 only the album rows, track links and artists that the event names — so releases
 and artists matched through MediaMonkey's own MusicBrainz lookup show up in the
 columns without a restart, even in a large library.
 
-### Previewing and applying the release metadata
+### Tag from MusicBrainz
 
-**Edit → Tag Tools → Preview MusicBrainz metadata…** (also in the track list
-context menu) opens the release behind the first selected track's album: artist
-credit, date, country, status, type, label and catalogue number, barcode, the
-Discogs page when the release or its release group links one, script/language,
-and every medium's tracks with their number, title, length, ISRC and recording
-ID. The Discogs link is MusicBrainz's URL relationship; a master page usually
-lives on the release group. Either way it is the value Picard stores as
-`discogs_url`.
+**Edit → Tag Tools → Tag from MusicBrainz…**, the track-list context menu and
+the toolbar button all open the same window on the current selection. It reads
+the release behind the first selected track's album: artist credit, date,
+country, status, type, label and catalogue number, barcode, the Discogs page
+when the release or its release group links one, script/language, and every
+medium's tracks with their number, title, length, ISRC and recording ID. The
+Discogs link is MusicBrainz's URL relationship; a master page usually lives on
+the release group. Either way it is the value Picard stores as `discogs_url`.
+
+Under the title, **Open in MusicBrainz** links the album's release, its release
+group and its album artist straight to musicbrainz.org. Those three links are
+also built from the album and artist rows when the album has no release ID, so
+they are there even without a lookup.
+
+Below the release block, **Album release ID** holds the album's `Albums.MBGID`
+— the value the whole lookup is keyed on. Correct it there when the album points
+at the wrong release: **Save ID** checks the value is a MusicBrainz UUID, asks
+before replacing an existing ID (naming the album and how many tracks it
+covers), writes only that column, and reloads the window with the release behind
+the new ID. An empty field clears the ID, and the window falls back to the
+no-release-ID state with **Search MusicBrainz**. Like any library-side write,
+MediaMonkey's own lookup can overwrite it later.
+
+The footer of the window shows the add-on version — `Loves MBz 0.5.1` — so you
+can tell which build is running before trusting a screenshot or a report from an
+older one.
 
 Below that, **Fields to write** lists only the fields whose MusicBrainz value
 differs from the library, one row and one checkbox each, with the current value,
-the fetched value and how many matched tracks would change. Everything starts
-ticked; untick anything you want to keep, then press **Apply**. Nothing is
-written before that click.
+the fetched value and `changes / total`. A value that differs per track reads
+**per track** instead of listing every value. Everything starts ticked; untick
+anything you want to keep, then press **Apply**. Nothing is written before that
+click.
+
+**Selected tracks** lists the tracks you selected, each with the release row it
+matched — disc/track, library title, release title, length, ISRC and recording
+ID — and how many field changes it has. A track with no counterpart says
+**no match** and is skipped. The full release listing is behind **Show all
+release tracks**, so the default view is your selection and not the album.
+
+The window works on **one album at a time**. A selection that spans more than
+one album ID does not open until you confirm a prompt that names the albums (and
+the release ID when they share one); then the first album's release is used and
+every selected track is matched by disc and track number. This matters for
+multi-disc releases too: MediaMonkey gives each disc its own album row.
 
 | Written to | Fields |
 |---|---|
@@ -127,9 +158,9 @@ written before that click.
 
 Release status, type and country are matched across Picard's format-specific
 names: `RELEASECOUNTRY` / `MusicBrainz Album Release Country`, `RELEASESTATUS`
-/ `MusicBrainz Album Status`, and `RELEASETYPE` / `MusicBrainz Album Type`. Fill
-updates the spelling the track already has and collapses duplicates instead of
-adding a second copy.
+/ `MusicBrainz Album Status`, and `RELEASETYPE` / `MusicBrainz Album Type`. The
+window updates the spelling the track already has and collapses duplicates
+instead of adding a second copy.
 
 Composer and lyricist are native MediaMonkey fields; they come from the work
 linked to each recording. A work with only generic writer relationships fills
@@ -143,30 +174,48 @@ title. A library track with no counterpart in the release is left alone, and a
 release track with no library counterpart is counted, so a partial match cannot
 write the wrong title onto a track. Extended tags are merged into each track's
 existing `Songs.ExtendedTags`: a tag already stored under another file-format
-name is replaced in place, unrelated tags and edits queued by the built-in
-**Custom** tab survive, and a field MusicBrainz has no value for is not offered,
-so nothing is cleared. `discogs_url` stays a plain extended tag, so it appears
-in MediaMonkey's **Custom** tab rather than this add-on's MusicBrainz tab.
+name is replaced in place, unrelated tags survive, and a field MusicBrainz has
+no value for is not offered, so nothing is cleared. `discogs_url` stays a plain
+extended tag, so it appears in MediaMonkey's **Custom** tab.
 
-**Apply** writes the ticked fields, calls `commitAsync()` on every touched
-track, then clears MediaMonkey's database cache and refreshes the view. The
-dialog re-reads the library and lists whatever is still different. The album's
-`MBGID`/`MBRGGID` and the artist rows are never written: the release ID is the
-lookup key, so applying cannot overwrite it. In Party Mode the preview still
-works, but the fields and **Apply** are hidden.
+**Apply** writes the ticked fields track by track: that track's native fields,
+then one read and one merged write of its `ExtendedTags` (the fill and any tag
+changes together), then `commitAsync()`. A failing track is reported and the
+rest still commit; the status line reads `Updated 12 of 15 tracks. Skipped 3
+(no matching disc and track number). 0 failed.` The window then re-reads the
+library and lists whatever is still different. Applying never writes the
+album's `MBGID`/`MBRGGID` or the artist rows: the release ID is the lookup key,
+so a fill cannot overwrite it. The one library write in the window is the
+**Album release ID** field, which touches `Albums.MBGID` only when you press
+**Save ID**. In Party Mode the window still shows the release and the tags, but
+the fields, **Apply** and the ID field are hidden.
 
 The lookup is by release ID only. The album must already carry `Albums.MBGID`
-(set it in the IDs dialog, or let MediaMonkey match the release); when that is
-empty or `0` the dialog says so and **no request is made**. It also offers
+(set it in the window's **Album release ID** field or in the IDs dialog, or let
+MediaMonkey match the release); when that is
+empty or `0` the window says so and **no request is made**. It also offers
 **Search MusicBrainz**, which opens the website release search with
 `release:"Album" AND artist:"Artist"`; the add-on does not choose a release or
 write an ID from that search. There is no API search by artist or album name,
 no AcoustID and no disc-ID lookup, so the add-on cannot pick the wrong release.
-No API key is needed: the add-on identifies
-itself with a `User-Agent` and keeps requests at least 1.1 s apart. A busy
-server (`503`/`429`) is retried twice with a growing delay, and the parsed
-release is cached by ID for that dialog, so previewing the same album again
-does not call the API.
+No API key is needed: the add-on identifies itself with a `User-Agent` and
+keeps requests at least 1.1 s apart. A busy server (`503`/`429`) is retried
+twice with a growing delay, and the parsed release is cached by ID for the
+session, so opening the same album again does not call the API.
+
+### The toolbar button
+
+The Tag from MusicBrainz action is a normal MediaMonkey action: it has the
+add-on icon, a tooltip, and is greyed out when nothing is selected. The add-on
+places a button for it in the right-hand toolbar strip, beside MediaMonkey's own
+tool buttons, when MediaMonkey starts: it is added with
+`uitools.addToolButton('righttoolbuttons', …)`, the same call the host uses, so
+it behaves like a built-in button and survives layout changes.
+
+The action is also listed under **Options → Layout → Toolbar** and can be given
+a hotkey there. A `toolbarItems` entry left by 0.5.0/0.5.1 — which put the
+button on the custom toolbar, on a row of its own — is removed on the next
+start.
 
 ### Setting an ID
 
@@ -205,15 +254,16 @@ lookup — you are supplying the identifier yourself. MediaMonkey's own lookup
 can overwrite it the next time it re-matches that release or artist, which is
 also why the confirmation says so.
 
-### MusicBrainz extended tags in Track Properties
+### MusicBrainz extended tags in the window
 
-**Track Properties → MusicBrainz** reads the selected track's
-`Songs.ExtendedTags` JSON and lists only entries whose names normalize to
-`MUSICBRAINZ*`. The same tag is therefore found whether the file stores it as
-`MUSICBRAINZ_TRACKID` (FLAC/Vorbis) or `MusicBrainz Track Id` (ID3 TXXX). The
-tab does not list `Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID` as rows;
-those are separate fields and stay in the columns and the IDs dialog. It does
-compare them with a matching tag and flag a disagreement (see below).
+The **MusicBrainz tags** table reads the selection's `Songs.ExtendedTags` JSON
+and lists only entries whose names normalize to `MUSICBRAINZ*`. The same tag is
+therefore found whether the file stores it as `MUSICBRAINZ_TRACKID`
+(FLAC/Vorbis) or `MusicBrainz Track Id` (ID3 TXXX). The table does not list
+`Albums.MBGID`, `Albums.MBRGGID` or `Artists.MBGID` as rows; those are separate
+fields — `Albums.MBGID` has its own field above **Fields to write**, the others
+stay in the columns and the IDs dialog. It does compare them with a matching tag
+and flag a disagreement (see below).
 
 Each row shows the raw tag name and its current value. ID tags link to the
 matching MusicBrainz page:
@@ -232,48 +282,39 @@ A value containing several IDs (`;`, `,`, `/` or whitespace separated) is shown
 as one row per ID, each editable and each with its own link. This matters for
 MP3: ID3v2.3 has no repeated text frames, so MediaMonkey writes several artist
 IDs into one value joined with `/` (`8d1a1d1e…/9b7e2d41…`). Clearing one row
-drops that artist and keeps the rest; on **OK** the rows are merged back into the
-single stored value, using the `/` separator the file already had instead of
-rewriting it to `;`, which other players would read as one malformed ID.
-On ID tags, values that are not UUIDs are kept, marked **Not a valid MusicBrainz
-ID**, and not linked. Non-ID MusicBrainz tags (album
+drops that artist and keeps the rest; on **Apply** the rows are merged back into
+the single stored value, using the `/` separator the file already had instead
+of rewriting it to `;`, which other players would read as one malformed ID.
+On ID tags, values that are not UUIDs are kept, marked **Not a valid
+MusicBrainz ID**, and not linked. Non-ID MusicBrainz tags (album
 status/type/country/date, disc ID) are listed without a link.
 
-Edit a value and click **OK** to write it back; an empty value removes that tag.
-Values made up only of valid IDs are stored in dashed lower-case form. The tab re-reads the current
-`ExtendedTags` array and merges only the rows you changed, so non-MusicBrainz
-tags and changes made in the built-in **Custom** tab survive. Editing a value
-never writes the album or artist database fields; only the warning strip below
-does, and only after a confirmation — except when it fills an empty library
-field, which overwrites nothing and happens immediately.
+Edit a value and press **Apply** to write it back; an empty value removes that
+tag. Values made up only of valid IDs are stored in dashed lower-case form. The
+window re-reads each track's current `ExtendedTags` array and merges only the
+rows you changed, so non-MusicBrainz tags survive. Editing a value never writes
+the album or artist database fields; only the disagreement strip below does, and
+only after a confirmation — except when it fills an empty library field, which
+overwrites nothing and happens immediately.
 
-**Fill from MusicBrainz** above the list stages the release behind the album's
-`Albums.MBGID` onto the dialog's track: native fields (`; `-separated album
-artist and artist, composer, lyricist, date, year, original date, original
-year, every label joined into `publisher`, title, ISRC, disc number) and the
-extended tags,
-including the joined credit in `ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`,
-`REMIXER`, `originaldate` and `discogs_url`. The
-`originalyear` tag is deliberately not written, because a library can store a
-full `YYYY-MM-DD` date there and a four-digit year would replace it. It lists
-every differing field with a checkbox; tick the fields to write and click
-**OK** in Track Properties. Values that already match are skipped, and the
-track is matched to the release by disc and track number. Nothing is saved
-until **OK**, which is also the only save button for a multi-track
-selection. The same checkboxes choose the fields for every matched track; OK
-stages them on each track and MediaMonkey's normal group save commits them.
-There is no separate **Apply selected** button. Cancel in Track Properties
-discards the pending fill. An album without a release ID is reported without a
-request, and the button is hidden only in Party Mode.
-
-The dialog's built-in fields are not rewritten, so the Year box can keep showing
-the old value until the dialog is reopened; the staged date is what OK saves.
+The **Fields to write** table covers the release side of the same window: native
+fields (`; `-separated album artist and artist, composer, lyricist, date, year,
+original date, original year, every label joined into `publisher`, title, ISRC,
+disc number) and the extended tags, including the joined credit in
+`ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`, `REMIXER`, `originaldate` and
+`discogs_url`. The `originalyear` tag is deliberately not written, because a
+library can store a full `YYYY-MM-DD` date there and a four-digit year would
+replace it. Values that already match are skipped, and each track is matched to
+the release by disc and track number. **Apply** writes the ticked fields on
+every matched track and reports what happened per track. An album without a
+release ID is reported without a request, and the fields and **Apply** are
+hidden in Party Mode.
 
 A track with no MusicBrainz extended tags is not a dead end. Use **Add tag** at
-the bottom of the tab: pick the tag, type a value and click **Add** — the new
-row is marked *(not saved yet)* and is written when you click **OK**, under the
-canonical `MUSICBRAINZ_*` name. Clear the value of such a row before **OK** to
-discard it. Clearing a tag that already exists still removes it.
+the bottom of the table: pick the tag, type a value and click **Add** — the new
+row is marked *(not saved yet)* and is written when you press **Apply**, under
+the canonical `MUSICBRAINZ_*` name. Clear the value of such a row before
+**Apply** to discard it. Clearing a tag that already exists still removes it.
 
 Adding `MUSICBRAINZ_ARTISTID` or `MUSICBRAINZ_ALBUMARTISTID` to a tag that
 already holds IDs appends to that tag instead of creating a second entry with
@@ -282,26 +323,43 @@ value keeps the separator the file uses (`/` for MP3, `; ` otherwise). Adding an
 ID the tag already has changes nothing.
 
 When the library already knows an ID, you do not have to paste it. The
-**From the library** suggestions above the picker offer the track's
+**From the library** suggestions above the add row offer the selection's
 `Albums.MBGID`, `Albums.MBRGGID` and `Artists.MBGID` as one-click tags, so a
 track matched in MediaMonkey can be given the matching extended tag without
 typing. A tag that is already listed — or already exists with another value —
-is not suggested; edit its row instead. In a group selection a suggestion is
+is not suggested; edit its row instead. In a multi-selection a suggestion is
 only offered for IDs that are identical on every selected track.
+
+With several tracks selected, the table shows the tags whose value is the same
+on every selected track that stores them — typically album-level tags such as
+the release, release-group and album-artist IDs — each badged with how many
+tracks carry it (`on 3 of 5 tracks`). Editing one applies the new value to every
+selected track; clearing it removes the tag from every selected track, and a
+tag added with **Add tag** is written to every selected track. Per-track tags
+such as `MUSICBRAINZ_TRACKID` differ by design, so they are listed for a single
+track.
+
+Nothing in the tag table is written until **Apply**, and **Apply** writes each
+track individually, so one failing file does not stop the rest. A track that
+stores the same tag name twice is left out of a multi-selection: there is no
+single row to edit.
+
+In Party Mode the values are disabled but the links still work. The file format
+must support extended tags — formats such as WAV may discard them.
 
 ### When the tag and the library disagree
 
 The release, release-group and artist IDs exist twice: in the file's extended
 tags and on the `Albums` or `Artists` row. When a single track's tag and its
-library row hold different values, a strip above the picker says so:
+library row hold different values, a strip below the tag table says so:
 
 ```
 The library ID and the tag disagree:
 Release ID — library 3f6a1c2e…, tag 9b7e2d41…   [Use library ID] [Update library]
 ```
 
-- **Use library ID** puts the library's value into the tag row, so the usual
-  **OK** saves it. The database is not touched.
+- **Use library ID** puts the library's value into the tag row, so the next
+  **Apply** saves it. The database is not touched.
 - **Update library** writes the tag's value onto the album or artist row. When
   that field already holds a different ID it asks first, naming the row and how
   many tracks it covers; filling an empty field overwrites nothing, so it
@@ -312,7 +370,7 @@ The strip works for a selection as well. The tag side is the value the selected
 tracks share; the library side is what their own album and artist rows hold, and
 it is compared only when those rows agree — a selection spread over albums with
 different IDs has no single library value to compare, so it stays quiet.
-**Use library ID** fills the group row, so **OK** writes it to every selected
+**Use library ID** fills the group row, so **Apply** writes it to every selected
 track. **Update library** is offered only when the selection resolves to one
 album or one artist; when it would touch several rows the strip says so instead
 of copying one release ID onto unrelated albums.
@@ -321,35 +379,6 @@ The artist comparison needs exactly one artist row per selected track — a
 featured or multi-artist credit has no unambiguous row and is left alone — and a
 tag holding several IDs at once is not compared either. In Party Mode the strip
 still reports the disagreement but shows no buttons.
-
-With several tracks selected, the tab shows tags whose value is the same on
-every selected track that stores them — typically album-level tags such as the
-release, release-group and album-artist IDs. Editing one applies the new value
-to every selected track; clearing it removes the tag from every selected track,
-and a tag added with **Add tag** is written to every selected track.
-
-The **Save MusicBrainz tags** box above the list ticks itself as soon as you
-edit a row. A group edit decides whether anything changed from the ticked
-boxes — the ones beside each standard field — so this box is what makes **OK**
-write the tab's tags to the files; without it the dialog would close without
-saving. Untick it to discard the tab's pending changes.
-
-A tag that only some of the selected tracks have is shown too, never hidden.
-Its **All tracks** checkbox is clear and its label counts how many selected
-tracks are missing it (`(missing on 2 of 5 tracks)`); tick the box and click
-**OK** and the value that is already there is written to those tracks. A tag
-that every selected track already has shows the box ticked and disabled,
-because there is nothing left to apply. Like the other fields in Track
-Properties, the box only queues the change — nothing is written until **OK**.
-Tracks that store the same tag name twice, or at different values, cannot be
-patched through the group, so that tag is left out.
-
-Per-track tags such as `MUSICBRAINZ_TRACKID` follow the same rule: they appear
-when the tracks agree (or only some have it). Group editing also requires every
-selected track to be in the library.
-
-In Party Mode the values are disabled but the links still work. The file format
-must support extended tags — formats such as WAV may discard them.
 
 ## How it works
 
@@ -376,122 +405,98 @@ must support extended tags — formats such as WAV may discard them.
   GROUP BY s.ID
   ```
 
-- **Release preview** — `dialogs/dlgMBzPreview.js` asks `mbzFetch.js` for one
-  album. `releaseIdForAlbumAsync` reads `SELECT MBGID FROM Albums WHERE ID = ?`
-  and returns `''` without any HTTP request when the album has no ID;
-  `fetchReleaseAsync` validates the UUID, serializes lookups through a queue
-  (at least 1.1 s apart), sends a `User-Agent`, retries `503`/`429` with
-  backoff, stops once the dialog has closed, and caches the parsed release by
-  ID. `recording-level-rels`, `work-rels`, `work-level-rels` and `artist-rels`
-  are part of the lookup, so work composers and lyricists and
-  release/recording producers and remixers are available; `url-rels` supplies
-  the release's Discogs page. When the release has none, `fetchReleaseAsync`
-  makes one `release-group/{id}?inc=url-rels` follow-up for the group's Discogs
-  master page and attaches it to the cached release; `discogsUrls` reads both.
-  The dialog renders the release and its track list, then asks `mbzApply.js`
-  for the diff.
-- **Applying** — `mbzApply.js` describes the release (native values and the
-  Picard extended tag names), loads the album's tracks with
-  `app.db.getTracklist('SELECT * FROM Songs WHERE IDAlbum = …')`, and matches
-  them by disc and track number. `buildPlanAsync` returns one entry per field
-  whose fetched value differs, reading current values from the track and its
-  `ExtendedTags`. `applyAsync` writes only the ticked fields, merges tags with
-  `mergeTags` (replace in place by normalized name, keeping the existing raw
-  title, append the rest), calls
-  `track.commitAsync()`, then `app.db.clearCache()` and `uitools.refreshView()`.
-- **Writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in `mbzMbgid.js` run
-  one validated `UPDATE` against `Albums` or `Artists`, then
+- **Tag from MusicBrainz** — `dialogs/dlgMBzTag.js` asks `mbzFetch.js` for the
+  release behind the scope's first album. `releaseIdForAlbumAsync` reads
+  `SELECT MBGID FROM Albums WHERE ID = ?` and returns `''` without any HTTP
+  request when the album has no ID; `fetchReleaseAsync` validates the UUID,
+  serializes lookups through a queue (at least 1.1 s apart), sends a
+  `User-Agent`, retries `503`/`429` with backoff, stops once the dialog has
+  closed, and caches the parsed release by ID. `recording-level-rels`,
+  `work-rels`, `work-level-rels` and `artist-rels` are part of the lookup, so
+  work composers and lyricists and release/recording producers and remixers are
+  available; `url-rels` supplies the release's Discogs page. When the release
+  has none, `fetchReleaseAsync` makes one `release-group/{id}?inc=url-rels`
+  follow-up for the group's Discogs master page and attaches it to the cached
+  release; `discogsUrls` reads both.
+- **Scope** — `mbzApply.resolveTagScope` is the only place that decides what the
+  window works on: the selected tracks, their album IDs, each album's release
+  ID, and whether the selection spans more than one album. The action and the
+  window both call it, so they cannot disagree.
+- **The plan** — `mbzApply.buildSelectionPlanAsync` calls `buildPendingAsync`
+  per track, matching by disc and track number and reading the selection's
+  `ExtendedTags` in one database query, so the library's current value is
+  reported beside the fetched one. `aggregateFields` turns the per-track work
+  into one row per field, collapsing values that differ per track.
+- **Writing** — `mbzApply.applySelectionAsync` is the only write path. Per
+  track: the ticked native fields (dates as `YYYYMMDD`, years and disc numbers
+  as numbers, `discNumberInt` rather than the string property), then one read
+  and one merged `ExtendedTags` write (`mergeTags` for the fill,
+  `applyTagEdits` for the tag table), then `track.commitAsync()`. A failing
+  track is collected and the rest still commit; at the end
+  `app.db.clearCache()` and `uitools.refreshView()` run.
+- **Tag positions** — `mergeTags` replaces a tag in place by normalized name,
+  keeping the raw title the file already uses, and collapses duplicate aliases.
+  `applyTagEdits` addresses a stored title and occurrence, removes a tag when
+  the value is cleared, and never adds a second entry with the same name.
+- **Library writes** — `setAlbumGuidAsync` / `setArtistGuidAsync` in
+  `mbzMbgid.js` run one validated `UPDATE` against `Albums` or `Artists`, then
   `app.db.clearCache()` and `uitools.refreshView()` so MediaMonkey does not keep
   serving old values. An album write updates the in-memory tables directly; an
-  artist write rebuilds them, because the artist column is keyed by song.
-  Nothing in this dialog writes to tags, files or anything outside those two
-  tables; the Track Properties tab is the separate path for per-track tags.
-- **Fill from MusicBrainz** — the tab's button asks `mbzFetch` for the album's
-  release, then `mbzApply.buildPendingAsync` returns the values that differ for
-  this disc/track as a field list. `filterPending` narrows that list to the
-  ticked fields; `applyPendingAsync` stages them without committing: native
-  fields are assigned (dates converted to `YYYYMMDD`, years to numbers) and the
-  extended tags are merged with `mergeTags` through `setExtendedTagsAsync`. It
-  stages each track's native fields before that track's extended tags, the same
-  order 0.4.3 uses. Native artist fields,
-  composer and lyricist use `; `-separated names; the joined MusicBrainz credit
-  stays in `ARTISTS`/`ALBUMARTISTS`. Generic writers are kept in `WRITER` and
-  fill Composer when no specific composer exists. Producers and remixers are
-  `; `-separated extended-tag values. The dialog's OK button saves, and
-  `mbzExtMarkChanged` marks the dialog dirty so the staged tags are included.
-- **Filling a selection** — with several tracks selected, the Fill button reads
-  each selected track's album and matches every file by disc and track. It
-  merges the Properties dialog's group tracklist with the main selected
-  tracklist, because the dialog list can be shorter than the actual selection.
-  After the checkbox selection, OK stages the chosen fields on each selected
-  track and MediaMonkey's normal group save commits them; there is no separate
-  apply button. Native Composer and Lyricist are staged before each track's
-  extended tags so the group commit sees them. The checkbox list is the
-  confirmation;
-  Cancel discards the pending fill. Albums without a release ID and unmatched
-  files are reported and skipped; a **Search MusicBrainz** button opens the
-  website's release search for the first album without an ID.
-- **Track Properties tab** — `dialogs/dlgTrackProperties_add.js` registers
-  `tabLovesMBz` after **Custom**. `tabLovesMBz.js` filters
-  `Songs.ExtendedTags` with `mbzMbgid.normalizeExtendedTagName`, builds links
-  from `mbzMbgid.musicBrainzUrl` and opens them with `uitools.openWeb`. On OK it
-  re-reads the whole array and merges changed rows by exact tag name and
-  occurrence, so duplicate artist IDs and the built-in Custom tab are safe. It
-  writes only `Songs.ExtendedTags`; MediaMonkey writes the file from that array,
-  so a repeated artist ID becomes repeated fields in FLAC and one `/`-joined
-  value in an ID3v2.3 MP3. In
-  group mode it reads each selected song's row, shows only tags with one
-  identical stored name and value across the selection, and sets a
-  deletion-aware patch on the group track without reading the group proxy's
-  never-completing extended-tags promise.
+  artist write rebuilds them, because the artist column is keyed by song. The
+  window's disagreement strip uses these; the tag table never touches those
+  columns.
+- **Toolbar** — `init.js` adds the button to `righttoolbuttons` with
+  `uitools.addToolButton`, the call MediaMonkey uses for its own tool buttons,
+  so it sits with the other icons on the right instead of on the custom toolbar.
+  A stale `lovesMBzTag` entry in `toolbarItems` from 0.5.0/0.5.1 is removed on
+  start-up.
 - **Lifecycle** — the dialog uses `window.localPromise` / `window.localListen`,
   long loops check `window._cleanUpCalled`, and the cache is only built in the
-  main window (`init.js`). Settings are not stored.
+  main window (`init.js`). The add-on stores no settings of its own.
 
 ### Deliberately not included
 
 - **Album Artist MBGID** — the album artist is a separate relation
   (`ArtistsAlbums`); the artist column is the track's Artist field.
 - **Per-track MBIDs in the database** — MediaMonkey has no recording or work
-  MBID column on `Songs`; the Track Properties tab edits the per-track values
-  in `Songs.ExtendedTags`, not the album/artist rows.
+  MBID column on `Songs`; Tag from MusicBrainz edits the per-track values in
+  `Songs.ExtendedTags`, not the album/artist rows.
 - **Per-track album overrides** — a release ID belongs to the `Albums` row. Two
-  tracks of the same album cannot have different release IDs, and the dialog
+  tracks of the same album cannot have different release IDs, and the window
   makes that explicit rather than pretending otherwise.
-- **Batch editing** — one row at a time, with one confirmation per row, so a
+- **Batch editing IDs** — one row at a time, with one confirmation per row, so a
   mistyped ID cannot spread across a multi-select.
 - **Works, labels, relationships as database columns** — not stored there.
-  Their IDs can appear in `Songs.ExtendedTags` and are shown by the Track
-  Properties tab.
+  Their IDs can appear in `Songs.ExtendedTags` and are shown by Tag from
+  MusicBrainz.
 
 ## Building an `.mmip`
 
 An `.mmip` is a ZIP with `info.json` at its **root** — zip the contents, not the
 containing folder, and leave out the repository files.
 
-PowerShell:
-
-```powershell
-# from this folder
-Compress-Archive -Path .\info.json, .\init.js, .\mbzMbgid.js, .\mbzFetch.js, .\mbzApply.js, .\actions_add.js, .\controls, .\dialogs, .\skin -DestinationPath .\LovesMBz.zip -Force
-Rename-Item .\LovesMBz.zip .\LovesMBz.mmip
+```bash
+node tools/build-mmip.js
 ```
 
-bash / Git Bash, if `zip` is available:
+The script copies the add-on into a temporary folder, writes the build time into
+`dialogs/dlgMBzTag.js` (in the copy and in the source), and zips the contents to
+`LovesMBz.mmip`, so the window footer reports the build it came from. It uses
+`zip` when available and PowerShell's `Compress-Archive` otherwise. Do not zip
+by hand: an archive built that way has no build time, and the version alone
+cannot tell two builds apart.
+
+The packager runs the save-path regression test first and refuses to build when
+it fails. The same guard runs on its own with:
 
 ```bash
-zip -r LovesMBz.mmip info.json init.js mbzMbgid.js mbzFetch.js mbzApply.js actions_add.js controls dialogs skin loves-mbz.png
+node tests/tag-path.test.js
 ```
 
-Before packaging, run the save-path regression test:
-
-```bash
-node tests/save-path.test.js
-```
-
-It guards the 0.4.3 group Fill order: each track's native fields are staged
-before its extended tags, and the group loop does not split those into separate
-passes. The contract is in [AGENTS.md](AGENTS.md).
+It guards the 0.5.0 write path: one write path, native fields before the single
+merged extended-tags write, one commit per track, per-track failure isolation,
+and the 0.4.x invariants (`discNumberInt`, no `SCRIPT`). The contract is in
+[AGENTS.md](AGENTS.md).
 
 ## Troubleshooting
 
@@ -523,51 +528,52 @@ passes. The contract is in [AGENTS.md](AGENTS.md).
 - **Only one artist lost its ID** — a track can credit several artists and each
   has its own `Artists` row. Choose the artist in the dropdown before saving or
   clearing; the dropdown appears whenever a row has more than one artist.
-- **The MusicBrainz tab is empty** — the track has no MusicBrainz entries in
-  `Songs.ExtendedTags`; the native album/artist MBIDs are not stored there. Use
-  the IDs dialog or the columns for those.
-- **A MusicBrainz tag has no link** — its value is not a UUID (the tab marks it)
-  or the tag has no entity page (album status/type/country/date, disc ID). Fix
-  the value from a MusicBrainz page to get a link.
+- **The MusicBrainz tags table is empty** — the selection has no MusicBrainz
+  entries in `Songs.ExtendedTags`; the native album/artist MBIDs are not stored
+  there. Use the IDs dialog or the columns for those.
+- **A MusicBrainz tag has no link** — its value is not a UUID (the window marks
+  it) or the tag has no entity page (album status/type/country/date, disc ID).
+  Fix the value from a MusicBrainz page to get a link.
 - **An extended-tag edit did not stick** — the file format may not support the
-  tag, or Party Mode is on. Check the value after reopening Track Properties.
+  tag, or Party Mode is on. Check the value after pressing **Apply** again.
 - **Apply changed nothing** — every offered field already matched, or no library
   track matched the release by disc and track number. Nothing is matched by
   title.
 - **Some tracks were skipped** — their disc/track numbers have no counterpart in
-  the release. The dialog counts them; fix the numbering or apply to the release
+  the release. The window counts them; fix the numbering or apply to the release
   that matches.
-- **The preview says the album has no release ID** — `Albums.MBGID` is empty or
-  `0`. Set it in the IDs dialog (or let MediaMonkey match the release). The
-  preview's **Search MusicBrainz** button opens a web search by album and
-  artist, but does not choose a release or write an ID.
-- **The preview reports that MusicBrainz is busy** — three requests in a row
-  were answered with `503`/`429`. Wait a minute and reopen the dialog.
-- **The MusicBrainz tab is missing** — `dialogs/dlgTrackProperties_add.js` did
-  not load; check `debug.log` for lines starting with `Loves MBz:`, then
-  reopen Track Properties.
+- **The window says the album has no release ID** — `Albums.MBGID` is empty or
+  `0`. Paste one into **Album release ID** and press **Save ID**, use the IDs
+  dialog, or let MediaMonkey match the release. The **Search MusicBrainz** button
+  opens a web search by album and artist, but does not choose a release or write
+  an ID.
+- **The window reports that MusicBrainz is busy** — three requests in a row
+  were answered with `503`/`429`. Wait a minute and reopen the window.
+- **The toolbar button is missing** — it is added to the right-hand strip at
+  start-up; check `debug.log` for `Loves MBz: could not add the toolbar button`.
+  The action is also listed under **Options → Layout → Toolbar**, so it can be
+  placed on the custom toolbar or given a hotkey there.
+- **Tag from MusicBrainz does not open** — `dialogs/dlgMBzTag.js` did not load;
+  check `debug.log` for lines starting with `Loves MBz:`.
 
 ## Layout
 
 ```
 info.json                          addon manifest (id, version, icon)
-init.js                            startup: loads the module, starts the cache
+init.js                            startup: cache, change events, toolbar button
 mbzMbgid.js                        database access, ID lookup tables, writes
 mbzFetch.js                        throttled MusicBrainz release lookup
-mbzApply.js                        release-to-library diff and writes
+mbzApply.js                        scope, plan and the only write path
 actions_add.js                     Edit > Tag Tools and track-list menu actions
 controls/trackListView_add.js      the three track-list columns
-dialogs/dlgLovesMBz.html           dialog markup
-dialogs/dlgLovesMBz.js             dialog: view, copy, edit
-dialogs/dlgMBzPreview.html         preview dialog markup
-dialogs/dlgMBzPreview.js           preview: compare, tick fields, Apply
-dialogs/dlgTrackProperties_add.js  registers the Track Properties tab
-dialogs/dlgTrackProperties/tabLovesMBz.html  tab markup
-dialogs/dlgTrackProperties/tabLovesMBz.js    tab: filter, link, edit
+dialogs/dlgLovesMBz.html           IDs dialog markup
+dialogs/dlgLovesMBz.js             IDs dialog: view, copy, edit
+dialogs/dlgMBzTag.html             Tag from MusicBrainz markup
+dialogs/dlgMBzTag.js               Tag from MusicBrainz: release, fields, tags
 loves-mbz.png                      add-on icon (info.json)
-skin/icon/lovesMBz.svg             menu icon
-AGENTS.md                          save-path contract for future changes
-tests/save-path.test.js            regression guard for group Fill order
+skin/icon/lovesMBz.svg             toolbar and menu icon
+AGENTS.md                          the write-path contract for future changes
+tests/tag-path.test.js             regression guard for the write path
 ```
 
 ## Changelog
