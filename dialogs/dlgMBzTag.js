@@ -24,7 +24,7 @@ localRequirejs('mbzMbgid');
 var ADDON_VERSION = '0.5.1';
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-11 19:14';
+var BUILD_TIME = '2026-11-12 21:26';
 
 var MBZ_TAG_ENTITY_LABELS = {
     release: _('release'),
@@ -300,7 +300,11 @@ function init(params) {
     }
 
     function setStatus(text) {
-        if (UI.applyStatus) UI.applyStatus.textContent = text || '';
+        if (!UI.applyStatus) return;
+
+        // The report lists failures one per line.
+        UI.applyStatus.style.whiteSpace = 'pre-line';
+        UI.applyStatus.textContent = text || '';
     }
 
     function setTagStatus(text) {
@@ -314,6 +318,8 @@ function init(params) {
     }
 
     function resetView() {
+        scheduleTableSync();
+
         if (UI.metaRows) UI.metaRows.textContent = '';
         if (UI.fieldRows) UI.fieldRows.textContent = '';
         if (UI.trackRows) UI.trackRows.textContent = '';
@@ -485,6 +491,83 @@ function init(params) {
      * column a real pixel height from the monitor instead, once the header and
      * footer are laid out.
      */
+    /**
+     * The skin sizes and aligns its Edit controls from a sheet it applies after
+     * this document's, so the rules in dlgMBzTag.html lose however specific
+     * they are. Inline important is the only declaration that outranks it, and
+     * the input inside the control has to be sized on its own as well.
+     */
+    /**
+     * Headers sit flush left over their data, and a header row disappears when
+     * there is nothing under it: column names above an empty table (no release
+     * ID, no tags) are just a ruler with words on it.
+     */
+    function syncTables() {
+        if (typeof document.querySelectorAll !== 'function') return;
+
+        var tables = document.querySelectorAll('.mbzTable');
+
+        for (var i = 0; i < tables.length; i++) {
+            var table = tables[i];
+            var body = table.tBodies && table.tBodies.length ? table.tBodies[0] : null;
+            var empty = !body || body.rows.length === 0;
+
+            if (table.tHead) table.tHead.style.display = empty ? 'none' : '';
+
+            var heads = table.querySelectorAll('th');
+
+            for (var h = 0; h < heads.length; h++) {
+                // The skin centres `th`; an inline important beats it.
+                if (heads[h].style && heads[h].style.setProperty) {
+                    heads[h].style.setProperty('text-align', 'left', 'important');
+                }
+            }
+        }
+
+        // The field list is only its table: no rows means no section.
+        show(UI.fieldsSection, !!(UI.fieldRows && UI.fieldRows.rows.length));
+    }
+
+    /* The renders fill their tables synchronously; this runs right after. */
+    function scheduleTableSync() {
+        if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(syncTables);
+            return;
+        }
+
+        setTimeout(syncTables, 0);
+    }
+
+    function pinFieldLayout() {
+        var idControl = mbzTagControl(UI.albumIdValue);
+
+        if (UI.albumIdValue && UI.albumIdValue.style) {
+            UI.albumIdValue.style.setProperty('display', 'flex', 'important');
+            UI.albumIdValue.style.setProperty('align-items', 'center', 'important');
+            UI.albumIdValue.style.setProperty('flex', '1 1 34em', 'important');
+            UI.albumIdValue.style.setProperty('min-width', '30em', 'important');
+        }
+
+        if (idControl && idControl.edit && idControl.edit.style) {
+            idControl.edit.setAttribute('size', '38');
+            idControl.edit.style.setProperty('align-self', 'center', 'important');
+            idControl.edit.style.setProperty('min-width', '30em', 'important');
+            idControl.edit.style.setProperty('width', '100%', 'important');
+        }
+
+        var valueControl = mbzTagControl(UI.addValue);
+
+        if (UI.addValue && UI.addValue.style) {
+            UI.addValue.style.setProperty('display', 'flex', 'important');
+            UI.addValue.style.setProperty('align-items', 'center', 'important');
+        }
+
+        if (valueControl && valueControl.edit && valueControl.edit.style) {
+            valueControl.edit.style.setProperty('align-self', 'center', 'important');
+            valueControl.edit.style.setProperty('width', '100%', 'important');
+        }
+    }
+
     function fitScrollColumn() {
         if (!UI.scrollColumn || !UI.scrollColumn.parentNode) return;
 
@@ -643,6 +726,8 @@ function init(params) {
 
         mbzTagSetFieldValue(UI.albumIdValue, currentAlbumReleaseId());
         if (UI.btnSaveAlbumId) UI.btnSaveAlbumId.classList.toggle('mbzDisabled', state.busy);
+
+        pinFieldLayout();
     }
 
     function albumName() {
@@ -742,6 +827,8 @@ function init(params) {
      * ---------------------------------------------------------------- */
 
     function renderFields(plan) {
+        scheduleTableSync();
+
         if (!UI.fieldRows) return;
 
         UI.fieldRows.textContent = '';
@@ -802,6 +889,8 @@ function init(params) {
      * ---------------------------------------------------------------- */
 
     function renderTracks(plan) {
+        scheduleTableSync();
+
         if (!UI.trackRows) return;
 
         UI.trackRows.textContent = '';
@@ -1154,6 +1243,8 @@ function init(params) {
     }
 
     function renderTagTable() {
+        scheduleTableSync();
+
         if (!UI.tagRows) return;
 
         renderTagRows();
@@ -2097,7 +2188,18 @@ function init(params) {
         }
 
         message += ' ' + sprintf(_('%d failed.'), result.failed.length);
-        if (result.failed.length) message += ' ' + result.failed[0].error;
+        // Name the failing tracks: a run that stopped on one track has to say
+        // which one and why, not just how many failed.
+        var shown = Math.min(result.failed.length, 6);
+
+        for (var failureIndex = 0; failureIndex < shown; failureIndex++) {
+            message += '\n' + (result.failed[failureIndex].title || _('a track'))
+                + ': ' + (result.failed[failureIndex].error || '');
+        }
+
+        if (result.failed.length > shown) {
+            message += '\n' + sprintf(_('...and %d more.'), result.failed.length - shown);
+        }
 
         return message;
     }
@@ -2119,7 +2221,11 @@ function init(params) {
         if (UI.btnApply) UI.btnApply.classList.add('mbzDisabled');
         setStatus(_('Writing...'));
 
-        window.localPromise(apply.applySelectionAsync(plan, keys, edits)).then(function (result) {
+        window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
+            if (window._cleanUpCalled) return;
+
+            setStatus(sprintf(_('Writing %d of %d...'), Math.min(index + 1, total), total));
+        })).then(function (result) {
             if (window._cleanUpCalled) return;
 
             state.busy = false;
@@ -2165,6 +2271,7 @@ function init(params) {
         if (addValue) addValue.disabled = state.readOnly;
 
         populateAddChoices();
+        pinFieldLayout();
 
         if (!apply || !mbz) {
             setSummary(_('The MusicBrainz modules did not load. Check debug.log for lines starting with "Loves MBz:".'));

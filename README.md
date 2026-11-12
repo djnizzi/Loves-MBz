@@ -140,8 +140,8 @@ click.
 **Selected tracks** lists the tracks you selected, each with the release row it
 matched — disc/track, library title, release title, length, ISRC and recording
 ID — and how many field changes it has. A track with no counterpart says
-**no match** and is skipped. The full release listing is behind **Show all
-release tracks**, so the default view is your selection and not the album.
+**no match** and is skipped. Only your selection is listed: the window does not
+preview the rest of the release.
 
 The window works on **one album at a time**. A selection that spans more than
 one album ID does not open until you confirm a prompt that names the albums (and
@@ -152,7 +152,7 @@ multi-disc releases too: MediaMonkey gives each disc its own album row.
 | Written to | Fields |
 |---|---|
 | Native track tags | title, artist, composer, lyricist, ISRC, disc number |
-| Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, original year, all labels joined into `publisher` |
+| Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, all labels joined into `publisher` |
 | Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `originaldate`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS`, `WRITER`, `PRODUCER`, `REMIXER` |
 
@@ -182,7 +182,12 @@ extended tag, so it appears in MediaMonkey's **Custom** tab.
 then one read and one merged write of its `ExtendedTags` (the fill and any tag
 changes together), then `commitAsync()`. A failing track is reported and the
 rest still commit; the status line reads `Updated 12 of 15 tracks. Skipped 3
-(no matching disc and track number). 0 failed.` The window then re-reads the
+(no matching disc and track number). 0 failed.` While it runs it counts
+`Writing 7 of 15…`, and when tracks do fail the report names each one with its
+error. Every step — reading the extended tags, writing them, and the commit —
+has a 30-second deadline, so one stuck track is reported instead of leaving the
+window on **Writing…** with the rest of the selection unwritten. The window
+then re-reads the
 library and lists whatever is still different. Applying never writes the
 album's `MBGID`/`MBRGGID` or the artist rows: the release ID is the lookup key,
 so a fill cannot overwrite it. The one library write in the window is the
@@ -213,9 +218,11 @@ tool buttons, when MediaMonkey starts: it is added with
 it behaves like a built-in button and survives layout changes.
 
 The action is also listed under **Options → Layout → Toolbar** and can be given
-a hotkey there. A `toolbarItems` entry left by 0.5.0/0.5.1 — which put the
-button on the custom toolbar, on a row of its own — is removed on the next
-start.
+a hotkey there. A `toolbarItems` entry left by a 0.5.0 test build — which put
+the button on the custom toolbar, on a row of its own — is removed on the next
+start. The button also works when MediaMonkey has just started and tracks are
+already selected: if the host has no "last focused" track list yet, the window
+finds the selection in the main panel.
 
 ### Setting an ID
 
@@ -299,12 +306,12 @@ overwrites nothing and happens immediately.
 
 The **Fields to write** table covers the release side of the same window: native
 fields (`; `-separated album artist and artist, composer, lyricist, date, year,
-original date, original year, every label joined into `publisher`, title, ISRC,
-disc number) and the extended tags, including the joined credit in
+original date, every label joined into `publisher`, title, ISRC, disc number)
+and the extended tags, including the joined credit in
 `ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`, `REMIXER`, `originaldate` and
-`discogs_url`. The `originalyear` tag is deliberately not written, because a
-library can store a full `YYYY-MM-DD` date there and a four-digit year would
-replace it. Values that already match are skipped, and each track is matched to
+`discogs_url`. Neither the native **Original year** field nor the
+`originalyear` tag is written, because a library can store a full `YYYY-MM-DD`
+date there and a four-digit year would replace it. Values that already match are skipped, and each track is matched to
 the release by disc and track number. **Apply** writes the ticked fields on
 every matched track and reports what happened per track. An album without a
 release ID is reported without a request, and the fields and **Apply** are
@@ -448,8 +455,8 @@ still reports the disagreement but shows no buttons.
 - **Toolbar** — `init.js` adds the button to `righttoolbuttons` with
   `uitools.addToolButton`, the call MediaMonkey uses for its own tool buttons,
   so it sits with the other icons on the right instead of on the custom toolbar.
-  A stale `lovesMBzTag` entry in `toolbarItems` from 0.5.0/0.5.1 is removed on
-  start-up.
+  A stale `lovesMBzTag` entry in `toolbarItems` from the 0.5.0 test builds is
+  removed on start-up.
 - **Lifecycle** — the dialog uses `window.localPromise` / `window.localListen`,
   long loops check `window._cleanUpCalled`, and the cache is only built in the
   main window (`init.js`). The add-on stores no settings of its own.

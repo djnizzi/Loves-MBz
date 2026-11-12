@@ -25,7 +25,8 @@
         { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date', force: true },
         { key: 'year', label: _('Year'), scope: 'album', native: 'year', kind: 'year' },
         { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate', kind: 'date' },
-        { key: 'origYear', label: _('Original year'), scope: 'album', native: 'origYear', kind: 'year' },
+        // Original year is deliberately not offered: it lands in the same
+        // library field as the original date and overwrote what was there.
         { key: 'publisher', label: _('Labels'), scope: 'album', native: 'publisher' },
         { key: 'title', label: _('Title'), scope: 'track', native: 'title' },
         // Write the integer property. Assigning the string discNumber used to
@@ -903,6 +904,36 @@
         }
     }
 
+    /*
+     * A locked file or a stalled save can leave one step pending forever, which
+     * stopped the whole run with the window stuck on "Writing...". Each step
+     * gets a deadline, so that track is reported and the rest still commit.
+     */
+    var WRITE_TIMEOUT_MS = 30000;
+
+    function withTimeout(promise, ms, message) {
+        return new Promise(function (resolve, reject) {
+            var settled = false;
+            var timer = setTimeout(function () {
+                if (settled) return;
+                settled = true;
+                reject(new Error(message));
+            }, ms);
+
+            Promise.resolve(promise).then(function (value) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            }, function (error) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
+    }
+
     /**
      * The only write path. For every selected track: the ticked native fields,
      * then one read and one merged ExtendedTags write (fill tags and tag edits
@@ -914,11 +945,13 @@
      * @param {string[]} keys field keys to fill
      * @param {Array<{title: string, occurrence?: number, value: string,
      *   add?: boolean, deleted?: boolean}>} tagEdits tag table edits
+     * @param {Function} [onProgress] called with (index, total) before each
+     *   track, so the window can show where the run is
      * @returns {Promise<{total: number, updated: number, skipped: number,
      *   noMatch: number, unchanged: number, tagWrites: number,
      *   failed: Array<{title: string, error: string}>}>}
      */
-    async function applySelectionAsync(plan, keys, tagEdits) {
+    async function applySelectionAsync(plan, keys, tagEdits, onProgress) {
         var wanted = {};
         (keys || []).forEach(function (key) { wanted[key] = true; });
 
@@ -935,6 +968,10 @@
         };
 
         for (var i = 0; i < entries.length; i++) {
+            if (typeof onProgress === 'function') {
+                try { onProgress(i, entries.length, entries[i]); } catch (e) { /* reporting must not stop a write */ }
+            }
+
             var entry = entries[i];
             var track = entry && entry.track;
             var pending = (entry && entry.pending) || { matched: false, fields: [], native: {} };
@@ -969,7 +1006,8 @@
                 });
 
                 if (writes.length || edits.length) {
-                    var current = parseTags(await track.getExtendedTagsAsync());
+                    var current = parseTags(await withTimeout(track.getExtendedTagsAsync(),
+                        WRITE_TIMEOUT_MS, _('Reading the extended tags timed out.')));
                     if (!Array.isArray(current)) {
                         throw new Error(_('The extended tags of this track could not be read as JSON.'));
                     }
@@ -987,14 +1025,18 @@
                     }
 
                     if (writes.length || applied) {
-                        await track.setExtendedTagsAsync(merged.length ? JSON.stringify(merged) : '');
+                        await withTimeout(track.setExtendedTagsAsync(merged.length ? JSON.stringify(merged) : ''),
+                            WRITE_TIMEOUT_MS, _('Writing the extended tags timed out.'));
                         touched = true;
                         tagsWritten = true;
                     }
                 }
 
                 if (touched) {
-                    if (track.commitAsync) await track.commitAsync();
+                    if (track.commitAsync) {
+                        await withTimeout(track.commitAsync(), WRITE_TIMEOUT_MS,
+                            _('Saving the track timed out.'));
+                    }
                     result.updated++;
                     if (tagsWritten) result.tagWrites++;
                 } else {

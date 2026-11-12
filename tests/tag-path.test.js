@@ -107,6 +107,11 @@ assert.match(dialogHtml, /data-id="scrollColumn"/, 'the scrolling column needs a
 assert.match(dialogHtml, /\.mbzSection \{ padding-top: 10px/, 'sections must keep the 0.4.5 rhythm');
 assert.match(dialogHtml, /\.mbzMetaTable th \{[^}]*text-align: left !important/,
     'the meta labels must be left aligned, not centred by the skin');
+assert.match(dialogCode, /function syncTables/, 'empty tables must not draw their header row');
+assert.match(dialogHtml, /\.mbzTable th \{[^}]*text-align: left !important/,
+    'table headers must be left aligned over their data');
+assert.match(dialogCode, /result\.failed\[failureIndex\]\.title/,
+    'the apply report must name the failing track, not just count them');
 assert.match(dialogHtml, /commonControls\.js/,
     'the dialog must load the skinned control classes');
 assert.match(dialogHtml, /data-control-class="Edit"/,

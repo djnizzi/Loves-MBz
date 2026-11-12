@@ -100,7 +100,8 @@
 
         .mbzTable { width: 100%; border-collapse: collapse; font-size: 0.95em; }
         .mbzTable th {
-            text-align: left;
+            /* The skin centres `th`; the header must sit over the data. */
+            text-align: left !important;
             padding: 4px 8px;
             font-weight: bold;
             white-space: nowrap;

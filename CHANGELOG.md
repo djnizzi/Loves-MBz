@@ -3,9 +3,10 @@
 All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags.
 
-## 0.5.1 (2026-11-11)
+## 0.5.1 (2026-11-12)
 
-Fixes and additions on top of the first 0.5.0 build.
+"Tag from MusicBrainz" as it ships: the first public build of the 0.5 line,
+combining the 0.5.0 rewrite with the fixes and polish below.
 
 - **`mbzApply.js can't be loaded! (NOT FOUND)` on Tag from MusicBrainz.** The
   action called `localRequirejs` from inside `script://actions`, where the loader
@@ -34,6 +35,31 @@ Fixes and additions on top of the first 0.5.0 build.
   can be told apart. `node tools/build-mmip.js` writes the time in as it
   packages; the version half is checked against `info.json` by the regression
   test. The packager runs that test first and refuses to build when it fails.
+- **The window uses MediaMonkey's own controls.** Every text field and the tag
+  picker are the host's skinned `Edit` and `Dropdown` controls (the dialog loads
+  `commonControls.js`), so they are the same height as the rest of the
+  application. Native `<input>`/`<select>` elements were drawn oversized by the
+  skin and ignored every stylesheet and inline rule aimed at them. The
+  **Album release ID** field takes the row's width so a 36-character UUID is
+  readable, and both field rows are centred vertically.
+- **Only the selected tracks are listed.** The release-wide track preview and
+  its **Show all release tracks** button are gone.
+- **Table headers match their data and stay out of the way.** They are
+  left-aligned over their columns — the skin centres `th` — and a header row is
+  hidden when its table has no rows, for example an album without a release ID.
+- **Original year is no longer offered.** The native **Original year** field
+  landed in the same library field as the original date and overwrote it, so the
+  field is gone (the `originalyear` tag was already excluded).
+- **Apply cannot hang any more.** Reading the extended tags, writing them and
+  the commit each have a 30-second deadline: a stalled track is reported as
+  failed and the rest still commit, instead of the window sitting on
+  **Writing…** with half the selection written. The status line counts
+  `Writing 3 of 8…` as it goes, and the report names every failed track with its
+  error, up to six of them, then `...and N more.`.
+- **The toolbar button works on a fresh start.** Opening it when MediaMonkey has
+  just started and tracks are already selected used to do nothing until the
+  selection changed, because the host reports no "last focused" track list yet;
+  the window now looks for the selection in the main panel.
 
 ## 0.5.0 "Tag from MusicBrainz" (2026-11-11)
 
