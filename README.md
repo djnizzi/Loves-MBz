@@ -33,7 +33,8 @@ without a release ID is skipped without a request; the window offers a button
 that opens the MusicBrainz website search by album and artist, but the add-on
 itself never searches by name.
 
-Current version: **0.5.1**.
+Current version: **0.5.2** "Prettier". A test build names its channel (for
+example `0.5.2-rc1`) in the window footer and in the package.
 
 ---
 
@@ -108,7 +109,7 @@ the toolbar button all open the same window on the current selection. It reads
 the release behind the first selected track's album: artist credit, date,
 country, status, type, label and catalogue number, barcode, the Discogs page
 when the release or its release group links one, script/language, and every
-medium's tracks with their number, title, length, ISRC and recording ID. The
+medium's tracks with their number, title, length and artist credit. The
 Discogs link is MusicBrainz's URL relationship; a master page usually lives on
 the release group. Either way it is the value Picard stores as `discogs_url`.
 
@@ -126,9 +127,10 @@ the new ID. An empty field clears the ID, and the window falls back to the
 no-release-ID state with **Search MusicBrainz**. Like any library-side write,
 MediaMonkey's own lookup can overwrite it later.
 
-The footer of the window shows the add-on version — `Loves MBz 0.5.1` — so you
-can tell which build is running before trusting a screenshot or a report from an
-older one.
+The footer of the window shows the add-on version — `Loves MBz 0.5.2` for this
+release, with a test build's channel appended — so you can tell which build is
+running before trusting a screenshot or a report from an older one. The build
+time follows it.
 
 Below that, **Fields to write** lists only the fields whose MusicBrainz value
 differs from the library, one row and one checkbox each, with the current value,
@@ -137,9 +139,15 @@ the fetched value and `changes / total`. A value that differs per track reads
 anything you want to keep, then press **Apply**. Nothing is written before that
 click.
 
+Beside **Apply**, the footer states exactly what that click writes — for example
+`Will write 9 field changes on 5 tracks · 2 tag edits` — and it updates as you
+tick fields, type a tag value or clear one. A field that differs on four tracks
+counts as four field changes. With nothing staged the line reads
+`Nothing to apply yet — tick a field or edit a tag.`
+
 **Selected tracks** lists the tracks you selected, each with the release row it
-matched — disc/track, library title, release title, length, ISRC and recording
-ID — and how many field changes it has. A track with no counterpart says
+matched — disc/track, library title and artist, release title and artist, and
+length — and how many field changes it has. A track with no counterpart says
 **no match** and is skipped. Only your selection is listed: the window does not
 preview the rest of the release.
 
@@ -186,7 +194,12 @@ rest still commit; the status line reads `Updated 12 of 15 tracks. Skipped 3
 `Writing 7 of 15…`, and when tracks do fail the report names each one with its
 error. Every step — reading the extended tags, writing them, and the commit —
 has a 30-second deadline, so one stuck track is reported instead of leaving the
-window on **Writing…** with the rest of the selection unwritten. The window
+window on **Writing…** with the rest of the selection unwritten. **Apply** is
+greyed out until the release comparison has produced a plan, with a tooltip
+saying why. While it runs, the field checkboxes, tag values, **Add** row,
+**Save ID**, the library suggestions and the disagreement strip's buttons are
+locked, so an edit cannot
+be typed into a write that has already read its inputs. The window
 then re-reads the
 library and lists whatever is still different. Applying never writes the
 album's `MBGID`/`MBRGGID` or the artist rows: the release ID is the lookup key,
@@ -206,7 +219,12 @@ no AcoustID and no disc-ID lookup, so the add-on cannot pick the wrong release.
 No API key is needed: the add-on identifies itself with a `User-Agent` and
 keeps requests at least 1.1 s apart. A busy server (`503`/`429`) is retried
 twice with a growing delay, and the parsed release is cached by ID for the
-session, so opening the same album again does not call the API.
+session, so opening the same album again does not call the API. When the lookup
+still fails, the window says why and, for a busy server, a timeout or a network
+error, offers **Retry** beside the message. **Retry** repeats the lookup in
+place, so the tag edits and every other value in the window stay; when the
+release ID points at a release MusicBrainz does not have, the message says to
+check the ID instead of offering a retry that cannot help.
 
 ### The toolbar button
 
@@ -555,7 +573,10 @@ and the 0.4.x invariants (`discNumberInt`, no `SCRIPT`). The contract is in
   opens a web search by album and artist, but does not choose a release or write
   an ID.
 - **The window reports that MusicBrainz is busy** — three requests in a row
-  were answered with `503`/`429`. Wait a minute and reopen the window.
+  were answered with `503`/`429`. Wait a moment and press **Retry** in the
+  window: it repeats the lookup in place, so your tag edits stay. When the
+  album release ID points at a release MusicBrainz does not have, **Retry** is
+  not offered; correct the ID or clear it and search.
 - **The toolbar button is missing** — it is added to the right-hand strip at
   start-up; check `debug.log` for `Loves MBz: could not add the toolbar button`.
   The action is also listed under **Options → Layout → Toolbar**, so it can be
@@ -580,6 +601,7 @@ dialogs/dlgMBzTag.js               Tag from MusicBrainz: release, fields, tags
 loves-mbz.png                      add-on icon (info.json)
 skin/icon/lovesMBz.svg             toolbar and menu icon
 AGENTS.md                          the write-path contract for future changes
+UI-ROADMAP.md                      the UI audit and prioritised design plan
 tests/tag-path.test.js             regression guard for the write path
 ```
 

@@ -20,11 +20,17 @@ localRequirejs('mbzMbgid');
 /*
  * The build this window belongs to, shown in the footer. Keep it equal to
  * info.json: tests/tag-path.test.js fails when the two disagree.
+ * MediaMonkey only accepts a three-number manifest version, so a test build
+ * carries its channel separately and reads as 0.5.2-rc1 in the footer.
  */
-var ADDON_VERSION = '0.5.1';
+var ADDON_VERSION = '0.5.2';
+var BUILD_CHANNEL = '';         // test builds set 'rc1', 'rc2', …
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-12 21:26';
+var BUILD_TIME = '2026-11-15 20:30';
+
+/* Restored whenever a release finally loads, so an error note does not linger. */
+var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
 
 var MBZ_TAG_ENTITY_LABELS = {
     release: _('release'),
@@ -45,6 +51,19 @@ var MBZ_TAG_NATIVE_FIELDS = [
 
 function mbzTagText(value) {
     return String(value === undefined || value === null ? '' : value).trim();
+}
+
+/** MediaMonkey stores multi-value artists internally; show the readable form. */
+function mbzTagArtistText(value) {
+    var artist = mbzTagText(value);
+    try {
+        if (typeof utils !== 'undefined' && utils.multiString2VisualString) {
+            artist = utils.multiString2VisualString(artist);
+        }
+    } catch (e) {
+        // keep the raw value
+    }
+    return artist;
 }
 
 /*
@@ -226,11 +245,13 @@ function init(params) {
 
     var UI = {
         summary: qid('summary'),
+        btnRetry: qid('btnRetry'),
         warning: qid('warning'),
         searchRow: qid('searchRow'),
         btnSearch: qid('btnSearch'),
         searchStatus: qid('searchStatus'),
         linksBar: qid('linksBar'),
+        releaseCard: qid('releaseCard'),
         metaScroll: qid('metaScroll'),
         scrollColumn: qid('scrollColumn'),
         meta: qid('meta'),
@@ -255,6 +276,7 @@ function init(params) {
         addValue: qid('addValue'),
         addButton: qid('addButton'),
         btnApply: qid('btnApply'),
+        pendingSummary: qid('pendingSummary'),
         buildStamp: qid('buildStamp'),
         applyStatus: qid('applyStatus'),
         note: qid('note')
@@ -317,8 +339,31 @@ function init(params) {
         else element.classList.add('mbzHidden');
     }
 
+    function showRetry(visible) {
+        show(UI.btnRetry, !!visible);
+    }
+
+    /** The release card exists only while it has something in it. */
+    function syncReleaseCard() {
+        var metaVisible = !!UI.metaScroll && !UI.metaScroll.classList.contains('mbzHidden');
+        var idVisible = !!UI.albumIdRow && !UI.albumIdRow.classList.contains('mbzHidden');
+
+        show(UI.releaseCard, metaVisible || idVisible);
+    }
+
+    function mbzTagErrorCode(error) {
+        return (error && error.mbzCode) ? String(error.mbzCode) : '';
+    }
+
+    /** Retrying cannot help when MusicBrainz has no release with that ID. */
+    function canRetryRelease(error) {
+        var code = mbzTagErrorCode(error);
+        return code !== 'not-found' && code !== 'cancelled' && code !== 'missing-id';
+    }
+
     function resetView() {
         scheduleTableSync();
+        showRetry(false);
 
         if (UI.metaRows) UI.metaRows.textContent = '';
         if (UI.fieldRows) UI.fieldRows.textContent = '';
@@ -345,6 +390,7 @@ function init(params) {
         setWarning('');
         setTagSummary('');
         setSearch('');
+        syncReleaseCard();
     }
 
     /* ---------------------------------------------------------------- *
@@ -655,6 +701,7 @@ function init(params) {
         }
 
         show(UI.metaScroll, !!metaPairs.length);
+        syncReleaseCard();
     }
 
     function renderRelease(result) {
@@ -662,6 +709,8 @@ function init(params) {
 
         metaPairs = [];
         setSearch('');
+        showRetry(false);
+        setNote(DEFAULT_NOTE);
 
         addMeta(_('Artist'), mbzTagCredit(release));
         addMeta(_('Date'), mbzTagText(release.date));
@@ -683,6 +732,13 @@ function init(params) {
 
     function renderSkipped(result) {
         var reason = (result && result.reason) || 'no-album';
+        showRetry(false);
+
+        // A release that went away must not leave the old overview on screen.
+        metaPairs = [];
+        if (UI.metaRows) UI.metaRows.textContent = '';
+        show(UI.metaScroll, false);
+        syncReleaseCard();
 
         if (reason === 'no-album') {
             setSummary(_('This selection has no album, so there is no release to look up.'));
@@ -721,6 +777,7 @@ function init(params) {
     function syncAlbumIdInput() {
         var editable = !state.readOnly && !!(state.scope && state.scope.albumId > 0);
         show(UI.albumIdRow, editable);
+        syncReleaseCard();
 
         if (!editable) return;
 
@@ -741,7 +798,7 @@ function init(params) {
      * new ID is then loaded instead of the old one's.
      */
     function saveAlbumId() {
-        if (state.readOnly || !mbz || !state.scope || !(state.scope.albumId > 0)) return;
+        if (state.readOnly || state.busy || !mbz || !state.scope || !(state.scope.albumId > 0)) return;
 
         var raw = mbzTagFieldValue(UI.albumIdValue);
         var value = raw ? mbz.normalizeGuid(raw) : '';
@@ -836,6 +893,7 @@ function init(params) {
         var fields = (plan && plan.fields) || [];
         if (!fields.length) {
             show(UI.fieldsSection, false);
+            updatePending();
             return;
         }
 
@@ -862,11 +920,15 @@ function init(params) {
             if (typeof initializeControl === 'function') initializeControl(box);
             if (box.controlClass) {
                 box.controlClass.checked = true;
-                if (state.readOnly) box.controlClass.disabled = true;
+                if (state.readOnly || state.busy) box.controlClass.disabled = true;
             }
+
+            window.localListen(box, 'click', schedulePending);
+            window.localListen(box, 'change', schedulePending);
         });
 
         show(UI.fieldsSection, true);
+        updatePending();
     }
 
     function checkedKeys() {
@@ -882,6 +944,107 @@ function init(params) {
         }
 
         return keys;
+    }
+
+    /* ---------------------------------------------------------------- *
+     * What Apply would write right now
+     * ---------------------------------------------------------------- */
+
+    function countLabel(count, singular, many) {
+        return count + ' ' + (count === 1 ? singular : many);
+    }
+
+    /**
+     * Ticked fields and staged tag edits, counted the way Apply writes them:
+     * one field row writes on every track where it differs, and a tag edit is
+     * written to every selected track.
+     */
+    function pendingWork() {
+        var plan = state.plan;
+        var keys = checkedKeys();
+        var edits = collectEdits();
+        var fieldChanges = 0;
+        var fieldTracks = 0;
+
+        ((plan && plan.entries) || []).forEach(function (entry) {
+            var chosen = ((entry.pending && entry.pending.fields) || []).filter(function (field) {
+                return keys.indexOf(field.key) >= 0;
+            });
+
+            if (!chosen.length) return;
+            fieldChanges += chosen.length;
+            fieldTracks++;
+        });
+
+        var removals = 0;
+        edits.forEach(function (edit) {
+            if (!edit.add && !mbzTagText(edit.value)) removals++;
+        });
+
+        return {
+            fields: fieldChanges,
+            tracks: fieldTracks,
+            tags: edits.length,
+            tagTracks: edits.length && plan ? (plan.entries || []).length : 0,
+            removals: removals
+        };
+    }
+
+    function updatePending() {
+        if (!UI.pendingSummary) return;
+
+        if (state.readOnly || !state.plan) {
+            UI.pendingSummary.textContent = '';
+            UI.pendingSummary.removeAttribute('title');
+            return;
+        }
+
+        var work = pendingWork();
+
+        if (!work.fields && !work.tags) {
+            UI.pendingSummary.textContent = _('Nothing to apply yet \u2014 tick a field or edit a tag.');
+            UI.pendingSummary.removeAttribute('title');
+            return;
+        }
+
+        var parts = [];
+
+        if (work.fields) {
+            parts.push(sprintf(_('Will write %s on %s'),
+                countLabel(work.fields, _('field change'), _('field changes')),
+                countLabel(work.tracks, _('track'), _('tracks'))));
+        }
+
+        if (work.tags) {
+            var tagText = countLabel(work.tags, _('tag edit'), _('tag edits'));
+
+            // Tag edits go to every selected track; say so when that is not
+            // already the track count the field changes used.
+            if (!work.fields || work.tagTracks !== work.tracks) {
+                tagText += ' ' + sprintf(_('on %s'),
+                    countLabel(work.tagTracks, _('track'), _('tracks')));
+            }
+
+            if (work.removals) {
+                tagText += ' ' + (work.removals === 1
+                    ? _('(1 removal)')
+                    : sprintf(_('(%d removals)'), work.removals));
+            }
+
+            parts.push(work.fields ? tagText : sprintf(_('Will write %s'), tagText));
+        }
+
+        var text = parts.join(' \u00b7 ');
+        UI.pendingSummary.textContent = text;
+        UI.pendingSummary.title = text;
+    }
+
+    /**
+     * A host checkbox updates its own state inside its click handler, so the
+     * count is read once that handler has finished rather than beside it.
+     */
+    function schedulePending() {
+        setTimeout(updatePending, 0);
     }
 
     /* ---------------------------------------------------------------- *
@@ -910,13 +1073,10 @@ function init(params) {
             row.appendChild(mbzTagCell(String(entry.disc || (release && release.disc) || ''), 'mbzNowrap'));
             row.appendChild(mbzTagCell(String(entry.number || ''), 'mbzNowrap'));
             row.appendChild(mbzTagCell(entry.title));
+            row.appendChild(mbzTagCell(mbzTagArtistText(entry.artist)));
             row.appendChild(mbzTagCell(release ? release.title : '\u2014'));
+            row.appendChild(mbzTagCell(release ? mbzTagArtistText(release.artist) : '\u2014'));
             row.appendChild(mbzTagCell(release ? mbzTagLength(release.length) : '', 'mbzNowrap'));
-            row.appendChild(mbzTagCell(release ? release.isrc : ''));
-
-            var guid = mbzTagCell(release ? release.recordingId : '', 'mbzGuid');
-            if (release && release.recordingId) guid.setAttribute('data-tip', release.recordingId);
-            row.appendChild(guid);
 
             row.appendChild(mbzTagCell(
                 entry.changed ? String(entry.changes)
@@ -1170,7 +1330,7 @@ function init(params) {
                     : String(sourceValue === undefined || sourceValue === null ? '' : sourceValue);
                 input.spellcheck = false;
                 input.autocomplete = 'off';
-                input.disabled = state.readOnly;
+                input.disabled = state.readOnly || state.busy;
                 input.setAttribute('data-row', String(index));
                 if (partCount > 1) input.setAttribute('data-part', String(part));
                 valueCell.appendChild(input);
@@ -1256,6 +1416,7 @@ function init(params) {
         if (empty && UI.tagEmpty) UI.tagEmpty.textContent = emptyTagText();
 
         renderSuggestions();
+        updatePending();
     }
 
     function hasTagChanges() {
@@ -1278,6 +1439,7 @@ function init(params) {
         setTagStatus(hasTagChanges()
             ? _('Tag changes are written when you press Apply.')
             : '');
+        updatePending();
     }
 
     function collectEdits() {
@@ -1345,6 +1507,7 @@ function init(params) {
             chip.className = 'button mbzChip';
             chip.setAttribute('data-title', item.title);
             chip.setAttribute('data-value', item.value);
+            if (state.busy) chip.classList.add('mbzDisabled');
             chip.title = item.title + ' = ' + item.value;
             chip.textContent = (item.info ? _(item.info.label) : item.title) + ' ' + mbzTagShortGuid(item.value);
             UI.suggestBar.appendChild(chip);
@@ -1354,7 +1517,7 @@ function init(params) {
     }
 
     function addTagRow(title, value) {
-        if (!mbz || state.readOnly || !title || !value) return false;
+        if (!mbz || state.readOnly || state.busy || !title || !value) return false;
 
         var target = null;
         state.rows.forEach(function (row) {
@@ -1437,7 +1600,7 @@ function init(params) {
     }
 
     function addPending() {
-        if (state.readOnly || !mbz) return;
+        if (state.readOnly || state.busy || !mbz) return;
 
         var title = mbzTagFieldValue(UI.addTag);
         var value = mbzTagFieldValue(UI.addValue);
@@ -1743,6 +1906,7 @@ function init(params) {
             if (!state.readOnly && conflict.nativeValue) {
                 var useNative = document.createElement('div');
                 useNative.className = 'button';
+                if (state.busy) useNative.classList.add('mbzDisabled');
                 useNative.setAttribute('data-diverge', 'tag');
                 useNative.setAttribute('data-key', conflict.key);
                 useNative.textContent = _('Use library ID');
@@ -1753,6 +1917,7 @@ function init(params) {
             if (!state.readOnly && canWrite) {
                 var useTag = document.createElement('div');
                 useTag.className = 'button';
+                if (state.busy) useTag.classList.add('mbzDisabled');
                 useTag.setAttribute('data-diverge', 'library');
                 useTag.setAttribute('data-key', conflict.key);
                 useTag.textContent = _('Update library');
@@ -1791,7 +1956,7 @@ function init(params) {
         if (event.preventDefault) event.preventDefault();
         if (event.stopPropagation) event.stopPropagation();
 
-        if (state.readOnly || !mbz) return;
+        if (state.readOnly || state.busy || !mbz) return;
 
         var action = node.getAttribute('data-diverge');
         var key = node.getAttribute('data-key');
@@ -1920,6 +2085,8 @@ function init(params) {
      * ---------------------------------------------------------------- */
 
     function onTagInput(event) {
+        if (state.busy) return;
+
         var input = event && event.target;
         if (!input || input.tagName !== 'INPUT' || !input.classList ||
             !input.classList.contains('mbzValue')) return;
@@ -2025,9 +2192,49 @@ function init(params) {
         return window.localPromise(fetch.previewAsync(scope.albumId)).then(function (result) {
             return result;
         }, function (error) {
+            var retryable = canRetryRelease(error);
+
             setSummary(sprintf(_('Could not read the release: %s'), mbzTagErrorText(error)));
-            setNote(_('The release ID is unchanged and nothing was written.'));
+            setNote(retryable
+                ? _('The release ID is unchanged and nothing was written. Press Retry to look it up again.')
+                : _('The release ID is unchanged and nothing was written. Check the album release ID, or clear it and search MusicBrainz for the right release.'));
+            showRetry(retryable);
             return { skipped: true, reason: 'error' };
+        });
+    }
+
+    /**
+     * Repeats the release lookup in place. The tag edits and every other value
+     * in the window stay as they are: only the release is fetched again.
+     */
+    function retryRelease() {
+        if (state.busy || !state.scope || !fetch) return;
+
+        var scope = state.scope;
+
+        showRetry(false);
+        setSummary(_('Reading the release from MusicBrainz...'));
+
+        window.localPromise(loadReleaseAsync(scope)).then(function (result) {
+            if (window._cleanUpCalled) return null;
+
+            if (!result || result.skipped) {
+                // A failed retry has already put its own message on screen.
+                if (!result || result.reason !== 'error') {
+                    renderSkipped(result || { reason: 'no-album' });
+                    state.hasRelease = false;
+                    state.release = null;
+                }
+                return buildPlanAsync(null);
+            }
+
+            state.release = result.release;
+            state.hasRelease = true;
+            renderRelease(result);
+            return buildPlanAsync(result.release);
+        }).then(function () {
+            if (window._cleanUpCalled) return;
+            syncAlbumIdInput();
         });
     }
 
@@ -2126,6 +2333,7 @@ function init(params) {
             if (window._cleanUpCalled) return;
 
             state.plan = plan;
+            refreshApply();
             renderFields(plan);
             renderTracks(plan);
             renderWarnings(plan);
@@ -2140,6 +2348,10 @@ function init(params) {
         var scope = state.scope;
         if (!scope) return Promise.resolve();
 
+        showRetry(false);
+        state.plan = null;
+        updatePending();
+        refreshApply();
         setStatus('');
         setTagStatus('');
 
@@ -2204,8 +2416,79 @@ function init(params) {
         return message;
     }
 
+    function canApply() {
+        return !state.readOnly && !state.busy && !!state.plan;
+    }
+
+    /**
+     * Apply is grey until there is a plan to apply, and while a write runs. The
+     * tooltip says why, because a grey button with no reason reads as a bug.
+     */
+    function refreshApply() {
+        if (!UI.btnApply) return;
+
+        UI.btnApply.classList.toggle('mbzDisabled', !canApply());
+
+        if (!state.plan) {
+            UI.btnApply.title = _('Waiting for the release comparison to finish.');
+        } else {
+            UI.btnApply.removeAttribute('title');
+        }
+    }
+
+    /**
+     * Locks the whole editable surface while a write is running. An edit typed
+     * after Apply has read its inputs would otherwise be discarded by the
+     * reload that follows the write.
+     */
+    function setBusy(on) {
+        state.busy = !!on;
+
+        if (UI.btnSaveAlbumId) UI.btnSaveAlbumId.classList.toggle('mbzDisabled', state.busy);
+        if (UI.btnRetry) UI.btnRetry.classList.toggle('mbzDisabled', state.busy);
+        if (UI.addButton) {
+            UI.addButton.classList.toggle('mbzDisabled', state.busy || state.readOnly);
+        }
+
+        var addTag = mbzTagControl(UI.addTag);
+        var addValue = mbzTagControl(UI.addValue);
+        var albumId = mbzTagControl(UI.albumIdValue);
+
+        if (addTag) addTag.disabled = state.busy || state.readOnly;
+        if (addValue) addValue.disabled = state.busy || state.readOnly;
+        if (albumId) albumId.disabled = state.busy;
+
+        var values = UI.tagRows ? UI.tagRows.querySelectorAll('input.mbzValue') : [];
+
+        for (var i = 0; i < values.length; i++) {
+            values[i].disabled = state.busy || state.readOnly;
+        }
+
+        var boxes = UI.fieldRows ? UI.fieldRows.querySelectorAll('[data-key]') : [];
+
+        for (var b = 0; b < boxes.length; b++) {
+            if (boxes[b].controlClass) {
+                boxes[b].controlClass.disabled = state.busy || state.readOnly;
+            }
+        }
+
+        var chips = UI.suggestBar ? UI.suggestBar.querySelectorAll('.mbzChip') : [];
+
+        for (var c = 0; c < chips.length; c++) {
+            chips[c].classList.toggle('mbzDisabled', state.busy);
+        }
+
+        var buttons = UI.divergeBar ? UI.divergeBar.querySelectorAll('.button') : [];
+
+        for (var d = 0; d < buttons.length; d++) {
+            buttons[d].classList.toggle('mbzDisabled', state.busy);
+        }
+
+        refreshApply();
+    }
+
     function applyNow() {
-        if (state.readOnly || state.busy || !apply) return;
+        if (state.readOnly || state.busy || !state.plan || !apply) return;
 
         var keys = checkedKeys();
         var edits = collectEdits();
@@ -2215,10 +2498,9 @@ function init(params) {
             return;
         }
 
-        var plan = state.plan || { entries: [], work: [], fields: [], skipped: {} };
+        var plan = state.plan;
 
-        state.busy = true;
-        if (UI.btnApply) UI.btnApply.classList.add('mbzDisabled');
+        setBusy(true);
         setStatus(_('Writing...'));
 
         window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
@@ -2228,22 +2510,21 @@ function init(params) {
         })).then(function (result) {
             if (window._cleanUpCalled) return;
 
-            state.busy = false;
-            if (UI.btnApply) UI.btnApply.classList.remove('mbzDisabled');
-
             var message = reportText(result);
 
             return window.localPromise(reloadAsync()).then(function () {
                 if (window._cleanUpCalled) return;
+                setBusy(false);
                 setStatus(message);
             }, function () {
+                if (window._cleanUpCalled) return;
+                setBusy(false);
                 setStatus(message);
             });
         }, function (error) {
             if (window._cleanUpCalled) return;
 
-            state.busy = false;
-            if (UI.btnApply) UI.btnApply.classList.remove('mbzDisabled');
+            setBusy(false);
             setStatus(sprintf(_('Could not write: %s'), mbzTagErrorText(error)));
         });
     }
@@ -2263,6 +2544,7 @@ function init(params) {
 
         show(UI.btnApply, !state.readOnly);
         show(UI.addBar, !state.readOnly);
+        refreshApply();
         if (UI.addButton) UI.addButton.classList.toggle('mbzDisabled', state.readOnly);
 
         var addTag = mbzTagControl(UI.addTag);
@@ -2316,12 +2598,18 @@ function init(params) {
 
     if (UI.buildStamp) {
         UI.buildStamp.textContent = 'Loves MBz ' + ADDON_VERSION
+            + (BUILD_CHANNEL ? '-' + BUILD_CHANNEL : '')
             + (BUILD_TIME ? ' \u00b7 ' + BUILD_TIME : '');
     }
+
+    if (UI.btnRetry) UI.btnRetry.title = _('Look the release up again without closing the window.');
 
     resetView();
 
     if (UI.btnSearch) window.localListen(UI.btnSearch, 'click', openSearch);
+    if (UI.btnRetry) window.localListen(UI.btnRetry, 'click', retryRelease);
+    if (UI.fieldRows) window.localListen(UI.fieldRows, 'click', updatePending);
+    if (UI.fieldRows) window.localListen(UI.fieldRows, 'change', updatePending);
     if (UI.btnSaveAlbumId) window.localListen(UI.btnSaveAlbumId, 'click', saveAlbumId);
     if (UI.albumIdValue) window.localListen(UI.albumIdValue, 'keydown', onAlbumIdKey);
     if (UI.linksBar) window.localListen(UI.linksBar, 'click', onLinkClick);

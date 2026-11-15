@@ -1,7 +1,9 @@
 # Roadmap
 
 A living list — items get added as we go. **Owner** work needs artwork or an
-account; **Agent** work is repo and documentation.
+account; **Agent** work is repo and documentation. UI and UX work is planned
+separately in [UI-ROADMAP.md](UI-ROADMAP.md); this file tracks features and
+release mechanics.
 
 ## 0.3.x — polish and publish
 
@@ -303,9 +305,9 @@ window cannot disagree.
 - [x] `AGENTS.md` rewritten to the contract above.
 - [x] README: the Track Properties sections become the new window; the
       screenshot list loses the tab.
-- [x] `info.json` → 0.5.1 (0.5.0 was the first build; 0.5.1 carries the fixes), CHANGELOG entries, and a fresh `LovesMBz.mmip`.
-- [ ] Tag `v0.5.1` and attach `LovesMBz.mmip` to the GitHub release (owner:
-      needs a moderator-approved addon page and a push).
+- [x] `info.json` → 0.5.2, the "Prettier" CHANGELOG entry, and a fresh
+      `LovesMBz.mmip`.
+- [x] Tag `v0.5.2` and attach `LovesMBz.mmip` to the GitHub release.
 
 ### Known consequences
 

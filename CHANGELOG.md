@@ -1,7 +1,59 @@
 # Changelog
 
 All notable changes to Loves MBz, newest first. Version numbers match
-`info.json` and the git tags.
+`info.json` and the git tags. A test build names its channel in the window
+footer and in the package, because `info.json` must stay three numbers.
+
+## 0.5.2 "Prettier" (2026-11-15)
+
+A window you can read at a glance, and an Apply button that cannot be pressed
+before there is a plan or while a write is running. "Prettier" because the
+release is the 0.5 line's pass over the window itself: four cards instead of one
+long sheet, a preview table about the music rather than its identifiers, and a
+footer that says what a click will do.
+
+- **The window reads in cards.** **Release**, **Fields to write**, **Selected
+tracks** and **MusicBrainz tags** are now drawn as the rounded, titled box
+MediaMonkey's own settings panels use — a fieldset with its legend — matching
+ParaDeeJay's settings UI. The release overview and the album release ID share
+one card; a card with nothing in it is not drawn, and a release that disappears
+no longer leaves the previous overview on screen.
+- **Apply waits for a plan.** The button is greyed out, with a tooltip saying
+why, until the release comparison has produced a plan and while a reload is
+re-reading the selection after an apply or a **Save ID**. It can no longer
+report `Updated 0 of 0 tracks` because it was pressed while the window was
+still loading.
+- **A write locks the window.** While **Apply** runs, the field checkboxes, tag
+values, **Add** row, **Save ID**, the library suggestions and the disagreement
+strip's buttons are disabled. Previously only Apply itself was greyed out, so an
+edit typed during the run was silently discarded by the reload that followed.
+The lock clears when the run finishes, including when a track fails; Party Mode
+stays read-only as before.
+- **Apply says what it will write.** The footer beside **Apply** states the
+pending work — for example `Will write 9 field changes on 5 tracks · 2 tag
+edits` — and updates as fields are ticked, tag values are typed and tags are
+cleared. Field changes are counted per track, so a field that differs on four
+tracks counts as four. With nothing staged the line says so, instead of leaving
+Apply's effect to be discovered. Party Mode shows no line, because nothing can
+be written there.
+- **The preview table pairs artists instead of listing ISRCs.** **Selected
+tracks** now shows **Library title**, **Library artist**, **Release title** and
+**Release artist**, side by side, and the **ISRC** and **Recording ID** columns
+are gone. ISRCs and recording IDs are still fetched and still written to the
+tags; they just no longer take width in the window. An unmatched track shows a
+dash where the release title and artist would be.
+- **Retry a lookup that failed.** When MusicBrainz is busy, does not answer or
+cannot be reached, the window offers **Retry** beside the message. It repeats
+the release lookup in place, so the window no longer has to be closed and
+reopened, and tag edits made before the failure survive. A release ID that
+MusicBrainz does not have gets a "check the release ID" note instead, because
+retrying that cannot help.
+
+### Upgrading from 0.5.1
+
+Nothing changes in the tags or the library. The write path, the release-ID
+lookup and the extended-tag rules are the same; 0.5.2 changes how the window
+presents them and when **Apply** is available.
 
 ## 0.5.1 (2026-11-12)
 

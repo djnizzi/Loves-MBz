@@ -105,11 +105,26 @@ assert.doesNotMatch(dialogCode, /releaseRows/,
 assert.match(dialogCode, /fitScrollColumn/, 'the column must be sized in pixels, not viewport units');
 assert.match(dialogHtml, /data-id="scrollColumn"/, 'the scrolling column needs a handle');
 assert.match(dialogHtml, /\.mbzSection \{ padding-top: 10px/, 'sections must keep the 0.4.5 rhythm');
+assert.match(dialogHtml, /<fieldset class="mbzSection mbzCard/, 'sections must be drawn as cards');
+assert.match(dialogHtml, /<legend class="mbzCardTitle" data-localize>Fields to write<\/legend>/,
+    'the card needs a titled legend');
+assert.match(dialogHtml, /data-id="releaseCard"/, 'the release block needs its card');
+assert.match(dialogCode, /function syncReleaseCard/, 'an empty release card must hide itself');
 assert.match(dialogHtml, /\.mbzMetaTable th \{[^}]*text-align: left !important/,
     'the meta labels must be left aligned, not centred by the skin');
 assert.match(dialogCode, /function syncTables/, 'empty tables must not draw their header row');
 assert.match(dialogHtml, /\.mbzTable th \{[^}]*text-align: left !important/,
     'table headers must be left aligned over their data');
+
+// The preview pairs each side's artist instead of listing ISRCs and track IDs.
+assert.match(dialogHtml, /<th data-localize>Library artist<\/th>/,
+    'the preview must show the library artist');
+assert.match(dialogHtml, /<th data-localize>Release artist<\/th>/,
+    'the preview must show the release artist');
+assert.doesNotMatch(dialogHtml, /<th data-localize>ISRC<\/th>/,
+    'the preview must not show an ISRC column');
+assert.doesNotMatch(dialogHtml, /<th data-localize>Recording ID<\/th>/,
+    'the preview must not show a recording ID column');
 assert.match(dialogCode, /result\.failed\[failureIndex\]\.title/,
     'the apply report must name the failing track, not just count them');
 assert.match(dialogHtml, /commonControls\.js/,
@@ -142,6 +157,33 @@ assert.match(initSource, /mbzOpenTagSelection/, 'the toolbar button must call th
 assert.match(dialogCode, /setAlbumGuidAsync\(albumId, 'MBGID'/, 'the window must write the album release ID');
 assert.doesNotMatch(applySource, /setAlbumGuidAsync|setArtistGuidAsync/,
     'the write engine must never touch the album or artist ID columns');
+
+// A failed release lookup is recoverable in the window, not by closing it.
+assert.match(dialogHtml, /data-id="btnRetry"/, 'a failed lookup must offer a retry');
+assert.match(dialogCode, /function retryRelease/, 'the retry must reload the release in place');
+assert.match(dialogCode, /localListen\(UI\.btnRetry, 'click', retryRelease\)/,
+    'the retry button must be wired to the reload');
+
+// Apply states its pending work before it runs, and follows the table.
+assert.match(dialogHtml, /data-id="pendingSummary"/,
+    'the footer must state what Apply will write');
+assert.match(dialogCode, /function updatePending/, 'the pending summary must be computed in the window');
+assert.match(dialogCode, /localListen\(UI\.fieldRows, 'click', updatePending\)/,
+    'ticking a field must update the pending summary');
+
+// A write locks the editable surface, so no edit can be typed into a run
+// that has already read its inputs.
+assert.match(dialogCode, /function setBusy/, 'the window must have one busy lock');
+assert.match(dialogCode, /setBusy\(true\)/, 'Apply must lock the window before writing');
+assert.match(dialogCode, /values\[i\]\.disabled = state\.busy \|\| state\.readOnly/,
+    'tag values must be locked while writing');
+assert.match(dialogCode, /if \(state\.busy\) return;\s*\n\s*var input = event && event\.target;/,
+    'tag input must be ignored while writing');
+assert.match(dialogCode, /function refreshApply/, 'Apply readiness must live in one place');
+assert.match(dialogCode, /!state\.readOnly && !state\.busy && !!state\.plan/,
+    'Apply needs a plan and an idle window');
+assert.match(dialogCode, /state\.plan = null;\s*\n\s*updatePending\(\);\s*\n\s*refreshApply/,
+    'a reload must grey Apply until the new plan exists');
 
 // The build the window reports must be the build that was packaged.
 const infoVersion = JSON.parse(read('info.json')).version;
@@ -261,7 +303,7 @@ function makeTrack(options) {
         path: options.path || 'C:\\music\\song.flac',
         discNumber: options.discNumber || '',
         albumArtist: '',
-        artist: '',
+        artist: options.artist || '',
         year: '',
         date: 0,
         origDate: 0,
@@ -424,8 +466,12 @@ global.app = {
 
     // The library titles differ from the release titles: that is the field
     // the window exists to offer.
-    const one = makeTrack({ id: 1, number: 1, title: 'One (library)', log: planLogOne, tags: tagsOne });
-    const two = makeTrack({ id: 2, number: 2, title: 'Two (library)', log: planLogTwo, tags: tagsTwo });
+    const one = makeTrack({
+        id: 1, number: 1, title: 'One (library)', artist: 'Library One', log: planLogOne, tags: tagsOne
+    });
+    const two = makeTrack({
+        id: 2, number: 2, title: 'Two (library)', artist: 'Library Two', log: planLogTwo, tags: tagsTwo
+    });
 
     const plan = await apply.buildSelectionPlanAsync(
         [one, two],
@@ -438,6 +484,11 @@ global.app = {
     assert.strictEqual(plan.work.length, 2);
     assert.deepStrictEqual(plan.skipped, { noLibrary: 0, noAlbum: 0, unmatched: 0, same: 0 });
     assert.deepStrictEqual(planLogOne, [], 'planning must not read or write a track');
+
+    // The preview table pairs each side's artist, not just its title.
+    assert.strictEqual(plan.entries[0].artist, 'Library One', 'the preview needs the library artist');
+    assert.strictEqual(plan.entries[0].pending.release.artist, 'The Artist',
+        'the preview needs the release artist');
 
     // A 2-CD release. A per-disc rip often has no DISC tag, so the number has
     // to decide — but only when exactly one medium carries it.

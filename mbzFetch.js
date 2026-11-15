@@ -101,6 +101,16 @@
         return error.message ? error.message : String(error);
     }
 
+    /**
+     * An error with a stable code. The window reads `mbzCode` to decide whether
+     * Retry can help: a busy server or a timeout can, a missing release cannot.
+     */
+    function makeError(message, code) {
+        var error = new Error(message);
+        error.mbzCode = code || '';
+        return error;
+    }
+
     /** The JSON error MusicBrainz sends with a 4xx, or a short plain-text body. */
     function apiErrorDetail(body) {
         var raw = String(body === undefined || body === null ? '' : body).trim();
@@ -138,7 +148,7 @@
                 if (finished) return;
                 finished = true;
                 try { xhr.abort(); } catch (e) {}
-                reject(new Error(_('MusicBrainz did not answer in time.')));
+                reject(makeError(_('MusicBrainz did not answer in time.'), 'timeout'));
             }, REQUEST_TIMEOUT_MS + 2000);
 
             function stopTimer() {
@@ -147,11 +157,11 @@
                 timer = null;
             }
 
-            function fail(message) {
+            function fail(message, code) {
                 if (finished) return;
                 finished = true;
                 stopTimer();
-                reject(new Error(message));
+                reject(makeError(message, code));
             }
 
             xhr.open('GET', url, true);
@@ -163,7 +173,7 @@
                 if (xhr.readyState !== 4 || finished) return;
 
                 if (window._cleanUpCalled) {
-                    fail(_('Cancelled.'));
+                    fail(_('Cancelled.'), 'cancelled');
                     return;
                 }
 
@@ -176,34 +186,34 @@
                     stopTimer();
                     resolve(null);     // busy: the caller retries
                 } else if (xhr.status === 404) {
-                    fail(_('MusicBrainz has no release with that ID.'));
+                    fail(_('MusicBrainz has no release with that ID.'), 'not-found');
                 } else if (!xhr.status) {
-                    fail(_('Could not reach musicbrainz.org.'));
+                    fail(_('Could not reach musicbrainz.org.'), 'network');
                 } else {
                     var detail = apiErrorDetail(xhr.responseText);
                     fail(_('MusicBrainz returned HTTP ') + xhr.status +
-                        (detail ? ': ' + detail : '.'));
+                        (detail ? ': ' + detail : '.'), 'http');
                 }
             };
 
             xhr.ontimeout = function () {
-                fail(_('MusicBrainz did not answer in time.'));
+                fail(_('MusicBrainz did not answer in time.'), 'timeout');
             };
             xhr.onerror = function () {
-                fail(_('Could not reach musicbrainz.org.'));
+                fail(_('Could not reach musicbrainz.org.'), 'network');
             };
 
             try {
                 xhr.send();
             } catch (e) {
-                fail(errorText(e));
+                fail(errorText(e), 'network');
             }
         });
     }
 
     /** Sends one request, keeping the API's one-per-second spacing. */
     async function sendAsync(url) {
-        if (window._cleanUpCalled) throw new Error(_('Cancelled.'));
+        if (window._cleanUpCalled) throw makeError(_('Cancelled.'), 'cancelled');
 
         var waitMs = MIN_INTERVAL_MS - (now() - lastRequestAt);
         if (waitMs > 0) await wait(waitMs);
@@ -211,7 +221,7 @@
         lastRequestAt = now();
         requestCount++;
 
-        if (window._cleanUpCalled) throw new Error(_('Cancelled.'));
+        if (window._cleanUpCalled) throw makeError(_('Cancelled.'), 'cancelled');
 
         var text = await requestOnce(url);
         if (text === null) return null;
@@ -219,7 +229,7 @@
         try {
             return JSON.parse(text);
         } catch (e) {
-            throw new Error(_('MusicBrainz returned a response that is not JSON.'));
+            throw makeError(_('MusicBrainz returned a response that is not JSON.'), 'bad-response');
         }
     }
 
@@ -272,7 +282,7 @@
 
     async function fetchReleaseAsync(releaseId) {
         var id = normalizeReleaseId(releaseId);
-        if (!id) throw new Error(_('There is no MusicBrainz release ID to look up.'));
+        if (!id) throw makeError(_('There is no MusicBrainz release ID to look up.'), 'missing-id');
 
         if (cache.has(id)) return cache.get(id);
 
@@ -284,7 +294,7 @@
             var release = await fetchJsonWithRetriesAsync(url);
 
             if (!release) {
-                throw new Error(_('MusicBrainz is busy right now. Try again in a moment.'));
+                throw makeError(_('MusicBrainz is busy right now. Try again in a moment.'), 'busy');
             }
 
             await attachReleaseGroupUrlRelationsAsync(release);

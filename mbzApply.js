@@ -593,6 +593,9 @@
                 disc: item.disc,
                 track: item.track,
                 title: text(item.values.title),
+                // The track's credit on the release, which equals the release
+                // artist unless the release carries per-track credits.
+                artist: text(item.values.artist),
                 length: text(item.values.length),
                 isrc: text(item.values.isrc),
                 recordingId: text(item.trackTags.MUSICBRAINZ_TRACKID)
@@ -747,6 +750,7 @@
                 disc: leadingInt(track.discNumber),
                 number: leadingInt(track.trackNumber),
                 title: text(track.title),
+                artist: text(track.artist),
                 pending: pending,
                 matched: !!pending.matched,
                 changes: pending.matched ? (pending.fields || []).length : 0,

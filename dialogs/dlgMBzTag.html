@@ -45,6 +45,23 @@
             margin-bottom: 6px;
         }
 
+        /* Section cards: the rounded, titled box MediaMonkey's settings panels
+           draw around a fieldset, so the window reads as a few clear blocks
+           instead of one long sheet. The legend owns the title. */
+        .mbzCard {
+            box-sizing: border-box;
+            min-width: 0;
+            min-inline-size: 0;
+            margin: 0 0 10px 0;
+            padding: 4px 12px 12px 12px;
+            border: 1px solid rgba(128, 128, 128, 0.45);
+            border-radius: 6px;
+        }
+        .mbzCard > legend {
+            padding: 0 6px;
+            font-weight: bold;
+        }
+
         .mbzMetaTable { border-collapse: collapse; font-size: 0.95em; width: 100%; }
         .mbzMetaTable th {
             /* The skin centres `th`; the label column must stay flush left. */
@@ -160,13 +177,17 @@
             padding-top: 8px;
             border-top: 1px solid rgba(128, 128, 128, 0.35);
         }
+        .mbzPending { opacity: 0.75; min-width: 0; }
     </style>
 </head>
 
 <body data-posSaveName="dlgMBzTag" data-defaultSize="1200,960">
     <div class="flex column fill padding mbzTagRoot" style="gap: 10px;">
 
-        <label data-id="summary" class="padding" data-localize>Reading the release from MusicBrainz...</label>
+        <div class="flex row" style="align-items: center; gap: 10px;">
+            <label data-id="summary" class="padding fill" data-localize>Reading the release from MusicBrainz...</label>
+            <div class="button mbzButton mbzHidden" data-id="btnRetry" data-localize>Retry</div>
+        </div>
         <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
 
         <div class="flex row" data-id="searchRow" style="display: none; align-items: center; gap: 8px;">
@@ -174,23 +195,29 @@
             <label data-id="searchStatus" class="mbzNote"></label>
         </div>
 
-        <div class="mbzLinks mbzHidden" data-id="linksBar"></div>            <div class="mbzTagScroll" data-id="scrollColumn">
-            <div data-id="metaScroll" class="mbzHidden">
-                <table data-id="meta" class="mbzMetaTable">
-                    <tbody data-id="metaRows"></tbody>
-                </table>
-            </div>
+        <div class="mbzLinks mbzHidden" data-id="linksBar"></div>
 
-            <!-- The lookup key itself: the album's Albums.MBGID. -->
-            <div class="flex row mbzIdRow mbzHidden" data-id="albumIdRow">
-                <label class="mbzLabel" data-localize>Album release ID</label>
-                <div data-id="albumIdValue" class="mbzIdInput" data-control-class="Edit"></div>
-                <div class="button mbzButton" data-id="btnSaveAlbumId" data-localize>Save ID</div>
-                <label data-id="albumIdStatus" class="mbzNote fill"></label>
-            </div>
+        <div class="mbzTagScroll" data-id="scrollColumn">
+            <fieldset class="mbzSection mbzCard mbzHidden" data-id="releaseCard">
+                <legend class="mbzCardTitle" data-localize>Release</legend>
 
-            <div class="mbzSection mbzHidden" data-id="fieldsSection">
-                <div class="mbzSectionTitle" data-localize>Fields to write</div>
+                <div data-id="metaScroll" class="mbzHidden">
+                    <table data-id="meta" class="mbzMetaTable">
+                        <tbody data-id="metaRows"></tbody>
+                    </table>
+                </div>
+
+                <!-- The lookup key itself: the album's Albums.MBGID. -->
+                <div class="flex row mbzIdRow mbzHidden" data-id="albumIdRow">
+                    <label class="mbzLabel" data-localize>Album release ID</label>
+                    <div data-id="albumIdValue" class="mbzIdInput" data-control-class="Edit"></div>
+                    <div class="button mbzButton" data-id="btnSaveAlbumId" data-localize>Save ID</div>
+                    <label data-id="albumIdStatus" class="mbzNote fill"></label>
+                </div>
+            </fieldset>
+
+            <fieldset class="mbzSection mbzCard mbzHidden" data-id="fieldsSection">
+                <legend class="mbzCardTitle" data-localize>Fields to write</legend>
                 <table class="mbzTable">
                     <thead>
                         <tr>
@@ -203,29 +230,29 @@
                     </thead>
                     <tbody data-id="fieldRows"></tbody>
                 </table>
-            </div>
+            </fieldset>
 
-            <div class="mbzSection" data-id="trackSection">
-                <div class="mbzSectionTitle" data-localize>Selected tracks</div>
+            <fieldset class="mbzSection mbzCard" data-id="trackSection">
+                <legend class="mbzCardTitle" data-localize>Selected tracks</legend>
                 <table class="mbzTable">
                     <thead>
                         <tr>
                             <th data-localize>Disc</th>
                             <th data-localize>Track</th>
                             <th data-localize>Library title</th>
+                            <th data-localize>Library artist</th>
                             <th data-localize>Release title</th>
+                            <th data-localize>Release artist</th>
                             <th data-localize>Length</th>
-                            <th data-localize>ISRC</th>
-                            <th data-localize>Recording ID</th>
                             <th data-localize>Changes</th>
                         </tr>
                     </thead>
                     <tbody data-id="trackRows"></tbody>
                 </table>
-            </div>
+            </fieldset>
 
-            <div class="mbzSection">
-                <div class="mbzSectionTitle" data-localize>MusicBrainz tags</div>
+            <fieldset class="mbzSection mbzCard" data-id="tagSection">
+                <legend class="mbzCardTitle" data-localize>MusicBrainz tags</legend>
                 <label data-id="tagSummary"></label>
 
                 <table class="mbzTable" data-id="tagTable">
@@ -253,13 +280,14 @@
                 </div>
 
                 <label data-id="tagStatus" class="mbzNote"></label>
-            </div>
+            </fieldset>
 
             <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply. Closing the window writes nothing.</label>
         </div>
 
         <div class="flex row mbzFooter">
             <div class="button mbzButton" data-id="btnApply" data-localize>Apply</div>
+            <label data-id="pendingSummary" class="mbzPending"></label>
             <label data-id="applyStatus" class="fill"></label>
             <label data-id="buildStamp" class="mbzStamp"></label>
         </div>
