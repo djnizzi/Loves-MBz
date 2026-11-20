@@ -1,4 +1,4 @@
-# Loves MBz
+# Loves MBz for MediaMonkey
 
 [![Latest release](https://img.shields.io/github/v/release/djnizzi/Loves-MBz?label=release&sort=semver)](https://github.com/djnizzi/Loves-MBz/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/djnizzi/Loves-MBz/total)](https://github.com/djnizzi/Loves-MBz/releases)
