@@ -91,3 +91,7 @@ folder in for development, see [TECHNICAL.md](TECHNICAL.md).
 | [AGENTS.md](AGENTS.md) | the write-path contract for anyone changing the tagging engine |
 | [CHANGELOG.md](CHANGELOG.md) | the version history |
 | [ROADMAP.md](ROADMAP.md) | what has shipped and what is next |
+
+---
+
+2026 · made with ❤️ by NiZ Design
