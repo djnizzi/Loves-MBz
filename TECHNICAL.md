@@ -468,9 +468,13 @@ MediaMonkey loads addons from a folder named after the addon id
 | Current user | `%APPDATA%\MediaMonkey5\Scripts\lovesMBz\` |
 | All users | `%ProgramFiles%\MediaMonkey5\Scripts\lovesMBz\` |
 
-Editing the dialog files only needs the dialog to be reopened; `info.json`,
-`init.js`, `actions_add.js` and `controls/trackListView_add.js` are read at
-startup, so restart MediaMonkey for those.
+The dialog script (`dialogs/dlgMBzTag.js`) is read again each time the window
+opens, but its page (`dialogs/dlgMBzTag.html`) is not: MediaMonkey keeps the
+page it loaded when the process started, so a change to the markup or CSS only
+shows after MediaMonkey is fully restarted. `info.json`, `init.js`,
+`actions_add.js` and `controls/trackListView_add.js` are read at startup too and
+need the same restart. That is why the window's busy ring and the card gap are
+pinned inline in the script as well as in the page.
 
 ## Building an `.mmip`
 
