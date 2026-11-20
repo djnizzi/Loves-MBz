@@ -1,3 +1,7 @@
 # Built add-on packages are produced per release and attached to the GitHub
 # release; only the add-on's source files belong in the repository.
 LovesMBz*.mmip
+
+# The README cover's Photoshop source is a working file; the exported image is
+# what the repository carries.
+*.psd

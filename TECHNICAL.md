@@ -577,6 +577,7 @@ dialogs/dlgMBzTag.html             Tag from MusicBrainz markup
 dialogs/dlgMBzTag.js               Tag from MusicBrainz: release, fields, tags
 loves-mbz.png                      add-on icon (info.json)
 skin/icon/lovesMBz.svg             toolbar and menu icon
+docs/lovesmbz-cover.jpg            README cover image (its .psd is ignored)
 AGENTS.md                          the write-path contract for future changes
 TECHNICAL.md                       this document: usage in detail, internals
 UI-ROADMAP.md                      the UI audit and prioritised design plan
