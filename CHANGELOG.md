@@ -4,6 +4,126 @@ All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags. A test build names its channel in the window
 footer and in the package, because `info.json` must stay three numbers.
 
+## 0.5.3 "Responsive" (2026-11-20)
+
+The window says when it is working, and stops drawing cards it has nothing to
+put in. "Responsive" because every wait in the window — saving an album release
+ID, reloading after **Apply** — is now visible while it happens, instead of the
+window looking stuck.
+
+- **The window shows that it is working.** Saving a release ID starts a release
+lookup in the background, and reloading after **Apply** reads the selection
+again; until now the only sign of either was a sentence, and **Save ID** stayed
+clickable. A small ring now turns beside the header sentence for as long as
+anything is being read or written, **Save ID** is greyed for the duration, and
+the window's cursor becomes the system's progress cursor. The ring is counted,
+not flagged: saving an ID, the reload behind it and Apply's write run on top of
+one another, so it stays up until the last of them has finished.
+- **The ring does not depend on the page or the skin.** Like the italics and the
+card gap, `dialogs/dlgMBzTag.js` builds it when the host is still serving an
+older copy of `dialogs/dlgMBzTag.html`, and its size, border and colour are
+pinned inline because MediaMonkey applies its skin sheet after the window's own:
+styled only by the page, the element was there but drew nothing. A script timer
+rotates it as well, so it turns even where the page's animation is ignored.
+- **No release, no comparison cards.** An album without a release ID shows only
+the release lookup and its existing MusicBrainz tags. **Fields to write** and
+**Selected tracks** are not drawn at all until a release is loaded — including
+right after **Save ID** succeeds — instead of standing there empty. The cards
+start hidden and are cleared on every reload, so a failed or replaced lookup
+cannot leave an old table behind. They also survive the skin: hiding sets the
+declaration inline with `!important`.
+- **Guidance reads as guidance.** The explanatory notes, the search and save
+statuses, the pending-work line, warnings and Apply's report are italic, so a
+sentence is not mistaken for a value. A release title in the header stays
+upright. The notes and the gap are pinned inline too, so the result does not
+depend on which copy of the page the host has loaded.
+- **More air between the cards.** The gap is now `1rem` instead of 10px.
+
+### Upgrading from 0.5.2
+
+Nothing changes in the tags, the library or the write path. The release-ID
+lookup, the disc/track matching, `applySelectionAsync` and the extended-tag rules
+are the same; 0.5.3 changes what the window draws and what it shows while it
+waits. A change to the window's page only appears after MediaMonkey is fully
+restarted, because the host keeps the page it loaded at start-up.
+
+## 0.5.3-rc5 (2026-11-19)
+
+Test build for the 0.5.3 line; `info.json` says `0.5.3`.
+
+- **The ring is visible now.** rc4's ring was drawn only by the dialog's own
+stylesheet, and the host applies its skin sheet afterwards: the element was
+there, but it lost its border and size and drew nothing. Its shape, size and
+colour are now pinned inline as well — the same fix the italics and the card
+gap needed — so the skin cannot take them away.
+- **It turns even where the page's animation is ignored.** A script timer
+rotates the ring as well; the CSS animation simply wins when it does run. It is
+larger and darker than before, so it reads at a glance.
+- **A busy pointer while anything runs.** The window's cursor becomes the
+system's progress cursor for the duration of a lookup or a write, so the wait
+is visible even away from the ring.
+
+## 0.5.3-rc4 (2026-11-19)
+
+Test build for the 0.5.3 line; `info.json` says `0.5.3`.
+
+- **The window shows that it is working.** Saving a release ID starts a
+release lookup in the background, and until now the only sign of it was the
+sentence next to the field. A small ring now turns beside the header sentence
+while anything is being read or written, and **Save ID** is greyed for the
+duration. The ring is counted, not flagged: saving an ID, the reload behind it
+and Apply's write run on top of each other, so it stays up until the last of
+them has finished.
+- **The ring does not depend on the page.** Like the italics and the card gap,
+`dialogs/dlgMBzTag.js` builds it when the host is still serving an older copy
+of `dialogs/dlgMBzTag.html`, so the feedback appears before MediaMonkey is
+restarted.
+
+## 0.5.3-rc3 (2026-11-18)
+
+Test build for the 0.5.3 line; `info.json` says `0.5.3`.
+
+- **Style pinned from script.** Hiding worked, but the italic notes and the
+wider card gap did not change on screen: they lived in the dialog's stylesheet,
+and the host was still serving the previous page while running the new script.
+Both are now applied inline at start-up — `font-style: italic !important` on
+every guidance label, `margin: 0 0 1rem 0 !important` on every card — so the
+result no longer depends on which copy of the page the host has.
+- **Every guidance line is italic.** `setSummary` treats a sentence as an aside
+by default and only a loaded release title is upright, so statuses set before
+the release is read ("Reading the selection…", multi-album, read errors) are
+covered too.
+
+## 0.5.3-rc2 (2026-11-18)
+
+Test build for the 0.5.3 line; `info.json` says `0.5.3`.
+
+- **The cards hide even under the skin.** MediaMonkey's stylesheet is applied
+after this window's and styles `fieldset`, so `display: none` on a class was
+being outranked: an album with no release ID still drew the empty **Fields to
+write** and **Selected tracks** cards. Hiding now also sets the declaration
+inline with `!important`, the same technique that keeps the host's `Edit`
+controls in check. The field card additionally refuses to return until
+`hasRelease` is true.
+- **The italics and the 1rem gap survive the skin.** Both are marked
+`!important` so a host rule cannot reset them.
+
+## 0.5.3-rc1 (2026-11-18)
+
+Test build for the 0.5.3 line; `info.json` says `0.5.3`.
+
+- **No release, no comparison cards.** An album without a release ID now shows
+only the release lookup and its existing MusicBrainz tags. **Fields to write**
+and **Selected tracks** are not drawn at all until a release is loaded —
+including right after **Save ID** succeeds — instead of standing there empty.
+The cards also start hidden and are cleared on every reload, so a failed or
+replaced lookup cannot leave an old table behind.
+- **Guidance reads as guidance.** The explanatory notes, the search and save
+statuses, the pending-work line, warnings and Apply's report are italic, so a
+sentence is not mistaken for a value. A release title in the header stays
+upright; the "Reading the release…" and no-release sentences do not.
+- **More air between the cards.** The gap is now `1rem` instead of 10px.
+
 ## 0.5.2 "Prettier" (2026-11-15)
 
 A window you can read at a glance, and an Apply button that cannot be pressed

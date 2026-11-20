@@ -33,8 +33,8 @@ without a release ID is skipped without a request; the window offers a button
 that opens the MusicBrainz website search by album and artist, but the add-on
 itself never searches by name.
 
-Current version: **0.5.2** "Prettier". A test build names its channel (for
-example `0.5.2-rc1`) in the window footer and in the package.
+Current version: **0.5.3** "Responsive". A test build names its channel (for
+example `0.5.3-rc1`) in the window footer and in the package.
 
 ---
 
@@ -127,7 +127,7 @@ the new ID. An empty field clears the ID, and the window falls back to the
 no-release-ID state with **Search MusicBrainz**. Like any library-side write,
 MediaMonkey's own lookup can overwrite it later.
 
-The footer of the window shows the add-on version — `Loves MBz 0.5.2` for this
+The footer of the window shows the add-on version — `Loves MBz 0.5.3` for this
 release, with a test build's channel appended — so you can tell which build is
 running before trusting a screenshot or a report from an older one. The build
 time follows it.

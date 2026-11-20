@@ -110,6 +110,25 @@ assert.match(dialogHtml, /<legend class="mbzCardTitle" data-localize>Fields to w
     'the card needs a titled legend');
 assert.match(dialogHtml, /data-id="releaseCard"/, 'the release block needs its card');
 assert.match(dialogCode, /function syncReleaseCard/, 'an empty release card must hide itself');
+assert.match(dialogHtml, /\.mbzCard \{[^}]*margin: 0 0 1rem 0/, 'cards need room between them');
+assert.match(dialogHtml, /\.mbzInfo \{[^}]*font-style: italic/,
+    'guidance must read as an aside');
+assert.match(dialogHtml, /<fieldset class="mbzSection mbzCard mbzHidden" data-id="trackSection"/,
+    'the track card starts hidden');
+assert.match(dialogCode, /show\(UI\.fieldsSection, false\);\s*show\(UI\.trackSection, false\);/,
+    'a release that is not loaded hides the comparison cards');
+assert.match(dialogCode, /setProperty\('display', 'none', 'important'\)/,
+    'hiding must outrank the skin stylesheet, as the control sizing does');
+assert.match(dialogCode, /function pinCardSpacing/,
+    'the card gap must be pinned from script, not only the page stylesheet');
+assert.match(dialogCode, /setProperty\('margin', '0 0 1rem 0', 'important'\)/,
+    'the 1rem gap must be applied inline');
+assert.match(dialogCode, /function italicizeInfo/,
+    'the asides must be italicized from script');
+assert.match(dialogCode, /setProperty\('font-style', 'italic', 'important'\)/,
+    'italic text must outrank the host font');
+assert.match(dialogCode, /show\(UI\.fieldsSection,\s*!!state\.hasRelease/,
+    'the field card must not return before a release is loaded');
 assert.match(dialogHtml, /\.mbzMetaTable th \{[^}]*text-align: left !important/,
     'the meta labels must be left aligned, not centred by the skin');
 assert.match(dialogCode, /function syncTables/, 'empty tables must not draw their header row');
@@ -184,6 +203,31 @@ assert.match(dialogCode, /!state\.readOnly && !state\.busy && !!state\.plan/,
     'Apply needs a plan and an idle window');
 assert.match(dialogCode, /state\.plan = null;\s*\n\s*updatePending\(\);\s*\n\s*refreshApply/,
     'a reload must grey Apply until the new plan exists');
+
+// Background work shows the busy ring: one counter, one toggle, and every
+// lookup and write runs under it. The ring is built in the window as well as
+// drawn by the page, for the same reason the italics are.
+assert.match(dialogHtml, /data-id="working"/, 'the header must carry the busy ring');
+assert.match(dialogHtml, /\.mbzSpinner \{[^}]*animation: mbzSpin/, 'the busy ring must turn');
+assert.match(dialogCode, /working: qid\('working'\)/, 'the window must look the ring up');
+assert.match(dialogCode, /function syncWorking/, 'the ring must be driven from one place');
+assert.match(dialogCode, /function beginWork/, 'work must be counted, not flagged');
+assert.match(dialogCode, /function trackWork/, 'lookups must run under the ring');
+assert.match(dialogCode, /function endWork/, 'the ring must clear when the work ends');
+assert.match(dialogCode, /trackWork\(loadTagRowsAsync/, 'a reload must show the ring');
+assert.match(dialogCode, /trackWork\(window\.localPromise\(mbz\.setAlbumGuidAsync/,
+    'saving a release ID must show the ring');
+assert.match(dialogCode, /trackWork\(window\.localPromise\(apply\.applySelectionAsync/,
+    'Apply must show the ring');
+assert.match(dialogCode, /createElement\('style'\)/, 'a page older than the script must still get the ring');
+
+// The ring has to survive the host's skin sheet and an engine that ignores the
+// page's animation, so its shape is pinned inline and it turns from script.
+assert.match(dialogCode, /function pinWorkingStyle/, 'the ring must be styled inline, like the italics');
+assert.match(dialogCode, /set\('border', '3px solid/, 'the ring must draw its own border inline');
+assert.match(dialogCode, /function startSpin/, 'the ring must turn from script as well');
+assert.match(dialogCode, /setProperty\('transform', 'rotate\(/, 'the script spin must rotate the ring');
+assert.match(dialogCode, /setProperty\('cursor', 'progress'/, 'the window must show a busy cursor');
 
 // The build the window reports must be the build that was packaged.
 const infoVersion = JSON.parse(read('info.json')).version;

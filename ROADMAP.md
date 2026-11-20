@@ -305,9 +305,9 @@ window cannot disagree.
 - [x] `AGENTS.md` rewritten to the contract above.
 - [x] README: the Track Properties sections become the new window; the
       screenshot list loses the tab.
-- [x] `info.json` → 0.5.2, the "Prettier" CHANGELOG entry, and a fresh
+- [x] `info.json` → 0.5.3, the "Responsive" CHANGELOG entry, and a fresh
       `LovesMBz.mmip`.
-- [x] Tag `v0.5.2` and attach `LovesMBz.mmip` to the GitHub release.
+- [x] Tag `v0.5.3` and attach `LovesMBz.mmip` to the GitHub release.
 
 ### Known consequences
 

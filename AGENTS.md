@@ -63,8 +63,23 @@ The packager runs `tests/tag-path.test.js` first and stops when it fails, then
 copies the sources into a temporary folder, fills the `BUILD_TIME` slot in
 `dialogs/dlgMBzTag.js` (in the copy and in the source, so a copied dialog reports
 the same build), and writes `LovesMBz.mmip` with `info.json` at the archive
-root. Use it instead of zipping by hand: a hand-made archive has no build time,
-and the version alone cannot tell two builds apart.
+root. It then reopens the archive and checks it entry by entry, so a package
+that would install the dialog script without `dialogs/dlgMBzTag.html` is
+refused instead of shipping. Use it instead of zipping by hand: a hand-made
+archive has no build time and no such check, and the version alone cannot tell
+two builds apart.
+
+An `.mmip` replaces the files in `%APPDATA%\MediaMonkey5\Scripts\lovesMBz`
+straight away, but MediaMonkey keeps the dialog page it loaded when the process
+started: the script is read again on each open, the page is not. A change to
+`dialogs/dlgMBzTag.html` therefore only shows after MediaMonkey is fully
+restarted, which is why the notes and the card gap are pinned inline in
+`dialogs/dlgMBzTag.js` as well as in the page, and why the busy ring is created
+there when the page has none. The ring's size, border and animation are pinned
+inline too, and it is rotated from script as well: the host applies its skin
+sheet after the page's, so a ring styled only by the page draws nothing (that
+is how rc4 happened), and an inline animation is only as good as the engine's
+support for it.
 
 ## Other invariants kept from 0.4.x
 

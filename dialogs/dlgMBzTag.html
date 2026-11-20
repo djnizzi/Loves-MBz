@@ -52,7 +52,7 @@
             box-sizing: border-box;
             min-width: 0;
             min-inline-size: 0;
-            margin: 0 0 10px 0;
+            margin: 0 0 1rem 0 !important;
             padding: 4px 12px 12px 12px;
             border: 1px solid rgba(128, 128, 128, 0.45);
             border-radius: 6px;
@@ -145,13 +145,33 @@
         .mbzLinks { white-space: nowrap; }
         .mbzLinks a { margin-right: 10px; }
 
-        .mbzNote { opacity: 0.7; }
+        /* Explanations, hints and results read as asides, not as data. */
+        .mbzNote { opacity: 0.7; font-style: italic !important; }
+        .mbzInfo { font-style: italic !important; }
         /* The same weight as the meta table's labels. */
         .mbzLabel { opacity: 0.7; font-size: 0.95em; }
-        .mbzWarning { color: #d9534f; white-space: normal; }
+        .mbzWarning { color: #d9534f; white-space: normal; font-style: italic !important; }
         .mbzHidden { display: none !important; }
         .mbzDisabled { opacity: 0.5; pointer-events: none; }
         .mbzButton { padding: 0 14px; line-height: 24px; white-space: nowrap; }
+
+        /* The busy ring: it turns while a lookup or a write runs, next to the
+           sentence that says what is running. */
+        .mbzSpinner {
+            box-sizing: border-box;
+            flex: 0 0 auto;
+            width: 16px;
+            height: 16px;
+            min-width: 16px;
+            min-height: 16px;
+            padding: 0;
+            margin: 0;
+            border: 3px solid rgba(128, 128, 128, 0.55);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: mbzSpin 0.8s linear infinite;
+        }
+        @keyframes mbzSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
         .mbzSuggest, .mbzAdd { flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 6px; padding-top: 6px; }
         .mbzChip { cursor: pointer; padding: 0 10px; line-height: 22px; }
@@ -177,7 +197,7 @@
             padding-top: 8px;
             border-top: 1px solid rgba(128, 128, 128, 0.35);
         }
-        .mbzPending { opacity: 0.75; min-width: 0; }
+        .mbzPending { opacity: 0.75; min-width: 0; font-style: italic !important; }
     </style>
 </head>
 
@@ -185,7 +205,8 @@
     <div class="flex column fill padding mbzTagRoot" style="gap: 10px;">
 
         <div class="flex row" style="align-items: center; gap: 10px;">
-            <label data-id="summary" class="padding fill" data-localize>Reading the release from MusicBrainz...</label>
+            <div class="mbzSpinner mbzHidden" data-id="working"></div>
+            <label data-id="summary" class="padding fill mbzInfo" data-localize>Reading the release from MusicBrainz...</label>
             <div class="button mbzButton mbzHidden" data-id="btnRetry" data-localize>Retry</div>
         </div>
         <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
@@ -232,7 +253,7 @@
                 </table>
             </fieldset>
 
-            <fieldset class="mbzSection mbzCard" data-id="trackSection">
+            <fieldset class="mbzSection mbzCard mbzHidden" data-id="trackSection">
                 <legend class="mbzCardTitle" data-localize>Selected tracks</legend>
                 <table class="mbzTable">
                     <thead>
@@ -253,7 +274,7 @@
 
             <fieldset class="mbzSection mbzCard" data-id="tagSection">
                 <legend class="mbzCardTitle" data-localize>MusicBrainz tags</legend>
-                <label data-id="tagSummary"></label>
+                <label data-id="tagSummary" class="mbzInfo"></label>
 
                 <table class="mbzTable" data-id="tagTable">
                     <thead>
@@ -288,7 +309,7 @@
         <div class="flex row mbzFooter">
             <div class="button mbzButton" data-id="btnApply" data-localize>Apply</div>
             <label data-id="pendingSummary" class="mbzPending"></label>
-            <label data-id="applyStatus" class="fill"></label>
+            <label data-id="applyStatus" class="fill mbzInfo"></label>
             <label data-id="buildStamp" class="mbzStamp"></label>
         </div>
     </div>

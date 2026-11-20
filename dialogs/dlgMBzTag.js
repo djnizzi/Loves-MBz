@@ -21,13 +21,13 @@ localRequirejs('mbzMbgid');
  * The build this window belongs to, shown in the footer. Keep it equal to
  * info.json: tests/tag-path.test.js fails when the two disagree.
  * MediaMonkey only accepts a three-number manifest version, so a test build
- * carries its channel separately and reads as 0.5.2-rc1 in the footer.
+ * carries its channel separately and reads as 0.5.3-rc1 in the footer.
  */
-var ADDON_VERSION = '0.5.2';
-var BUILD_CHANNEL = '';         // test builds set 'rc1', 'rc2', …
+var ADDON_VERSION = '0.5.3';
+var BUILD_CHANNEL = '';      // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-15 20:30';
+var BUILD_TIME = '2026-11-20 17:13';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
@@ -245,6 +245,7 @@ function init(params) {
 
     var UI = {
         summary: qid('summary'),
+        working: qid('working'),
         btnRetry: qid('btnRetry'),
         warning: qid('warning'),
         searchRow: qid('searchRow'),
@@ -307,8 +308,58 @@ function init(params) {
     var searchUrl = '';
     var countToken = 0;
 
-    function setSummary(text) {
-        if (UI.summary) UI.summary.textContent = text;
+    /**
+     * Guidance is italic by default; only a loaded release title is data and
+     * stays upright. The style is set inline as well as by class: the host's
+     * sheet can reset a label's font, and MediaMonkey keeps the dialog page it
+     * first loaded while reading this script again, so the page on screen can be
+     * older than the class the markup below would give it.
+     */
+    function setSummary(text, info) {
+        if (!UI.summary) return;
+        if (typeof info === 'undefined') info = true;
+
+        UI.summary.textContent = text;
+        UI.summary.classList.toggle('mbzInfo', !!info);
+
+        if (UI.summary.style) {
+            if (info && UI.summary.style.setProperty) {
+                UI.summary.style.setProperty('font-style', 'italic', 'important');
+            } else if (UI.summary.style.removeProperty) {
+                UI.summary.style.removeProperty('font-style');
+            }
+        }
+    }
+
+    /* The labels that carry sentences rather than values. */
+    var INFO_LABELS = ['summary', 'warning', 'searchStatus', 'albumIdStatus', 'tagSummary',
+        'tagEmpty', 'tagStatus', 'note', 'pendingSummary', 'applyStatus'];
+
+    /**
+     * Pin the asides italic, inline: the skin sheet cannot reset an inline
+     * important, and a page MediaMonkey loaded before the last install still
+     * ends up italic.
+     */
+    function italicizeInfo() {
+        INFO_LABELS.forEach(function (key) {
+            var element = UI[key];
+            if (element && element.style && element.style.setProperty) {
+                element.style.setProperty('font-style', 'italic', 'important');
+            }
+        });
+    }
+
+    /** Pin the gap between the cards, inline, for the same reason. */
+    function pinCardSpacing() {
+        if (typeof document.querySelectorAll !== 'function') return;
+
+        var cards = document.querySelectorAll('.mbzCard');
+
+        for (var i = 0; i < cards.length; i++) {
+            if (cards[i].style && cards[i].style.setProperty) {
+                cards[i].style.setProperty('margin', '0 0 1rem 0', 'important');
+            }
+        }
     }
 
     function setWarning(text) {
@@ -335,12 +386,227 @@ function init(params) {
 
     function show(element, visible) {
         if (!element) return;
-        if (visible) element.classList.remove('mbzHidden');
-        else element.classList.add('mbzHidden');
+
+        if (visible) {
+            element.classList.remove('mbzHidden');
+            if (element.style) {
+                if (element.style.removeProperty) element.style.removeProperty('display');
+                else element.style.display = '';
+            }
+            return;
+        }
+
+        element.classList.add('mbzHidden');
+
+        // The skin's stylesheet is applied after this document's and styles
+        // fieldsets, so `display: none` on the class can lose there. An inline
+        // important declaration is the one rule it cannot outrank.
+        if (element.style) {
+            if (element.style.setProperty) element.style.setProperty('display', 'none', 'important');
+            else element.style.display = 'none';
+        }
     }
 
     function showRetry(visible) {
         show(UI.btnRetry, !!visible);
+    }
+
+    /* ---------------------------------------------------------------- *
+     * The busy ring
+     * ---------------------------------------------------------------- */
+
+    var workingCount = 0;
+
+    /*
+     * The page's own rule, repeated here for the same reason the italics and
+     * the card gap are: MediaMonkey keeps the dialog document it loaded while
+     * reading this script again, so right after an install the page can be
+     * older than the script. A page without the ring then still gets one.
+     */
+    var WORKING_STYLE = '.mbzSpinner{box-sizing:border-box;flex:0 0 auto;width:16px;height:16px;'
+        + 'min-width:16px;min-height:16px;padding:0;margin:0;'
+        + 'border:3px solid rgba(128,128,128,0.55);border-top-color:currentColor;'
+        + 'border-radius:50%;animation:mbzSpin 0.8s linear infinite}'
+        + '@keyframes mbzSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+
+    /**
+     * The ring's size, shape and colour go inline as well as into the page.
+     * The host applies its skin sheet after this document's, and a generic rule
+     * there (or a page older than the install) leaves the div without a border
+     * or without its size, which draws nothing at all.
+     */
+    function pinWorkingStyle(spinner) {
+        if (!spinner || !spinner.style || !spinner.style.setProperty) return;
+
+        var style = spinner.style;
+
+        function set(name, value) {
+            style.setProperty(name, value, 'important');
+        }
+
+        set('box-sizing', 'border-box');
+        set('width', '16px');
+        set('height', '16px');
+        set('min-width', '16px');
+        set('min-height', '16px');
+        set('max-width', '16px');
+        set('max-height', '16px');
+        set('flex', '0 0 auto');
+        set('padding', '0');
+        set('margin', '0');
+        set('background', 'none');
+        set('border', '3px solid rgba(128,128,128,0.55)');
+        set('border-top-color', 'currentColor');
+        set('border-radius', '50%');
+        set('animation', 'mbzSpin 0.8s linear infinite');
+    }
+
+    /*
+     * The ring turns itself from script too: an inline important animation is
+     * only as good as the engine's support for it, and a still ring reads as a
+     * decoration rather than as "something is happening". The CSS animation
+     * outranks this plain transform when it does run, so the two never fight.
+     */
+    var spinTimer = null;
+    var spinAngle = 0;
+    var spinElement = null;
+
+    function startSpin(spinner) {
+        spinElement = spinner;
+        if (spinTimer || typeof setInterval !== 'function') return;
+
+        spinAngle = 0;
+
+        spinTimer = setInterval(function () {
+            var target = spinElement;
+            if (!target || !target.style) return;
+
+            spinAngle = (spinAngle + 30) % 360;
+            if (target.style.setProperty) {
+                target.style.setProperty('transform', 'rotate(' + spinAngle + 'deg)');
+            } else {
+                target.style.transform = 'rotate(' + spinAngle + 'deg)';
+            }
+        }, 80);
+    }
+
+    function stopSpin(spinner) {
+        if (spinTimer) {
+            clearInterval(spinTimer);
+            spinTimer = null;
+        }
+
+        spinElement = null;
+
+        if (spinner && spinner.style && spinner.style.removeProperty) {
+            spinner.style.removeProperty('transform');
+        }
+    }
+
+    /** MediaMonkey's own busy pointer, for the eye that misses the ring. */
+    function syncWorkingCursor(on) {
+        if (typeof document === 'undefined' || !document.body || !document.body.style) return;
+
+        var style = document.body.style;
+        if (!style.setProperty) return;
+
+        if (on) style.setProperty('cursor', 'progress', 'important');
+        else if (style.removeProperty) style.removeProperty('cursor');
+        else style.cursor = '';
+    }
+
+    function workingElement() {
+        if (UI.working) return UI.working;
+        if (typeof document === 'undefined' || !document.body || !document.createElement) return null;
+
+        var existing = document.querySelector ? document.querySelector('[data-id=working]') : null;
+        if (existing) {
+            UI.working = existing;
+            return existing;
+        }
+
+        if (!document.querySelector || !document.querySelector('[data-id=workingStyle]')) {
+            var style = document.createElement('style');
+            style.setAttribute('data-id', 'workingStyle');
+            style.textContent = WORKING_STYLE;
+            (document.head || document.body).appendChild(style);
+        }
+
+        var spinner = document.createElement('div');
+        spinner.setAttribute('data-id', 'working');
+        spinner.className = 'mbzSpinner';
+        spinner.style.display = 'none';
+
+        var row = UI.summary && UI.summary.parentNode;
+        if (row && row.insertBefore) row.insertBefore(spinner, UI.summary);
+        else document.body.appendChild(spinner);
+
+        UI.working = spinner;
+        return spinner;
+    }
+
+    /** Save ID has nothing to save while anything is being read or written. */
+    function saveIdDisabled() {
+        return state.busy || workingCount > 0;
+    }
+
+    /** Shows the ring while at least one lookup or write is running. */
+    function syncWorking() {
+        var spinner = workingElement();
+        var running = workingCount > 0;
+
+        if (spinner) {
+            pinWorkingStyle(spinner);
+            show(spinner, running);
+
+            if (running && spinner.style && spinner.style.setProperty) {
+                spinner.style.setProperty('display', 'block', 'important');
+            }
+
+            spinner.title = running ? _('Working...') : '';
+
+            if (running) startSpin(spinner);
+            else stopSpin(spinner);
+        }
+
+        syncWorkingCursor(running);
+
+        if (UI.btnSaveAlbumId) UI.btnSaveAlbumId.classList.toggle('mbzDisabled', saveIdDisabled());
+    }
+
+    /**
+     * Counted rather than a flag: saving an ID runs the release lookup, Apply
+     * runs one again afterwards, and the ring has to stay up until the last of
+     * them has finished.
+     */
+    function beginWork() {
+        workingCount++;
+        syncWorking();
+    }
+
+    function endWork() {
+        if (window._cleanUpCalled) {
+            workingCount = 0;
+            stopSpin(null);
+            syncWorkingCursor(false);
+            return;
+        }
+
+        if (workingCount > 0) workingCount--;
+        syncWorking();
+    }
+
+    /** Runs a lookup under the ring, however the lookup ends. */
+    function trackWork(promise) {
+        beginWork();
+
+        return Promise.resolve(promise).then(function (value) {
+            endWork();
+            return value;
+        }, function (error) {
+            endWork();
+            throw error;
+        });
     }
 
     /** The release card exists only while it has something in it. */
@@ -378,6 +644,7 @@ function init(params) {
         show(UI.albumIdRow, false);
         show(UI.metaScroll, false);
         show(UI.fieldsSection, false);
+        show(UI.trackSection, false);
         show(UI.divergeBar, false);
         show(UI.suggestBar, false);
         show(UI.tagTable, true);
@@ -570,8 +837,10 @@ function init(params) {
             }
         }
 
-        // The field list is only its table: no rows means no section.
-        show(UI.fieldsSection, !!(UI.fieldRows && UI.fieldRows.rows.length));
+        // The field list is only its table, and only once a release is behind
+        // it: no rows or no release means no section.
+        show(UI.fieldsSection,
+            !!state.hasRelease && !!(UI.fieldRows && UI.fieldRows.rows.length));
     }
 
     /* The renders fill their tables synchronously; this runs right after. */
@@ -725,7 +994,7 @@ function init(params) {
         addMeta(_('Tracks'), String(mbzTagReleaseTrackCount(release) || ''));
         renderMeta();
 
-        setSummary(release.title || result.releaseId || '');
+        setSummary(release.title || result.releaseId || '', false);
         renderLinks();
         fitScrollColumn();
     }
@@ -740,13 +1009,20 @@ function init(params) {
         show(UI.metaScroll, false);
         syncReleaseCard();
 
+        // Both cards need a release to compare with: until one is loaded, the
+        // only things to show are the release lookup and the existing tags.
+        if (UI.fieldRows) UI.fieldRows.textContent = '';
+        if (UI.trackRows) UI.trackRows.textContent = '';
+        show(UI.fieldsSection, false);
+        show(UI.trackSection, false);
+
         if (reason === 'no-album') {
-            setSummary(_('This selection has no album, so there is no release to look up.'));
+            setSummary(_('This selection has no album, so there is no release to look up.'), true);
             setSearch('');
             return;
         }
 
-        setSummary(_('This album has no MusicBrainz release ID. Nothing was requested.'));
+        setSummary(_('This album has no MusicBrainz release ID. Nothing was requested.'), true);
         var info = searchTerms();
         if (info) setSearch(mbzTagSearchUrl(info.album, info.artist));
         setNote(_('Search MusicBrainz for this album, then add its release ID to the album. Tag from MusicBrainz still does not query MusicBrainz by name.'));
@@ -782,7 +1058,7 @@ function init(params) {
         if (!editable) return;
 
         mbzTagSetFieldValue(UI.albumIdValue, currentAlbumReleaseId());
-        if (UI.btnSaveAlbumId) UI.btnSaveAlbumId.classList.toggle('mbzDisabled', state.busy);
+        syncWorking();
 
         pinFieldLayout();
     }
@@ -818,8 +1094,9 @@ function init(params) {
 
         function write() {
             setAlbumIdStatus(_('Updating the album...'));
+            setSummary(_('Reading the release from MusicBrainz...'), true);
 
-            window.localPromise(mbz.setAlbumGuidAsync(albumId, 'MBGID', value || '')).then(function () {
+            return trackWork(window.localPromise(mbz.setAlbumGuidAsync(albumId, 'MBGID', value || '')).then(function () {
                 if (window._cleanUpCalled) return null;
 
                 if (state.scope) {
@@ -837,7 +1114,7 @@ function init(params) {
             }, function (error) {
                 if (window._cleanUpCalled) return;
                 setAlbumIdStatus(sprintf(_('Could not update the album: %s'), mbzTagErrorText(error)));
-            });
+            }));
         }
 
         // Filling an empty field overwrites nothing, so it needs no prompt.
@@ -846,7 +1123,7 @@ function init(params) {
             return;
         }
 
-        window.localPromise(mbz.countAlbumTracksAsync(albumId)).then(function (count) {
+        trackWork(window.localPromise(mbz.countAlbumTracksAsync(albumId)).then(function (count) {
             if (window._cleanUpCalled) return;
 
             var message = _('Change the release ID of this album?')
@@ -869,7 +1146,7 @@ function init(params) {
             if (window._cleanUpCalled) return;
             setAlbumIdStatus(sprintf(
                 _('Could not check how many tracks the change covers: %s'), mbzTagErrorText(error)));
-        });
+        }));
     }
 
     function onAlbumIdKey(event) {
@@ -2194,7 +2471,7 @@ function init(params) {
         }, function (error) {
             var retryable = canRetryRelease(error);
 
-            setSummary(sprintf(_('Could not read the release: %s'), mbzTagErrorText(error)));
+            setSummary(sprintf(_('Could not read the release: %s'), mbzTagErrorText(error)), true);
             setNote(retryable
                 ? _('The release ID is unchanged and nothing was written. Press Retry to look it up again.')
                 : _('The release ID is unchanged and nothing was written. Check the album release ID, or clear it and search MusicBrainz for the right release.'));
@@ -2213,9 +2490,9 @@ function init(params) {
         var scope = state.scope;
 
         showRetry(false);
-        setSummary(_('Reading the release from MusicBrainz...'));
+        setSummary(_('Reading the release from MusicBrainz...'), true);
 
-        window.localPromise(loadReleaseAsync(scope)).then(function (result) {
+        trackWork(window.localPromise(loadReleaseAsync(scope)).then(function (result) {
             if (window._cleanUpCalled) return null;
 
             if (!result || result.skipped) {
@@ -2235,7 +2512,7 @@ function init(params) {
         }).then(function () {
             if (window._cleanUpCalled) return;
             syncAlbumIdInput();
-        });
+        }));
     }
 
     function loadAlbumCountAsync(scope) {
@@ -2355,7 +2632,7 @@ function init(params) {
         setStatus('');
         setTagStatus('');
 
-        return loadTagRowsAsync(scope).then(function () {
+        return trackWork(loadTagRowsAsync(scope).then(function () {
             if (window._cleanUpCalled) return null;
 
             renderTagTable();
@@ -2379,7 +2656,7 @@ function init(params) {
             if (window._cleanUpCalled) return null;
             syncAlbumIdInput();
             return loadLibraryContextAsync(scope);
-        });
+        }));
     }
 
     /* ---------------------------------------------------------------- *
@@ -2503,7 +2780,7 @@ function init(params) {
         setBusy(true);
         setStatus(_('Writing...'));
 
-        window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
+        trackWork(window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
             if (window._cleanUpCalled) return;
 
             setStatus(sprintf(_('Writing %d of %d...'), Math.min(index + 1, total), total));
@@ -2526,7 +2803,7 @@ function init(params) {
 
             setBusy(false);
             setStatus(sprintf(_('Could not write: %s'), mbzTagErrorText(error)));
-        });
+        }));
     }
 
     /* ---------------------------------------------------------------- *
@@ -2562,7 +2839,7 @@ function init(params) {
 
         setSummary(_('Reading the selection...'));
 
-        window.localPromise(apply.collectSelectionAsync(sourceList)).then(function (tracks) {
+        trackWork(window.localPromise(apply.collectSelectionAsync(sourceList)).then(function (tracks) {
             if (window._cleanUpCalled) return null;
 
             if (!tracks.length) {
@@ -2590,7 +2867,7 @@ function init(params) {
                 setSummary(_('Reading the release from MusicBrainz...'));
                 return reloadAsync();
             });
-        }).catch(function (error) {
+        })).catch(function (error) {
             if (window._cleanUpCalled) return;
             setSummary(sprintf(_('Could not read the selection: %s'), mbzTagErrorText(error)));
         });
@@ -2604,6 +2881,8 @@ function init(params) {
 
     if (UI.btnRetry) UI.btnRetry.title = _('Look the release up again without closing the window.');
 
+    pinCardSpacing();
+    italicizeInfo();
     resetView();
 
     if (UI.btnSearch) window.localListen(UI.btnSearch, 'click', openSearch);

@@ -13,7 +13,10 @@
  * builds of the same version apart.
  *
  * The save-path regression test runs first, and nothing is packaged when it
- * fails.
+ * fails. Afterwards the archive is opened again and checked entry by entry: a
+ * package that carried the dialog script but not the dialog page installs
+ * cleanly and then draws the page already in the folder, which makes a CSS
+ * change look like it never shipped.
  */
 
 var fs = require('fs');
@@ -90,44 +93,123 @@ function runGuard() {
     }
 }
 
-runGuard();
+/**
+ * The archive's central directory: names normalised to `/`, mapped to the
+ * uncompressed size of each file. Reading it here keeps the check free of a zip
+ * dependency, and it reads both `zip` and Compress-Archive output, which differ
+ * in the separator they write.
+ */
+function archiveEntries(file) {
+    var buffer = fs.readFileSync(file);
+    var end = -1;
 
-var staging = fs.mkdtempSync(path.join(os.tmpdir(), 'lovesmbz-'));
-var stamp = buildTime();
-
-try {
-    ENTRIES.forEach(function (entry) {
-        var source = path.join(ROOT, entry);
-        if (!fs.existsSync(source)) throw new Error('Missing entry: ' + entry);
-        copyInto(source, path.join(staging, entry));
-    });
-
-    var dialog = path.join('dialogs', 'dlgMBzTag.js');
-    stampDialog(path.join(staging, dialog), stamp);
-    stampDialog(path.join(ROOT, dialog), stamp);
-
-    if (fs.existsSync(OUTPUT)) fs.unlinkSync(OUTPUT);
-
-    try {
-        execFileSync('zip', ['-qr', OUTPUT].concat(ENTRIES), { cwd: staging });
-    } catch (noZip) {
-        // No zip on this machine: PowerShell makes the same archive.
-        var list = ENTRIES.map(function (entry) { return '.\\' + entry; }).join(',');
-        execFileSync('powershell.exe', ['-NoProfile', '-Command',
-            'Compress-Archive -Path ' + list + ' -DestinationPath "' + OUTPUT + '" -Force'
-        ], { cwd: staging });
+    for (var i = buffer.length - 22; i >= 0 && i >= buffer.length - 65557; i--) {
+        if (buffer.readUInt32LE(i) === 0x06054b50) { end = i; break; }
     }
 
-    var files = 0;
-    (function count(directory) {
-        fs.readdirSync(directory).forEach(function (name) {
-            var full = path.join(directory, name);
-            if (fs.statSync(full).isDirectory()) count(full); else files++;
-        });
-    }(staging));
+    if (end < 0) throw new Error('Not a zip archive: ' + path.basename(file));
 
-    console.log('Packaged ' + path.basename(OUTPUT) + ' (' + files + ' files)');
-    console.log('Build time: ' + stamp);
-} finally {
-    fs.rmSync(staging, { recursive: true, force: true });
+    var count = buffer.readUInt16LE(end + 10);
+    var at = buffer.readUInt32LE(end + 16);
+    var entries = {};
+
+    for (var index = 0; index < count; index++) {
+        if (buffer.readUInt32LE(at) !== 0x02014b50) {
+            throw new Error('Damaged central directory in ' + path.basename(file));
+        }
+
+        var nameLength = buffer.readUInt16LE(at + 28);
+        var extraLength = buffer.readUInt16LE(at + 30);
+        var commentLength = buffer.readUInt16LE(at + 32);
+        var name = buffer.toString('utf8', at + 46, at + 46 + nameLength);
+
+        entries[name.replace(/\\/g, '/')] = buffer.readUInt32LE(at + 24);
+        at += 46 + nameLength + extraLength + commentLength;
+    }
+
+    return entries;
 }
+
+/** Every file in the staging folder, relative and `/` separated, with its size. */
+function stagedFiles(directory, prefix) {
+    var files = [];
+
+    fs.readdirSync(directory).forEach(function (name) {
+        var full = path.join(directory, name);
+        var relative = prefix ? prefix + '/' + name : name;
+
+        if (fs.statSync(full).isDirectory()) files = files.concat(stagedFiles(full, relative));
+        else files.push({ name: relative, size: fs.statSync(full).size });
+    });
+
+    return files;
+}
+
+/**
+ * A package is only worth installing when it carries the files it was built
+ * from. The dialog page is called out by name: script and page live in the same
+ * folder, MediaMonkey is handed the page, and an archive that ships the script
+ * alone would install over an older page without saying so.
+ */
+function verifyArchive(file, staging) {
+    var entries = archiveEntries(file);
+    var files = stagedFiles(staging, '');
+    var missing = [];
+    var mismatched = [];
+
+    files.forEach(function (entry) {
+        if (!Object.prototype.hasOwnProperty.call(entries, entry.name)) missing.push(entry.name);
+        else if (entries[entry.name] !== entry.size) mismatched.push(entry.name);
+    });
+
+    if (missing.length) throw new Error('Not in the archive: ' + missing.join(', '));
+    if (mismatched.length) throw new Error('Wrong size in the archive: ' + mismatched.join(', '));
+
+    var page = entries['dialogs/dlgMBzTag.html'];
+    if (!page) throw new Error('The archive has no dialogs/dlgMBzTag.html');
+
+    return { files: files.length, page: page };
+}
+
+function main() {
+    runGuard();
+
+    var staging = fs.mkdtempSync(path.join(os.tmpdir(), 'lovesmbz-'));
+    var stamp = buildTime();
+
+    try {
+        ENTRIES.forEach(function (entry) {
+            var source = path.join(ROOT, entry);
+            if (!fs.existsSync(source)) throw new Error('Missing entry: ' + entry);
+            copyInto(source, path.join(staging, entry));
+        });
+
+        var dialog = path.join('dialogs', 'dlgMBzTag.js');
+        stampDialog(path.join(staging, dialog), stamp);
+        stampDialog(path.join(ROOT, dialog), stamp);
+
+        if (fs.existsSync(OUTPUT)) fs.unlinkSync(OUTPUT);
+
+        try {
+            execFileSync('zip', ['-qr', OUTPUT].concat(ENTRIES), { cwd: staging });
+        } catch (noZip) {
+            // No zip on this machine: PowerShell makes the same archive.
+            var list = ENTRIES.map(function (entry) { return '.\\' + entry; }).join(',');
+            execFileSync('powershell.exe', ['-NoProfile', '-Command',
+                'Compress-Archive -Path ' + list + ' -DestinationPath "' + OUTPUT + '" -Force'
+            ], { cwd: staging });
+        }
+
+        var checked = verifyArchive(OUTPUT, staging);
+
+        console.log('Packaged ' + path.basename(OUTPUT) + ' (' + checked.files + ' files)');
+        console.log('Dialog page: dialogs/dlgMBzTag.html (' + checked.page + ' bytes)');
+        console.log('Build time: ' + stamp);
+    } finally {
+        fs.rmSync(staging, { recursive: true, force: true });
+    }
+}
+
+module.exports = { archiveEntries: archiveEntries, verifyArchive: verifyArchive };
+
+if (require.main === module) main();
