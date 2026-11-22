@@ -4,6 +4,289 @@ All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags. A test build names its channel in the window
 footer and in the package, because `info.json` must stay three numbers.
 
+## 0.6.1 "We just getting started" (2026-11-22)
+
+MediaMonkey matches the release group well and then points the album at the
+group's best-known release, which is often not the pressing in hand. This
+release lets that pressing be picked in the window. "We just getting started"
+because it is the first of the two 0.6 jobs: tagging files that are not in the
+library yet is 0.6.2.
+
+- **Pick the pressing, not the group.** A card lists every release of the
+  loaded release's group — title, date, country, format and track count, oldest
+  first — with the loaded one marked `✓` and a **use this** link on the rest,
+  both flush right. The links carry their sentence in the tooltip and
+  `aria-label`, and the column no longer repeats the release status the block
+  above already names.
+- **The card is the first one, with the release ID in it.** The list sits above
+  the release block, and the **Album release ID** field, **Save ID** and its
+  status line open the card, above the list. The card stays on screen while the
+  field does, even when the group has nothing to list or could not be read.
+- **A card that cannot be read says why, and offers Retry.** MusicBrainz answers
+  "busy" often enough that the first attempt regularly fails; a failure that can
+  pass gets a **Retry** button that reads the same group again, keeps the card
+  and its sentence while the request runs, and fills the rows in when it
+  succeeds.
+- **A Format column.** Each row names the medium MusicBrainz gives the release —
+  `CD`, `Digital Media`, `12" Vinyl`, `Cassette` — beside its date, country and
+  track count. Mixed media name each distinct format once (`CD, DVD`).
+- **Picking is a load, not a write.** The album's `Albums.MBGID` still changes
+  only through **Save ID**, and **Save ID** now writes straight away: the field
+  exists to be saved, the write is one library column, and the line under it
+  reports the result or why it failed. Apply still writes tags through
+  `mbzApply.applySelectionAsync`; nothing in the chooser touches either.
+- **One request per group, cached.** `mbzFetch.fetchReleaseGroupReleasesAsync`
+  browses `release?release-group={id}&inc=media` through the same queue and
+  1.1 s spacing as every other call, and keeps the parsed list by group ID for
+  the session. The browse endpoint is used because only its rows carry the media
+  that holds each pressing's track count and format. The plan does not wait for
+  it: the card fills in under the busy ring.
+- **An older page still shows the card.** MediaMonkey keeps the dialog page it
+  loaded at start-up, so the window builds the card itself when the page has
+  none, puts it first, and moves the release ID field into it.
+
+### Upgrading from 0.5.3
+
+Nothing changes in the tags, the library or the write path: the release lookup,
+the disc/track matching, `applySelectionAsync` and the extended-tag rules are
+the same. The window adds the card, and the **Album release ID** field moves into
+it with **Save ID** no longer asking for confirmation — **Update library** in the
+disagreement strip and the **MusicBrainz IDs…** dialog keep theirs, because they
+act on a tag's value rather than on something typed in the window. A change to
+the page appears after MediaMonkey is fully restarted; the card, its order and
+the field's place are also applied to an older page by the script.
+
+## 0.6.1-rc10 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The list said date,
+country and track count, but not what the pressing is made of.
+
+- **A Format column.** Each row now names the medium MusicBrainz gives for the
+  release — `CD`, `Digital Media`, `12" Vinyl`, `Cassette` — beside its date,
+  country and track count. A release with mixed media names each distinct
+  format once (`CD, DVD`), in the order the media list them; a release whose
+  media carry no format shows an empty cell.
+
+### Upgrading from 0.6.1-rc9
+
+Install this build over rc9 and restart MediaMonkey: the column is in the page,
+and the card the window builds for an older page has it too. The lookup is
+unchanged — the browse request already asked for the media, so the format costs
+no extra request. The tags, the write path and **Save ID**
+without a prompt are unchanged.
+
+## 0.6.1-rc9 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The card carried a
+sentence about picking that the list and the field already say themselves.
+
+- **No helper sentence under the list.** The note about picking another release
+  and the album keeping its own ID is gone; the `use this` links, the `✓` on the
+  loaded release and the line under the field say it where it happens.
+- **The release ID field is the first thing in the card.** It sits directly
+  under the card's title, above the list, so the key is where the eye lands
+  before the releases it can be replaced with.
+
+### Upgrading from 0.6.1-rc8
+
+Install this build over rc8. Both changes are in the page; the window also moves
+the field under the card's title when the page it runs is older than the script.
+The tags, the write path and **Save ID** without a prompt are unchanged.
+
+## 0.6.1-rc8 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The release list sat
+under the release block, and the field that saves the picked release lived in
+that block, away from the pick that fills it.
+
+- **The releases of the group are the first card.** Choosing the pressing is
+  what the window is for, so the list now sits above the release block instead
+  of under it.
+- **The album release ID moved into that card.** The field, **Save ID** and the
+  line under it are under the list, so the picked release and the ID it can be
+  saved as are one block. The card stays on screen while the field does, even
+  when the group has nothing to list or could not be read.
+- **The release block now holds only the release's details.** It still hides
+  itself when there is no release; with the ID field gone it no longer exists
+  just to carry the lookup key.
+
+### Upgrading from 0.6.1-rc7
+
+Install this build over rc7. The order and the field's place are in the page, so
+they show after a full MediaMonkey restart; the window also moves the field into
+the card when the page it runs is older than the script, so an install without
+a restart still shows it there. The tags, the write path, the **use this** links,
+**Save ID** without a prompt and **Retry** on the group card are unchanged.
+
+## 0.6.1-rc7 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. **Save ID** asked for
+confirmation before writing the ID you had just typed into the field.
+
+- **Save ID writes without asking.** It still validates the value and compares
+  it with the album row, then writes `Albums.MBGID` and reloads the window; the
+  line under the field reports the result, or why the write failed. The extra
+  track-count request that only fed the prompt is gone with it, so the save
+  happens on one request instead of two.
+- **Update library still asks.** The disagreement strip writes the tag's value
+  onto the album or artist row, which is not something typed in the window, so
+  it keeps its confirmation. The **MusicBrainz IDs…** dialog keeps its own.
+
+### Upgrading from 0.6.1-rc6
+
+Install this build over rc6. The tags, the write path, the **use this** links and
+**Retry** on the group card are unchanged.
+
+## 0.6.1-rc6 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The release list was
+still wider than it needed to be, and its load control read as a player button.
+
+- **No status column.** Every row repeated the string already shown in the
+  release block above ("Official", "Bootleg"), and it took width the track list
+  wanted. The column is gone.
+- **`use this` instead of a `▶`.** The load control is a link in the host's
+  link colour, not a button with a play icon that looks like Play in
+  MediaMonkey. Its tooltip and `aria-label` still name the release it loads.
+- **The action column ends flush right.** The loaded release's `✓` and the
+  `use this` links under it share one right edge, so the column reads as a
+  column instead of a wobble of centred marks.
+
+### Upgrading from 0.6.1-rc5
+
+Install this build over rc5. The tags, the write path, the **Save ID** rule and
+**Retry** on the group card are unchanged.
+
+## 0.6.1-rc5 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The pick no longer
+opens MediaMonkey's *Application throw an exception* box, but **Apply** and
+**Save ID** still handled their failures the same late way.
+
+- **One place decides how a failure is reported.** `handledInWindow` attaches
+  the failure handler to the promise the window is already building, so no
+  rejected promise ever reaches `trackWork`. **Apply** (write, then the reload
+  that follows it), **Save ID** (album write, then the reload) and the pick all
+  go through it and say "Could not write: …", "Could not update the album: …"
+  or "Could not read that release: …" in the header.
+- **A save that cannot reload still says so.** When the album write succeeds
+  but the reload behind it fails, the window keeps the new ID's sentence and
+  adds that the reload failed, instead of leaving the last message up or
+  opening the host's error box.
+- **The pick's failure flag is gone.** Its rejection is handled where the chain
+  is built, so nothing needs to remember how the chain ended.
+
+### Upgrading from 0.6.1-rc4
+
+Install this build over rc4. The tags, the write path, the **Save ID** rule, the
+glyph buttons and **Retry** on the group card are unchanged.
+
+## 0.6.1-rc4 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. Picking a release that
+MusicBrainz could not answer for showed MediaMonkey's own *Application throw an
+exception* box instead of a sentence in the window.
+
+- **A failed pick stays in the window.** The pick's failure handler now sits
+  inside the window's own promise chain. Handled only after `trackWork` wrapped
+  the promise, MediaMonkey's promise library had already reported the rejection
+  as unhandled and opened its error box over the window. The window now says
+  "Could not read that release: …" and keeps the list as it was.
+- **Two glyphs instead of two words.** The action column is a `▶` button that
+  loads that release and a `✓` on the release already loaded; the tooltip and
+  `aria-label` carry the sentence each word used to. The list is the narrow
+  part of the window, and the buttons no longer widen it.
+
+### Upgrading from 0.6.1-rc3
+
+Install this build over rc3. The tags, the write path, the **Save ID** rule and
+**Retry** on the group card are unchanged.
+
+## 0.6.1-rc3 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The card now appears on
+an older page, but MusicBrainz answers "busy" often enough that the first
+attempt regularly fails, and the card had no way to ask again.
+
+- **Retry on the card.** A group listing that failed for a reason that can pass
+  (MusicBrainz busy, a timeout, a dropped connection) now shows a **Retry**
+  button next to the reason. It reads the same group again, keeps the card and
+  its "Reading the releases of this group..." line while the request runs, and
+  fills the rows in when it succeeds. Nothing is cached from a failed lookup, so
+  the second attempt is a real request.
+- **Only a failure that can pass offers retry.** A group MusicBrainz does not
+  know, or a page still running an older `mbzFetch.js`, keeps its explanatory
+  sentence and no button: clicking again would not change either.
+
+### Upgrading from 0.6.1-rc2
+
+Install this build over rc2. The tags, the write path, the **Save ID** rule and
+the card's fallback are unchanged; the card only gains the button.
+
+## 0.6.1-rc2 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The new card did not
+show up after installing rc1 without a full MediaMonkey restart: the host keeps
+the dialog page it loaded at start-up, so the rc1 script ran against the older
+page, found no card in it, and drew nothing.
+
+- **The card exists even on an older page.** `dialogs/dlgMBzTag.js` builds the
+  **Releases in this release group** card itself when the page has none, inserts
+  it under the release block, and wires its rows — the same fallback the busy
+  ring already has. Installing this build over rc1 or 0.5.3 shows the section
+  without restarting MediaMonkey.
+- **A card that cannot read its list says why.** When the group listing fails
+  (MusicBrainz busy or unreachable) or the window came with an older
+  `mbzFetch.js`, the card stays on screen with a one-line reason instead of
+  disappearing. A group with a single release still draws no card, because there
+  is nothing to choose.
+
+### Upgrading from 0.6.1-rc1
+
+Install this build over rc1. Nothing else changed: the tags, the write path and
+the **Save ID** rule are the same. A group listing that cannot be read now says
+so in its card rather than leaving the window without that section.
+
+## 0.6.1-rc1 (2026-11-22)
+
+Test build for the 0.6.1 line; `info.json` says `0.6.1`. The 0.6 line has two
+jobs: tag files MediaMonkey has not added to its library, and let the right
+release be picked out of a release group. This build is the second one.
+
+- **Choose the pressing, not the group.** MediaMonkey usually matches the
+  release group correctly and then points the album at the group's best-known
+  release, which is often not the pressing in hand. A new **Releases in this
+  release group** card lists every release of the loaded release's group —
+  title, date, country, status and track count — with the loaded one marked.
+  **Use** on another row loads that release into the window: the release block,
+  the field comparison, the track table and **Apply** all follow it.
+- **One request per group, cached.** `mbzFetch.fetchReleaseGroupReleasesAsync`
+  makes one `release?release-group={id}&inc=media` request, through the same
+  queue and 1.1 s spacing as every other call, and keeps the parsed list by
+  group ID for the session. It browses the group's releases rather than looking
+  the group up, because only the browse rows carry the media that holds each
+  pressing's track count. The plan does not wait for it; the card fills in under the
+  busy ring. A group with one release draws no card, because there is nothing to
+  choose.
+- **Picking writes nothing.** The album's `Albums.MBGID` still changes only
+  through **Save ID**, after its own confirmation, and Apply still writes tags
+  through `mbzApply.applySelectionAsync`. The **Album release ID** field shows
+  the loaded release, so a picked release's ID is one click from being saved;
+  Save ID now compares the field with what the album row holds, so that click
+  writes the new ID instead of saying it is already there.
+- **The old release ID is not lost.** Reloading, closing the window, or picking
+  the album's own release again returns to what the album points at; nothing
+  was changed in between.
+
+### Upgrading from 0.5.3
+
+The tags, the write path and the extended-tag rules are unchanged. The window
+adds one card, which appears only when the loaded release's group has more than
+one release. The card is also built from script when the page is older than the
+script, so it shows without a restart; the rest of a page change
+(`dialogs/dlgMBzTag.html`) still appears only after MediaMonkey is fully
+restarted, because the host keeps the page it loaded at start-up.
+
 ## 0.5.3 "Responsive" (2026-11-20)
 
 The window says when it is working, and stops drawing cards it has nothing to

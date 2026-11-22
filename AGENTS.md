@@ -62,8 +62,9 @@ node tools/build-mmip.js
 The packager runs `tests/tag-path.test.js` first and stops when it fails, then
 copies the sources into a temporary folder, fills the `BUILD_TIME` slot in
 `dialogs/dlgMBzTag.js` (in the copy and in the source, so a copied dialog reports
-the same build), and writes `LovesMBz.mmip` with `info.json` at the archive
-root. It then reopens the archive and checks it entry by entry, so a package
+the same build), and writes the package — `LovesMBz.mmip`, or
+`LovesMBz-<version>-<channel>.mmip` while the dialog names a channel — with
+`info.json` at the archive root. It then reopens the archive and checks it entry by entry, so a package
 that would install the dialog script without `dialogs/dlgMBzTag.html` is
 refused instead of shipping. Use it instead of zipping by hand: a hand-made
 archive has no build time and no such check, and the version alone cannot tell
@@ -74,20 +75,51 @@ straight away, but MediaMonkey keeps the dialog page it loaded when the process
 started: the script is read again on each open, the page is not. A change to
 `dialogs/dlgMBzTag.html` therefore only shows after MediaMonkey is fully
 restarted, which is why the notes and the card gap are pinned inline in
-`dialogs/dlgMBzTag.js` as well as in the page, and why the busy ring is created
-there when the page has none. The ring's size, border and animation are pinned
+`dialogs/dlgMBzTag.js` as well as in the page, and why the busy ring and the
+**Releases in this release group** card are created there when the page has
+none. Anything new in the page that the window can draw itself belongs in that
+fallback too, or installing the build appears to do nothing. The ring's size, border and animation are pinned
 inline too, and it is rotated from script as well: the host applies its skin
 sheet after the page's, so a ring styled only by the page draws nothing (that
 is how rc4 happened), and an inline animation is only as good as the engine's
 support for it.
+
+## Report failures inside the window's promise chain
+
+Every promise the window builds is handled where it is built: wrap the work in
+`handledInWindow(work, onError)` and give `trackWork` only a promise that can no
+longer reject. A handler attached after `trackWork` is too late — `trackWork`
+adopts the promise through the native `Promise`, one microtask after the
+rejection, and MediaMonkey's promise library has already opened its *Application
+throw an exception* box by then. This covers **Apply**, **Save ID**, the group
+pick and anything added later.
 
 ## Other invariants kept from 0.4.x
 
 - Release country, status, and type are one logical field across Picard and
   canonical spellings; update the existing spelling and collapse duplicates.
 - Fill does not offer or write `SCRIPT`. Existing values stay untouched.
+- The **Releases in this release group** card is the first card in the column
+  and opens with the **Album release ID** field, above the list, with no helper
+  sentence under the list: `syncGroupCard` keeps it on screen
+  while it has rows or that field, and `ensureGroupCard` builds the card and
+  `relocateAlbumIdRow` moves the field into it on a page older than the move.
+  Keep the field's markup and that move together: the release card holds the
+  release's details only.
+- The chooser's action column ends flush right: `use this` on every release
+  that can be loaded, a single `✓` on the one already here. Both carry their
+  sentence in the tooltip and `aria-label`. The load control is an anchor with
+  the host's `hotlink` class, and `onGroupClick` consumes the press. Do not add
+  a status column: the release block above the list already names it.
+- Picking another release of the release group is a **load, not a write**: the
+  window fetches it and rebuilds the comparison, and the **Album release ID**
+  field shows the loaded release. `saveAlbumId` is still the only place that
+  writes `Albums.MBGID`, and it compares the field with what the album row
+  holds, so a picked release's ID can be saved. Nothing in the chooser may call
+  `applySelectionAsync` or `setAlbumGuidAsync`.
 - Library-side writes (`Albums.MBGID`, `Artists.MBGID`) never go through
   `applySelectionAsync`. The window's **Album release ID** field, the
   divergence strip's **Update library** and the **MusicBrainz IDs…** dialog all
-  call `mbzMbgid.setAlbumGuidAsync` / `setArtistGuidAsync` directly, after their
-  own confirmation. The field is a lookup key: write it, then reload.
+  call `mbzMbgid.setAlbumGuidAsync` / `setArtistGuidAsync` directly. **Save ID**
+  writes straight away; **Update library** and the IDs dialog keep their own
+  confirmation. The field is a lookup key: write it, then reload.

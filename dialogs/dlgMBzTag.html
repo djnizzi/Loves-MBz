@@ -219,6 +219,36 @@
         <div class="mbzLinks mbzHidden" data-id="linksBar"></div>
 
         <div class="mbzTagScroll" data-id="scrollColumn">
+            <!-- The other releases of the loaded release's group, first: a
+                 pick is what the window exists for. MediaMonkey often matches
+                 the group's best-known release, not the pressing the album
+                 actually is. The release ID field lives here too, next to the
+                 pick that fills it. -->
+            <fieldset class="mbzSection mbzCard mbzHidden" data-id="groupCard">
+                <legend class="mbzCardTitle" data-localize>Releases in this release group</legend>
+                <!-- The lookup key itself: the album's Albums.MBGID. -->
+                <div class="flex row mbzIdRow mbzHidden" data-id="albumIdRow">
+                    <label class="mbzLabel" data-localize>Album release ID</label>
+                    <div data-id="albumIdValue" class="mbzIdInput" data-control-class="Edit"></div>
+                    <div class="button mbzButton" data-id="btnSaveAlbumId" data-localize>Save ID</div>
+                    <label data-id="albumIdStatus" class="mbzNote fill"></label>
+                </div>
+
+                <table class="mbzTable">
+                    <thead>
+                        <tr>
+                            <th data-localize>Release</th>
+                            <th data-localize>Date</th>
+                            <th data-localize>Country</th>
+                            <th data-localize>Format</th>
+                            <th data-localize>Tracks</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody data-id="groupRows"></tbody>
+                </table>
+            </fieldset>
+
             <fieldset class="mbzSection mbzCard mbzHidden" data-id="releaseCard">
                 <legend class="mbzCardTitle" data-localize>Release</legend>
 
@@ -226,14 +256,6 @@
                     <table data-id="meta" class="mbzMetaTable">
                         <tbody data-id="metaRows"></tbody>
                     </table>
-                </div>
-
-                <!-- The lookup key itself: the album's Albums.MBGID. -->
-                <div class="flex row mbzIdRow mbzHidden" data-id="albumIdRow">
-                    <label class="mbzLabel" data-localize>Album release ID</label>
-                    <div data-id="albumIdValue" class="mbzIdInput" data-control-class="Edit"></div>
-                    <div class="button mbzButton" data-id="btnSaveAlbumId" data-localize>Save ID</div>
-                    <label data-id="albumIdStatus" class="mbzNote fill"></label>
                 </div>
             </fieldset>
 

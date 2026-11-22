@@ -18,6 +18,14 @@
  * Discogs master page on the release group. The parsed release is cached by
  * ID for the lifetime of this window, so previewing the same album twice
  * costs one release request and at most one group lookup.
+ *
+ * 0.6.1 adds the group's other releases: `release?release-group={id}` with
+ * `inc=media` lists every release of the group, with the media that carries
+ * each one's track count, so the window can offer the exact pressing when
+ * MediaMonkey matched the group's best-known release instead. A release-group
+ * lookup with `inc=releases` does return the same `releases` array, but with no
+ * media, so it cannot show how long a pressing is. The parsed list is cached
+ * by group ID, like the release itself.
  */
 
 (function () {
@@ -33,6 +41,7 @@
     var GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
     var cache = new Map();          // release MBID -> parsed release
+    var groupCache = new Map();     // release group MBID -> parsed release list
     var queue = Promise.resolve();
     var lastRequestAt = 0;
     var requestCount = 0;
@@ -61,6 +70,11 @@
         }
 
         return GUID_RE.test(id) ? id : '';
+    }
+
+    /** The same check for any MusicBrainz ID: a release group, an artist. */
+    function normalizeGuid(value) {
+        return normalizeReleaseId(value);
     }
 
     function collectDiscogsUrls(relations, urls) {
@@ -303,6 +317,141 @@
         });
     }
 
+    /**
+     * Tracks on a release, from the media the listing carries. A group listing
+     * gives each medium a `track-count`; the full medium is used when it does.
+     */
+    function releaseTrackCount(release) {
+        var media = (release && release.media) || [];
+        var total = 0;
+        var counted = false;
+
+        for (var i = 0; i < media.length; i++) {
+            var medium = media[i] || {};
+            var count = parseInt(medium['track-count'], 10);
+
+            if (!(count >= 0) && Array.isArray(medium.tracks)) count = medium.tracks.length;
+            if (!(count >= 0)) continue;
+
+            total += count;
+            counted = true;
+        }
+
+        if (!counted) {
+            var own = parseInt(release && release['track-count'], 10);
+            if (own >= 0) return own;
+        }
+
+        return counted ? total : 0;
+    }
+
+    /**
+     * The formats a release's media carry ("CD", "Digital Media", "12\" Vinyl").
+     * A release can mix them (a CD and a DVD in one box), so each distinct
+     * format is named once, in the order the media list them.
+     */
+    function releaseFormats(release) {
+        var media = (release && release.media) || [];
+        var formats = [];
+
+        for (var i = 0; i < media.length; i++) {
+            var medium = media[i] || {};
+            var format = String(medium.format === undefined || medium.format === null
+                ? ''
+                : medium.format).trim();
+
+            if (!format || formats.indexOf(format) >= 0) continue;
+            formats.push(format);
+        }
+
+        return formats;
+    }
+
+    /**
+     * The rows the window offers for one release group: the pressing's own
+     * title, date, country, format, status and track count. Oldest first, because a
+     * group's dates read as a history; an undated release goes last instead of
+     * sorting as year zero, and a duplicated row is dropped.
+     *
+     * @param {Object} group a `release?release-group={id}&inc=media` response
+     * @returns {{id: string, title: string, releases: Array}}
+     */
+    function releaseGroupReleases(group) {
+        var rows = [];
+        var seen = {};
+        var list = (group && group.releases) || [];
+
+        for (var i = 0; i < list.length; i++) {
+            var release = list[i] || {};
+            var id = normalizeGuid(release.id);
+
+            if (!id || seen[id]) continue;
+            seen[id] = true;
+
+            rows.push({
+                id: id,
+                title: String(release.title === undefined || release.title === null ? '' : release.title).trim(),
+                date: String(release.date === undefined || release.date === null ? '' : release.date).trim(),
+                country: String(release.country === undefined || release.country === null ? '' : release.country).trim(),
+                format: releaseFormats(release).join(', '),
+                status: String(release.status === undefined || release.status === null ? '' : release.status).trim(),
+                disambiguation: String(release.disambiguation === undefined || release.disambiguation === null ? '' : release.disambiguation).trim(),
+                trackCount: releaseTrackCount(release)
+            });
+        }
+
+        rows.sort(function (a, b) {
+            if (!a.date && !b.date) return a.title < b.title ? -1 : (a.title > b.title ? 1 : 0);
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+            return a.trackCount - b.trackCount;
+        });
+
+        return {
+            id: normalizeGuid(group && group.id),
+            title: String((group && group.title) || '').trim(),
+            releases: rows
+        };
+    }
+
+    /**
+     * Every release of one release group, cached by group ID. This is what
+     * turns "MediaMonkey matched the group" into "this pressing, not that
+     * one": one request lists them, and the window loads the chosen release
+     * through fetchReleaseAsync like any other release.
+     *
+     * The browse endpoint answers in pages; 100 is its maximum and is far more
+     * pressings than a group realistically has, so one request covers it.
+     */
+    async function fetchReleaseGroupReleasesAsync(groupId) {
+        var id = normalizeGuid(groupId);
+        if (!id) throw makeError(_('There is no MusicBrainz release group ID to look up.'), 'missing-id');
+
+        if (groupCache.has(id)) return groupCache.get(id);
+
+        return enqueueAsync(async function () {
+            if (groupCache.has(id)) return groupCache.get(id);
+
+            // Browse the group's releases rather than looking the group up:
+            // only these rows carry the media that holds each pressing's
+            // track count.
+            var url = API_ROOT + 'release?release-group=' + encodeURIComponent(id) +
+                '&inc=media&fmt=json&limit=100';
+            var group = await fetchJsonWithRetriesAsync(url);
+
+            if (!group) {
+                throw makeError(_('MusicBrainz is busy right now. Try again in a moment.'), 'busy');
+            }
+
+            var parsed = releaseGroupReleases(group);
+            if (!parsed.id) parsed.id = id;
+
+            groupCache.set(id, parsed);
+            return parsed;
+        });
+    }
+
     /** Runs one job at a time and keeps a failed job from blocking the queue. */
     function enqueueAsync(job) {
         var run = queue.then(job, job);
@@ -349,15 +498,20 @@
     window.mbzFetch = {
         previewAsync: previewAsync,
         fetchReleaseAsync: fetchReleaseAsync,
+        fetchReleaseGroupReleasesAsync: fetchReleaseGroupReleasesAsync,
+        releaseGroupReleases: releaseGroupReleases,
         releaseIdForAlbumAsync: releaseIdForAlbumAsync,
         normalizeReleaseId: normalizeReleaseId,
+        normalizeGuid: normalizeGuid,
         discogsUrls: discogsUrls,
         clearCache: function () {
             cache.clear();
+            groupCache.clear();
         },
         getState: function () {
             return {
                 cached: cache.size,
+                groupsCached: groupCache.size,
                 requests: requestCount,
                 userAgent: USER_AGENT,
                 include: INCLUDE

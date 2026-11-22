@@ -296,7 +296,7 @@ window cannot disagree.
       order (native → tags → commit), one tag write per track, per-track
       failure isolation, and the 0.4.x invariants kept (`discNumberInt`, no
       `SCRIPT`).
-- [x] Album release ID editable in the window: validated, confirmed, written
+- [x] Album release ID editable in the window: validated, written
       through `setAlbumGuidAsync`, then the release is reloaded.
 - [x] Version stamp in the window footer, kept equal to `info.json` by the test.
 - [x] `node tools/build-mmip.js` runs the regression test first, packages the
@@ -327,6 +327,54 @@ window cannot disagree.
 - Writing anything back to MusicBrainz.
 - Reading or writing the **artist** ID column from the new window (the album
   release ID is editable there).
+
+## 0.6.x — the exact release, and files outside the library
+
+Two roadmap items from 0.6, tackled one at a time so each can be tested on its
+own.
+
+### 0.6.1 — pick the release out of its release group
+
+MediaMonkey usually matches the release group and then points the album at the
+group's best-known release. The window now lists every release of that group
+(date, country, format, track count), and picking one loads it in place of the
+matched one. `Albums.MBGID` is still written only by **Save ID**; picking is a
+load, not a write.
+
+- [x] `mbzFetch.fetchReleaseGroupReleasesAsync` — one
+      `release?release-group={id}&inc=media` request, cached by group ID, same
+      queue and spacing as the release lookup. The browse endpoint is used
+      because a `release-group?inc=releases` listing carries no media, and so
+      no track count.
+- [x] `releaseGroupReleases` — rows sorted oldest first, duplicate and ID-less
+      releases dropped, track counts summed from the media the listing carries.
+- [x] **Releases in this release group** card in `dlgMBzTag`, with a **use
+      this** link on every row but the loaded one; the plan does not wait for
+      the request. It is the window's first card, opens with the album's
+      release ID field, and names each release's format.
+- [x] Save ID compares with the album row, so a picked release's ID can be
+      written; the field shows the loaded release.
+- [x] `tests/tag-path.test.js` covers the group listing and the card, and
+      refuses a chooser that writes the album row or the tags.
+- [x] `tools/build-mmip.js` names a test build's package after its channel
+      (`LovesMBz-0.6.1-rc1.mmip`), so it does not overwrite the release package.
+- [x] `info.json` → 0.6.1, `ADDON_VERSION` 0.6.1, test builds on channels
+      `rc1`–`rc10`.
+- [x] Test the package in MediaMonkey through the rc builds, then drop the
+      channel: 0.6.1 "We just getting started", a fresh `LovesMBz.mmip`, tagged
+      `v0.6.1` with the package on the GitHub release.
+
+### 0.6.2 — tag files that are not in the library yet
+
+The other 0.6 job, not started.
+
+- Scope by **album name** instead of album ID: every selected track must carry
+  the same album name, and an empty name on all of them is allowed.
+- Start from an empty release ID when the tag has none, instead of refusing the
+  lookup, so a file outside the library can be tagged from a release ID the
+  user supplies or picks from its release group.
+- The write path stays `mbzApply.applySelectionAsync`, with the same per-track
+  order and per-track failure isolation.
 
 ## Nice to have
 

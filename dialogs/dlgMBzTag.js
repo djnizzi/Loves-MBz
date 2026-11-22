@@ -21,13 +21,13 @@ localRequirejs('mbzMbgid');
  * The build this window belongs to, shown in the footer. Keep it equal to
  * info.json: tests/tag-path.test.js fails when the two disagree.
  * MediaMonkey only accepts a three-number manifest version, so a test build
- * carries its channel separately and reads as 0.5.3-rc1 in the footer.
+ * carries its channel separately and reads as 0.6.1-rc1 in the footer.
  */
-var ADDON_VERSION = '0.5.3';
-var BUILD_CHANNEL = '';      // '' for a release build
+var ADDON_VERSION = '0.6.1';
+var BUILD_CHANNEL = '';         // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-20 17:13';
+var BUILD_TIME = '2026-11-22 21:31';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
@@ -253,6 +253,8 @@ function init(params) {
         searchStatus: qid('searchStatus'),
         linksBar: qid('linksBar'),
         releaseCard: qid('releaseCard'),
+        groupCard: qid('groupCard'),
+        groupRows: qid('groupRows'),
         metaScroll: qid('metaScroll'),
         scrollColumn: qid('scrollColumn'),
         meta: qid('meta'),
@@ -287,6 +289,10 @@ function init(params) {
         scope: null,
         release: null,
         hasRelease: false,
+        groupReleases: [],
+        groupMessage: '',
+        groupRetryable: false,
+        pickedReleaseId: '',
         plan: null,
         rows: [],
         suggestions: [],
@@ -596,6 +602,24 @@ function init(params) {
         syncWorking();
     }
 
+    /**
+     * Reports a failure inside the window's own promise chain.
+     *
+     * MediaMonkey's promise library opens its Application Error box for a
+     * rejection it sees as unhandled. A handler attached after `trackWork` is too
+     * late, because `trackWork` adopts the promise through the native `Promise`,
+     * one microtask after the rejection. Handling the work where it is built
+     * keeps the failure a sentence in the header instead.
+     */
+    function handledInWindow(work, onError) {
+        return work.then(function (value) {
+            return value;
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+            onError(error);
+        });
+    }
+
     /** Runs a lookup under the ring, however the lookup ends. */
     function trackWork(promise) {
         beginWork();
@@ -612,9 +636,30 @@ function init(params) {
     /** The release card exists only while it has something in it. */
     function syncReleaseCard() {
         var metaVisible = !!UI.metaScroll && !UI.metaScroll.classList.contains('mbzHidden');
-        var idVisible = !!UI.albumIdRow && !UI.albumIdRow.classList.contains('mbzHidden');
 
-        show(UI.releaseCard, metaVisible || idVisible);
+        show(UI.releaseCard, metaVisible);
+    }
+
+    /** The release ID field lives in the group card; the card follows it. */
+    function idRowVisible() {
+        return !!UI.albumIdRow && !UI.albumIdRow.classList.contains('mbzHidden');
+    }
+
+    /**
+     * The first card holds the album's release ID and, once a release is
+     * loaded, the other releases of its group. It stays on screen while either
+     * has something in it: the field is the lookup key, so it is offered even
+     * when the group was never read, has nothing to list, or could not be read.
+     */
+    function syncGroupCard() {
+        var rows = 0;
+
+        if (UI.groupRows) {
+            rows = UI.groupRows.rows ? UI.groupRows.rows.length
+                : (UI.groupRows.childNodes ? UI.groupRows.childNodes.length : 0);
+        }
+
+        show(UI.groupCard, rows > 0 || idRowVisible());
     }
 
     function mbzTagErrorCode(error) {
@@ -634,7 +679,12 @@ function init(params) {
         if (UI.metaRows) UI.metaRows.textContent = '';
         if (UI.fieldRows) UI.fieldRows.textContent = '';
         if (UI.trackRows) UI.trackRows.textContent = '';
+        if (UI.groupRows) UI.groupRows.textContent = '';
         if (UI.tagRows) UI.tagRows.textContent = '';
+        state.groupReleases = [];
+        state.groupMessage = '';
+        state.groupRetryable = false;
+        state.pickedReleaseId = '';
         if (UI.divergeBar) UI.divergeBar.textContent = '';
         if (UI.suggestBar) UI.suggestBar.textContent = '';
         if (UI.linksBar) UI.linksBar.textContent = '';
@@ -645,6 +695,7 @@ function init(params) {
         show(UI.metaScroll, false);
         show(UI.fieldsSection, false);
         show(UI.trackSection, false);
+        syncGroupCard();
         show(UI.divergeBar, false);
         show(UI.suggestBar, false);
         show(UI.tagTable, true);
@@ -1013,8 +1064,14 @@ function init(params) {
         // only things to show are the release lookup and the existing tags.
         if (UI.fieldRows) UI.fieldRows.textContent = '';
         if (UI.trackRows) UI.trackRows.textContent = '';
+        if (UI.groupRows) UI.groupRows.textContent = '';
+        state.groupReleases = [];
+        state.groupMessage = '';
+        state.groupRetryable = false;
+        state.hasRelease = false;
         show(UI.fieldsSection, false);
         show(UI.trackSection, false);
+        syncGroupCard();
 
         if (reason === 'no-album') {
             setSummary(_('This selection has no album, so there is no release to look up.'), true);
@@ -1032,14 +1089,22 @@ function init(params) {
      * The album's release ID
      * ---------------------------------------------------------------- */
 
-    /** The release ID the album currently points at, fetched or stored. */
-    function currentAlbumReleaseId() {
-        if (state.release && state.release.id) return mbzTagText(state.release.id);
-        if (state.natives && state.natives.releaseId) return mbzTagText(state.natives.releaseId);
-
+    /** The release ID the album row actually holds; Save ID compares to it. */
+    function storedAlbumReleaseId() {
         var scope = state.scope;
         if (!scope) return '';
         return mbzTagText(scope.releaseIds ? scope.releaseIds[scope.albumId] : '');
+    }
+
+    /**
+     * The release ID to show in the field: the loaded release, which is the
+     * album's own unless the user picked another one of its release group.
+     */
+    function shownAlbumReleaseId() {
+        if (state.hasRelease && state.release && state.release.id) return mbzTagText(state.release.id);
+        if (state.natives && state.natives.releaseId) return mbzTagText(state.natives.releaseId);
+
+        return storedAlbumReleaseId();
     }
 
     function setAlbumIdStatus(text) {
@@ -1053,19 +1118,14 @@ function init(params) {
     function syncAlbumIdInput() {
         var editable = !state.readOnly && !!(state.scope && state.scope.albumId > 0);
         show(UI.albumIdRow, editable);
-        syncReleaseCard();
+        syncGroupCard();
 
         if (!editable) return;
 
-        mbzTagSetFieldValue(UI.albumIdValue, currentAlbumReleaseId());
+        mbzTagSetFieldValue(UI.albumIdValue, shownAlbumReleaseId());
         syncWorking();
 
         pinFieldLayout();
-    }
-
-    function albumName() {
-        var track = state.scope && state.scope.tracks ? state.scope.tracks[0] : null;
-        return mbzTagText(track && track.album) || _('this album');
     }
 
     /**
@@ -1078,7 +1138,7 @@ function init(params) {
 
         var raw = mbzTagFieldValue(UI.albumIdValue);
         var value = raw ? mbz.normalizeGuid(raw) : '';
-        var current = currentAlbumReleaseId();
+        var current = storedAlbumReleaseId();
 
         if (raw && !value) {
             setAlbumIdStatus(_('That is not a valid MusicBrainz release ID.'));
@@ -1096,7 +1156,7 @@ function init(params) {
             setAlbumIdStatus(_('Updating the album...'));
             setSummary(_('Reading the release from MusicBrainz...'), true);
 
-            return trackWork(window.localPromise(mbz.setAlbumGuidAsync(albumId, 'MBGID', value || '')).then(function () {
+            var work = window.localPromise(mbz.setAlbumGuidAsync(albumId, 'MBGID', value || '')).then(function () {
                 if (window._cleanUpCalled) return null;
 
                 if (state.scope) {
@@ -1105,48 +1165,36 @@ function init(params) {
                 }
                 if (state.natives) state.natives.releaseId = value || '';
 
+                // The album now points at the release it was showing, so there
+                // is no separate picking to keep.
+                state.pickedReleaseId = '';
+
                 setAlbumIdStatus(value
                     ? sprintf(_('The album release ID is now %s.'), value)
                     : _('The album release ID was cleared.'));
 
                 // A different release is the one to show now (or none at all).
-                return window.localPromise(reloadAsync());
-            }, function (error) {
-                if (window._cleanUpCalled) return;
+                // A failed reload is reported here: the ID itself is saved.
+                return window.localPromise(reloadAsync()).then(function () {
+                    return null;
+                }, function (error) {
+                    if (window._cleanUpCalled) return;
+                    setAlbumIdStatus(sprintf(
+                        _('The release ID was saved, but the window could not reload: %s'),
+                        mbzTagErrorText(error)));
+                });
+            });
+
+            return trackWork(handledInWindow(work, function (error) {
                 setAlbumIdStatus(sprintf(_('Could not update the album: %s'), mbzTagErrorText(error)));
             }));
         }
 
-        // Filling an empty field overwrites nothing, so it needs no prompt.
-        if (!current) {
-            write();
-            return;
-        }
-
-        trackWork(window.localPromise(mbz.countAlbumTracksAsync(albumId)).then(function (count) {
-            if (window._cleanUpCalled) return;
-
-            var message = _('Change the release ID of this album?')
-                + '<br><br>' + sprintf(_('Album \u201c%s\u201d (%s) will point at <b>%s</b>.'),
-                    albumName(), trackCountText(count), value || _('(no release ID)'))
-                + '<br>' + _('Every track of that album uses this ID for lookup and matching. MediaMonkey\'s own MusicBrainz lookup can overwrite it the next time it re-matches.');
-
-            if (typeof messageDlg !== 'function') {
-                write();
-                return;
-            }
-
-            messageDlg(message, 'Confirmation', ['btnYes', 'btnNo'],
-                { defaultButton: 'btnNo', title: _('Loves MBz') },
-                function (result) {
-                    if (!result || result.btnID !== 'btnYes' || window._cleanUpCalled) return;
-                    write();
-                });
-        }, function (error) {
-            if (window._cleanUpCalled) return;
-            setAlbumIdStatus(sprintf(
-                _('Could not check how many tracks the change covers: %s'), mbzTagErrorText(error)));
-        }));
+        // No prompt: the field exists to be saved, the write is one column, and
+        // the line under it says what was written. Only **Update library** in
+        // the disagreement strip still asks, because it acts on the tag's value
+        // rather than on something typed here.
+        write();
     }
 
     function onAlbumIdKey(event) {
@@ -1154,6 +1202,377 @@ function init(params) {
         if (event.preventDefault) event.preventDefault();
         if (event.stopPropagation) event.stopPropagation();
         saveAlbumId();
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Releases in this release group
+     * ---------------------------------------------------------------- */
+
+    /** What a picked release does and does not change. */
+    var GROUP_PICKED_NOTE = _('This release is loaded here. The album keeps its own release ID until you press Save ID.');
+
+    /**
+     * The action column ends with `use this` on every release that can be
+     * loaded and a single glyph on the one already here. The glyph says "this
+     * is it" without spending the room a second phrase would; the tooltip and
+     * `aria-label` carry the sentence. Written as an escape so the file stays
+     * plain ASCII.
+     */
+    var GROUP_LOADED_GLYPH = '\u2713';    // this is the release in the window
+
+    /**
+     * The card, built from script when the page does not have it. MediaMonkey
+     * keeps the page it loaded when the process started, so an install that adds
+     * a card shows nothing until MediaMonkey is fully restarted; creating the
+     * card here means the new section exists for an old page too, the way the
+     * busy ring is created when the page has none.
+     */
+    function ensureGroupCard() {
+        if (!UI.groupCard || !UI.groupRows) buildGroupCard();
+        placeGroupCardFirst();
+        relocateAlbumIdRow();
+    }
+
+    /** The card is the first one; a page that predates the move has it later. */
+    function placeGroupCardFirst() {
+        var host = UI.scrollColumn;
+        var card = UI.groupCard;
+
+        if (!host || !card || !host.insertBefore || !host.firstElementChild) return;
+        if (host.firstElementChild === card) return;
+
+        host.insertBefore(card, host.firstElementChild);
+    }
+
+    /** Builds the card to the page's shape when the window's page predates it. */
+    function buildGroupCard() {
+        if (typeof document === 'undefined') return;
+
+        var host = UI.scrollColumn;
+        if (!host || !host.insertBefore || !document.createElement) return;
+
+        var card = document.createElement('fieldset');
+        card.className = 'mbzSection mbzCard mbzHidden';
+        card.setAttribute('data-id', 'groupCard');
+
+        var legend = document.createElement('legend');
+        legend.className = 'mbzCardTitle';
+        legend.textContent = _('Releases in this release group');
+        card.appendChild(legend);
+
+        var table = document.createElement('table');
+        table.className = 'mbzTable';
+
+        var thead = document.createElement('thead');
+        var head = document.createElement('tr');
+        var titles = [_('Release'), _('Date'), _('Country'), _('Format'), _('Tracks'), ''];
+
+        for (var i = 0; i < titles.length; i++) {
+            var th = document.createElement('th');
+            th.textContent = titles[i];
+            head.appendChild(th);
+        }
+
+        thead.appendChild(head);
+        table.appendChild(thead);
+
+        var rows = document.createElement('tbody');
+        rows.setAttribute('data-id', 'groupRows');
+        table.appendChild(rows);
+        card.appendChild(table);
+
+        // First card in the column, above the release block: the page's order.
+        host.insertBefore(card, host.firstChild);
+
+        UI.groupCard = card;
+        UI.groupRows = rows;
+    }
+
+    /**
+     * The release ID field opens the group card, above the list, so the key is
+     * the first thing the card shows. A page loaded before the move still has
+     * the row in the release card; moving the node, rather than rebuilding it,
+     * keeps the control MediaMonkey already built on it.
+     */
+    function relocateAlbumIdRow() {
+        var card = UI.groupCard;
+        var row = UI.albumIdRow;
+
+        if (!card || !row || !card.insertBefore) return;
+
+        var legend = card.querySelector ? card.querySelector('legend') : null;
+        if (row.parentNode === card && legend && row.previousElementSibling === legend) return;
+
+        // The card's first content, right under its title, above the list.
+        card.insertBefore(row, legend && legend.nextSibling ? legend.nextSibling : card.firstChild);
+    }
+
+    /**
+     * The card says why it has no rows instead of disappearing. When the reason
+     * is one that passes (MusicBrainz busy, a timeout), it offers the attempt
+     * again: reading the group is a load like any other, and the lookup is not
+     * cached while it fails.
+     */
+    function renderGroupCardNote(text) {
+        if (!UI.groupRows || !text) {
+            syncGroupCard();
+            fitScrollColumn();
+            return;
+        }
+
+        var row = document.createElement('tr');
+        var cell = document.createElement('td');
+        cell.className = 'mbzNote';
+        cell.setAttribute('colspan', '6');
+        cell.textContent = text;
+
+        if (state.groupRetryable) {
+            var button = document.createElement('div');
+            button.className = 'button mbzButton';
+            button.textContent = _('Retry');
+            button.title = _('Read the releases of this group again.');
+            button.setAttribute('data-group-retry', '1');
+            // Inline, so the button keeps its gap on a page older than this script.
+            button.style.marginLeft = '10px';
+
+            if (state.busy) button.classList.add('mbzDisabled');
+
+            cell.appendChild(button);
+        }
+
+        row.appendChild(cell);
+        UI.groupRows.appendChild(row);
+
+        syncGroupCard();
+        fitScrollColumn();
+    }
+
+    /**
+     * The group's other releases, so a match for the group's best-known release
+     * can be swapped for the pressing the album actually is. The loaded release
+     * is marked instead of offered, and a group with one release draws no card:
+     * there would be nothing to choose. A group that could not be read keeps its
+     * card and says so, because a missing section reads as a missing feature.
+     */
+    function renderGroupReleases() {
+        scheduleTableSync();
+
+        if (!UI.groupRows) return;
+
+        UI.groupRows.textContent = '';
+
+        var releases = state.groupReleases || [];
+        var current = state.hasRelease && state.release && state.release.id
+            ? mbzTagText(state.release.id)
+            : '';
+
+        if (!state.hasRelease) {
+            syncGroupCard();
+            fitScrollColumn();
+            return;
+        }
+
+        if (!releases.length) {
+            renderGroupCardNote(state.groupMessage);
+            return;
+        }
+
+        if (releases.length < 2) {
+            syncGroupCard();
+            fitScrollColumn();
+            return;
+        }
+
+        releases.forEach(function (release) {
+            var row = document.createElement('tr');
+            var isCurrent = release.id === current;
+
+            if (isCurrent) row.className = 'mbzChanged';
+
+            var title = mbzTagText(release.title) || mbzTagShortGuid(release.id);
+            if (release.disambiguation) title += ' (' + release.disambiguation + ')';
+
+            row.appendChild(mbzTagCell(title));
+            row.appendChild(mbzTagCell(release.date, 'mbzNowrap'));
+            row.appendChild(mbzTagCell(release.country, 'mbzNowrap'));
+            row.appendChild(mbzTagCell(release.format, 'mbzNowrap'));
+            row.appendChild(mbzTagCell(release.trackCount ? String(release.trackCount) : '', 'mbzNowrap'));
+
+            var cell = document.createElement('td');
+            cell.className = 'mbzNowrap';
+            // Flush right, so the loaded release's check and the links under it
+            // line up on one edge whatever their own width.
+            cell.style.textAlign = 'right';
+
+            if (isCurrent) {
+                var loaded = _('This is the release loaded in the window.');
+                cell.textContent = GROUP_LOADED_GLYPH;
+                cell.title = loaded;
+                cell.setAttribute('aria-label', loaded);
+                cell.style.fontSize = '1.15em';
+            } else {
+                var action = sprintf(_('Load release %s into this window.'), release.id);
+                var link = document.createElement('a');
+                link.href = '#';
+                link.className = 'hotlink';
+                link.textContent = _('use this');
+                link.title = action;
+                link.setAttribute('aria-label', action);
+                link.setAttribute('data-release', release.id);
+                // Inline, so the link keeps its hand cursor on a page older
+                // than this script.
+                link.style.cursor = 'pointer';
+
+                // The rows are rebuilt after a pick, which happens while the
+                // window is locked: the new links must be drawn locked too.
+                if (state.busy || state.readOnly) link.classList.add('mbzDisabled');
+
+                cell.appendChild(link);
+            }
+
+            row.appendChild(cell);
+            UI.groupRows.appendChild(row);
+        });
+
+        syncGroupCard();
+        fitScrollColumn();
+    }
+
+    /**
+     * Loads one release of the group into the window. It writes nothing: the
+     * album's release ID changes only through Save ID, and Apply writes the
+     * loaded release's tags.
+     */
+    function chooseRelease(release) {
+        if (state.readOnly || state.busy || !fetch || !release || !release.id) return;
+
+        var current = state.hasRelease && state.release && state.release.id
+            ? mbzTagText(state.release.id)
+            : '';
+        if (release.id === current) return;
+
+        setBusy(true);
+        setStatus(sprintf(_('Reading release %s...'), release.id));
+
+        var work = window.localPromise(fetch.fetchReleaseAsync(release.id)).then(function (loaded) {
+            if (window._cleanUpCalled || !loaded) return null;
+
+            state.release = loaded;
+            state.hasRelease = true;
+            state.pickedReleaseId = release.id;
+
+            renderRelease({ release: loaded, releaseId: loaded.id });
+            setAlbumIdStatus(GROUP_PICKED_NOTE);
+            syncAlbumIdInput();
+            renderGroupReleases();
+
+            return buildPlanAsync(loaded).then(function () {
+                if (window._cleanUpCalled) return;
+                setStatus('');
+            });
+        });
+
+        trackWork(handledInWindow(work, function (error) {
+            setStatus(sprintf(_('Could not read that release: %s'), mbzTagErrorText(error)));
+        })).then(function () {
+            if (window._cleanUpCalled) return;
+            setBusy(false);
+        });
+    }
+
+    /**
+     * The chooser's links carry the release ID they load. They are anchors, so
+     * the press is consumed here rather than followed as a `#` link.
+     */
+    function onGroupClick(event) {
+        var target = event && event.target;
+        if (!target) return;
+
+        var node = target;
+
+        while (node && node !== UI.groupRows) {
+            var retry = node.getAttribute && node.getAttribute('data-group-retry');
+            var releaseId = node.getAttribute && node.getAttribute('data-release');
+
+            if (retry || releaseId) {
+                if (event.preventDefault) event.preventDefault();
+                if (state.busy || state.readOnly) return;
+
+                if (retry) {
+                    retryGroupReleases();
+                    return;
+                }
+
+                (state.groupReleases || []).forEach(function (release) {
+                    if (release.id === releaseId) chooseRelease(release);
+                });
+                return;
+            }
+
+            node = node.parentNode;
+        }
+    }
+
+    /**
+     * One request for the loaded release's group, cached by group ID in
+     * mbzFetch. The plan does not wait for it: the card fills in under the busy
+     * ring, and a group that cannot be read costs nothing but the card.
+     */
+    function loadGroupReleasesAsync(release, keepCard) {
+        var group = release && release['release-group'];
+        var groupId = mbzTagText(group && group.id);
+
+        state.groupReleases = [];
+        state.groupRetryable = false;
+        if (!keepCard) state.groupMessage = '';
+        renderGroupReleases();
+
+        // A release without a group has no list to offer; nothing is wrong.
+        if (!groupId) return Promise.resolve();
+
+        if (!fetch || typeof fetch.fetchReleaseGroupReleasesAsync !== 'function') {
+            state.groupMessage = _('This window cannot list the releases of this group yet. Restart MediaMonkey so the new lookup is loaded.');
+            renderGroupReleases();
+            return Promise.resolve();
+        }
+
+        return trackWork(window.localPromise(fetch.fetchReleaseGroupReleasesAsync(groupId)).then(function (result) {
+            if (window._cleanUpCalled) return;
+
+            // A release picked while this was in flight must not be replaced by
+            // the list of the release it replaced.
+            var loaded = state.release && state.release['release-group'];
+            if (mbzTagText(loaded && loaded.id) !== groupId) return;
+
+            state.groupReleases = (result && result.releases) || [];
+            state.groupMessage = '';
+            state.groupRetryable = false;
+            renderGroupReleases();
+        }, function (error) {
+            if (window._cleanUpCalled) return;
+
+            if (typeof ODS === 'function') {
+                ODS('Loves MBz: could not read the releases of the release group: '
+                    + mbzTagErrorText(error));
+            }
+
+            state.groupReleases = [];
+            state.groupMessage = sprintf(_('Could not read the other releases of this group: %s'),
+                mbzTagErrorText(error));
+            // Busy and network answers pass; a missing or unknown group does not.
+            state.groupRetryable = canRetryRelease(error);
+            renderGroupReleases();
+        }));
+    }
+
+    /** Reads the group's releases again, keeping the card and its sentence. */
+    function retryGroupReleases() {
+        if (state.busy || !state.release) return;
+
+        state.groupMessage = _('Reading the releases of this group...');
+        state.groupRetryable = false;
+        renderGroupReleases();
+        loadGroupReleasesAsync(state.release, true);
     }
 
     /* ---------------------------------------------------------------- *
@@ -2461,23 +2880,40 @@ function init(params) {
         });
     }
 
+    /** A failed release lookup: what the window says and whether Retry helps. */
+    function reportReleaseError(error) {
+        var retryable = canRetryRelease(error);
+
+        setSummary(sprintf(_('Could not read the release: %s'), mbzTagErrorText(error)), true);
+        setNote(retryable
+            ? _('The release ID is unchanged and nothing was written. Press Retry to look it up again.')
+            : _('The release ID is unchanged and nothing was written. Check the album release ID, or clear it and search MusicBrainz for the right release.'));
+        showRetry(retryable);
+        return { skipped: true, reason: 'error' };
+    }
+
     function loadReleaseAsync(scope) {
         if (!fetch || !(scope.albumId > 0)) {
             return Promise.resolve({ skipped: true, reason: 'no-album' });
         }
 
+        // A release picked out of the group is the one the window is working
+        // on, even though the album row still points at its own: a reload
+        // after Apply must not drop the picking behind the user's back.
+        if (state.pickedReleaseId) {
+            var picked = state.pickedReleaseId;
+
+            return window.localPromise(fetch.fetchReleaseAsync(picked)).then(function (release) {
+                return { releaseId: picked, release: release };
+            }, function (error) {
+                state.pickedReleaseId = '';
+                return reportReleaseError(error);
+            });
+        }
+
         return window.localPromise(fetch.previewAsync(scope.albumId)).then(function (result) {
             return result;
-        }, function (error) {
-            var retryable = canRetryRelease(error);
-
-            setSummary(sprintf(_('Could not read the release: %s'), mbzTagErrorText(error)), true);
-            setNote(retryable
-                ? _('The release ID is unchanged and nothing was written. Press Retry to look it up again.')
-                : _('The release ID is unchanged and nothing was written. Check the album release ID, or clear it and search MusicBrainz for the right release.'));
-            showRetry(retryable);
-            return { skipped: true, reason: 'error' };
-        });
+        }, reportReleaseError);
     }
 
     /**
@@ -2512,6 +2948,7 @@ function init(params) {
         }).then(function () {
             if (window._cleanUpCalled) return;
             syncAlbumIdInput();
+            loadGroupReleasesAsync(state.release);
         }));
     }
 
@@ -2651,7 +3088,10 @@ function init(params) {
             state.release = result.release;
             state.hasRelease = true;
             renderRelease(result);
-            return buildPlanAsync(result.release);
+            return buildPlanAsync(result.release).then(function () {
+                if (window._cleanUpCalled) return;
+                loadGroupReleasesAsync(result.release);
+            });
         }).then(function () {
             if (window._cleanUpCalled) return null;
             syncAlbumIdInput();
@@ -2761,6 +3201,14 @@ function init(params) {
             buttons[d].classList.toggle('mbzDisabled', state.busy);
         }
 
+        // A release picked from the group is a load, not a write: it is locked
+        // with the rest so the window cannot change under a running write.
+        var picks = UI.groupRows ? UI.groupRows.querySelectorAll('[data-release], [data-group-retry]') : [];
+
+        for (var g = 0; g < picks.length; g++) {
+            picks[g].classList.toggle('mbzDisabled', state.busy || state.readOnly);
+        }
+
         refreshApply();
     }
 
@@ -2780,7 +3228,7 @@ function init(params) {
         setBusy(true);
         setStatus(_('Writing...'));
 
-        trackWork(window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
+        var work = window.localPromise(apply.applySelectionAsync(plan, keys, edits, function (index, total) {
             if (window._cleanUpCalled) return;
 
             setStatus(sprintf(_('Writing %d of %d...'), Math.min(index + 1, total), total));
@@ -2789,21 +3237,23 @@ function init(params) {
 
             var message = reportText(result);
 
+            // The report is shown whether or not the reload that follows it
+            // works, because the write has already happened.
             return window.localPromise(reloadAsync()).then(function () {
                 if (window._cleanUpCalled) return;
-                setBusy(false);
                 setStatus(message);
             }, function () {
                 if (window._cleanUpCalled) return;
-                setBusy(false);
                 setStatus(message);
             });
-        }, function (error) {
-            if (window._cleanUpCalled) return;
+        });
 
-            setBusy(false);
+        trackWork(handledInWindow(work, function (error) {
             setStatus(sprintf(_('Could not write: %s'), mbzTagErrorText(error)));
-        }));
+        })).then(function () {
+            if (window._cleanUpCalled) return;
+            setBusy(false);
+        });
     }
 
     /* ---------------------------------------------------------------- *
@@ -2881,6 +3331,7 @@ function init(params) {
 
     if (UI.btnRetry) UI.btnRetry.title = _('Look the release up again without closing the window.');
 
+    ensureGroupCard();
     pinCardSpacing();
     italicizeInfo();
     resetView();
@@ -2889,6 +3340,7 @@ function init(params) {
     if (UI.btnRetry) window.localListen(UI.btnRetry, 'click', retryRelease);
     if (UI.fieldRows) window.localListen(UI.fieldRows, 'click', updatePending);
     if (UI.fieldRows) window.localListen(UI.fieldRows, 'change', updatePending);
+    if (UI.groupRows) window.localListen(UI.groupRows, 'click', onGroupClick);
     if (UI.btnSaveAlbumId) window.localListen(UI.btnSaveAlbumId, 'click', saveAlbumId);
     if (UI.albumIdValue) window.localListen(UI.albumIdValue, 'keydown', onAlbumIdKey);
     if (UI.linksBar) window.localListen(UI.linksBar, 'click', onLinkClick);

@@ -71,12 +71,26 @@ group and its album artist straight to musicbrainz.org. Those three links are
 also built from the album and artist rows when the album has no release ID, so
 they are there even without a lookup.
 
+**Releases in this release group** lists every release of the loaded release's
+group — title, date, country and track count, oldest first — with the loaded one
+marked `✓` and a **use this** link on the rest, both flush right. The release
+status is not repeated there; the release block above already names it.
+MediaMonkey often matches the group's best-known release; **use this** loads
+another pressing in place
+and the release block, the field comparison, the track table and **Apply** all
+follow it. Picking writes nothing: the album's `Albums.MBGID` still changes only
+through **Save ID**, and the card is drawn only when the group has more than one
+release. One `release?release-group={id}&inc=media` request supplies the list,
+cached by group ID, and the plan does not wait for it.
+
 Below the release block, **Album release ID** holds the album's `Albums.MBGID`
 — the value the whole lookup is keyed on. Correct it there when the album points
-at the wrong release: **Save ID** checks the value is a MusicBrainz UUID, asks
-before replacing an existing ID (naming the album and how many tracks it
-covers), writes only that column, and reloads the window with the release behind
-the new ID. An empty field clears the ID, and the window falls back to the
+at the wrong release: **Save ID** checks the value is a MusicBrainz UUID, writes
+only that column, and reloads the window with the release behind the new ID. It
+asks nothing first — the field exists to be saved, and the line under it reports
+what was written (or why it was not). The field shows the release currently loaded, so after picking one
+from the group it holds the picked ID; **Save ID** compares it with the album
+row, so pressing it writes the new ID instead of reporting it as already set. An empty field clears the ID, and the window falls back to the
 no-release-ID state with **Search MusicBrainz**. Like any library-side write,
 MediaMonkey's own lookup can overwrite it later.
 
@@ -90,7 +104,7 @@ script with its size, border and colour pinned inline, so it turns under
 MediaMonkey's skin even when the host is still serving an older copy of the
 dialog page.
 
-The footer of the window shows the add-on version — `Loves MBz 0.5.3` for this
+The footer of the window shows the add-on version — `Loves MBz 0.6.1` for this
 release, with a test build's channel appended — so you can tell which build is
 running before trusting a screenshot or a report from an older one. The build
 time follows it.
@@ -406,6 +420,24 @@ still reports the disagreement but shows no buttons.
   has none, `fetchReleaseAsync` makes one `release-group/{id}?inc=url-rels`
   follow-up for the group's Discogs master page and attaches it to the cached
   release; `discogsUrls` reads both.
+- **The release group's other releases** — `fetchReleaseGroupReleasesAsync`
+  makes one `release?release-group={id}&inc=media` request through the same
+  queue and spacing, caches the parsed list by group ID, and hands it to the
+  window's chooser. It browses releases instead of looking the group up: a
+  `release-group?inc=releases` response lists the same releases but without
+  their media, and the media is where each pressing's track count lives. `releaseGroupReleases` turns that response into rows (date, country, format,
+  status, summed track counts, oldest first, ID-less and duplicate releases
+  dropped); `releaseFormats` names each distinct medium format once, so a CD
+  and a DVD in one box read `CD, DVD`; a chosen release is then loaded with the ordinary
+  `fetchReleaseAsync` path, so its tags and matching are the ones already tested.
+  The card itself is not only in the page: `ensureGroupCard` builds it in the
+  window when the page is older than the script (the host keeps the page it
+  loaded at start-up), and a listing that cannot be read leaves the card in
+  place with the reason, so an install without a restart still shows the
+  section. It is the first card in the column and holds the **Album release ID**
+  field: `syncGroupCard` keeps it on screen while it has rows or that field, and
+  `relocateAlbumIdRow` moves the row into the card on a page that predates the
+  move.
 - **Scope** — `mbzApply.resolveTagScope` is the only place that decides what the
   window works on: the selected tracks, their album IDs, each album's release
   ID, and whether the selection spans more than one album. The action and the
@@ -440,7 +472,12 @@ still reports the disagreement but shows no buttons.
   removed on start-up.
 - **Lifecycle** — the dialog uses `window.localPromise` / `window.localListen`,
   long loops check `window._cleanUpCalled`, and the cache is only built in the
-  main window (`init.js`). The add-on stores no settings of its own.
+  main window (`init.js`). The add-on stores no settings of its own. Every
+  promise the window starts is handled where it is built, through
+  `handledInWindow(work, onError)`: a rejection reaching `trackWork` is reported
+  by MediaMonkey's promise library as an unhandled exception, because
+  `trackWork` adopts the promise through the native `Promise` one microtask
+  after the rejection.
 
 ### Deliberately not included
 

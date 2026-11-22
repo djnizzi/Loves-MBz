@@ -24,6 +24,7 @@ const dialogSource = read(path.join('dialogs', 'dlgMBzTag.js'));
 const dialogHtml = read(path.join('dialogs', 'dlgMBzTag.html'));
 const actionsSource = read('actions_add.js');
 const initSource = read('init.js');
+const fetchSource = read('mbzFetch.js');
 
 /* -------------------------------------------------------------------------- *
  * Stubs
@@ -38,6 +39,9 @@ global.sprintf = (format, ...args) => {
 
 require(applyPath);
 const apply = global.window.mbzApply;
+
+require(path.join(root, 'mbzFetch.js'));
+const mbzFetch = global.window.mbzFetch;
 
 /* -------------------------------------------------------------------------- *
  * Source shape
@@ -177,6 +181,154 @@ assert.match(dialogCode, /setAlbumGuidAsync\(albumId, 'MBGID'/, 'the window must
 assert.doesNotMatch(applySource, /setAlbumGuidAsync|setArtistGuidAsync/,
     'the write engine must never touch the album or artist ID columns');
 
+/* -------------------------------------------------------------------------- *
+ * 0.6.1: the other releases of the release group
+ * -------------------------------------------------------------------------- */
+
+assert.match(dialogHtml, /data-id="groupCard"[\s\S]*?data-id="groupRows"/,
+    'the window must list the releases of the loaded release group');
+assert.match(dialogHtml,
+    /<legend class="mbzCardTitle" data-localize>Releases in this release group<\/legend>/,
+    'the group list needs a titled card');
+assert.match(dialogHtml, /<th data-localize>Date<\/th>/,
+    'the group list must show each release date');
+assert.match(dialogHtml, /<th data-localize>Tracks<\/th>/,
+    'the group list must show each release track count');
+assert.match(dialogHtml, /<th data-localize>Format<\/th>/,
+    'the group list must show the medium each release is');
+assert.match(dialogCode, /mbzTagCell\(release\.format,[^)]*\)/,
+    'the window must draw the release format from the listing');
+assert.match(dialogCode, /function renderGroupReleases/, 'the group list is drawn by the window');
+assert.match(dialogCode, /releases\.length < 2/,
+    'a group with nothing to choose must not draw the card');
+assert.match(dialogCode, /function chooseRelease/, 'a listed release must be loadable in place');
+assert.match(dialogCode, /localListen\(UI\.groupRows, 'click', onGroupClick\)/,
+    'the chooser must be wired to its rows');
+assert.match(dialogCode, /fetch\.fetchReleaseGroupReleasesAsync\(groupId\)/,
+    'the list must come from the release group lookup');
+assert.match(dialogCode, /loadGroupReleasesAsync\(state\.release\)/,
+    'a loaded release brings its group list, and the plan does not wait for it');
+assert.match(dialogCode, /function syncGroupCard/,
+    'the card follows the rows it draws and the release ID field it holds');
+assert.match(dialogCode, /function relocateAlbumIdRow/,
+    'a page older than this script must still get the ID field into the card');
+assert.match(dialogCode, /function placeGroupCardFirst/,
+    'a page older than this script must still get the group card first');
+assert.ok(dialogHtml.indexOf('data-id="groupCard"') < dialogHtml.indexOf('data-id="releaseCard"'),
+    'the releases of the group are the first card in the window');
+
+const groupCardHtml = dialogHtml.slice(
+    dialogHtml.indexOf('data-id="groupCard"'),
+    dialogHtml.indexOf('data-id="releaseCard"')
+);
+assert.match(groupCardHtml, /data-id="albumIdRow"/,
+    'the album release ID field belongs inside the group card');
+assert.match(groupCardHtml, /data-id="btnSaveAlbumId"/,
+    'Save ID lives beside the field it saves');
+assert.ok(groupCardHtml.indexOf('data-id="albumIdRow"') < groupCardHtml.indexOf('data-id="groupRows"'),
+    'the release ID field is the first thing in the card, above the list');
+assert.doesNotMatch(dialogHtml, /Picking another release/,
+    'the card carries no helper sentence the list and the field already say');
+assert.doesNotMatch(dialogCode, /GROUP_CARD_NOTE/,
+    'the script must not rebuild the removed helper sentence');
+assert.match(dialogCode, /function ensureGroupCard/,
+    'the window must build the group card when the page predates it');
+assert.match(dialogCode, /ensureGroupCard\(\);/,
+    'the group card must be in place before the window starts');
+assert.match(dialogCode, /function renderGroupCardNote/,
+    'a group that could not be read must say so instead of vanishing');
+assert.match(dialogCode, /Could not read the other releases of this group: %s/,
+    'the card must carry the reason it has no rows');
+assert.match(dialogCode, /data-group-retry/,
+    'a listing that failed must offer another attempt');
+assert.match(dialogCode, /function retryGroupReleases/,
+    'the retry must read the same group again');
+assert.match(dialogCode, /loadGroupReleasesAsync\(state\.release, true\)/,
+    'a retry keeps the card while the group is read again');
+assert.match(dialogCode, /state\.groupRetryable = canRetryRelease\(error\)/,
+    'only a failure that can pass may offer a retry');
+
+// The release status is already named in the release block above the list; the
+// column repeated it on every row and cost width the chooser does not have.
+assert.doesNotMatch(dialogHtml, /<th data-localize>Status<\/th>/,
+    'the group list must not carry a status column');
+assert.doesNotMatch(dialogCode, /mbzTagCell\(release\.status/,
+    'the group list must not draw the release status');
+
+// The action column ends flush right: `use this` on the releases that can be
+// loaded, one glyph on the loaded one.
+assert.match(dialogCode, /GROUP_LOADED_GLYPH/, 'the loaded release needs its own mark');
+assert.doesNotMatch(dialogCode, /GROUP_USE_GLYPH/,
+    'the load action is a link that says so, not a glyph');
+
+const groupRowsSlice = dialogCode.slice(
+    dialogCode.indexOf('function renderGroupReleases'),
+    dialogCode.indexOf('function chooseRelease')
+);
+assert.doesNotMatch(groupRowsSlice, /_\('Use'\)|_\('Loaded'\)/,
+    'the chooser must use icons instead of the words Use and Loaded');
+assert.match(groupRowsSlice, /link\.textContent = _\('use this'\)/,
+    'a listed release needs a link that says what it does');
+assert.match(groupRowsSlice, /link\.setAttribute\('aria-label', action\)/,
+    'the link still needs its accessible name');
+assert.match(groupRowsSlice, /link\.setAttribute\('data-release', release\.id\)/,
+    'the link carries the release it loads');
+assert.match(groupRowsSlice, /cell\.style\.textAlign = 'right'/,
+    'the links must line up with the loaded release check');
+
+// Picking a release is a load, not a write: Save ID stays the only place that
+// touches Albums.MBGID, and nothing goes through the apply path.
+
+// Picking a release is a load, not a write: Save ID stays the only place that
+// touches Albums.MBGID, and nothing goes through the apply path.
+const chooseSlice = dialogCode.slice(
+    dialogCode.indexOf('function chooseRelease'),
+    dialogCode.indexOf('function onGroupClick')
+);
+assert.match(chooseSlice, /fetchReleaseAsync/, 'the chooser loads the picked release');
+assert.doesNotMatch(chooseSlice, /setAlbumGuidAsync|applySelectionAsync/,
+    'picking a release must not write the album row or the tags');
+
+// A failed pick is reported inside the window's promise chain. Handled only
+// after trackWork wraps the promise, MediaMonkey's promise library reports the
+// rejection as an unhandled exception and shows its own error box.
+assert.match(chooseSlice, /trackWork\(handledInWindow\(work, function \(error\)/,
+    'the pick must handle its failure inside the window promise chain');
+assert.doesNotMatch(chooseSlice, /var failed/,
+    'the pick needs no failure flag: its rejection is handled where it is built');
+assert.strictEqual(
+    (dialogSource.match(/setAlbumGuidAsync\(albumId, 'MBGID'/g) || []).length,
+    1,
+    'Save ID must stay the only album release ID write'
+);
+
+// The field exists to be saved: Save ID writes the value it holds and reports it
+// underneath, instead of opening a modal for the value the user just typed.
+const saveIdSlice = dialogCode.slice(
+    dialogCode.indexOf('function saveAlbumId'),
+    dialogCode.indexOf('function onAlbumIdKey')
+);
+assert.doesNotMatch(saveIdSlice, /messageDlg|'Confirmation'/,
+    'Save ID must write without a confirmation dialog');
+assert.match(saveIdSlice, /trackWork\(handledInWindow\(work, function \(error\)/,
+    'Save ID must handle its failure inside the window promise chain');
+
+// A release picked from the group is the ID the field shows, while Save ID
+// compares against what the album row actually holds.
+// A picked release survives the reload that follows Apply: the album row still
+// points at its own release until Save ID is pressed.
+assert.match(dialogCode, /state\.pickedReleaseId = release\.id/,
+    'picking a release must be remembered');
+assert.match(dialogCode, /fetch\.fetchReleaseAsync\(picked\)/,
+    'a reload after Apply must keep the picked release loaded');
+assert.match(dialogCode, /state\.pickedReleaseId = '';/,
+    'Save ID ends the picking, because the album then points at it');
+
+assert.match(dialogCode, /function storedAlbumReleaseId/, 'the album row value needs its own reader');
+assert.match(dialogCode, /function shownAlbumReleaseId/, 'the shown release needs its own reader');
+assert.match(dialogCode, /var current = storedAlbumReleaseId\(\);/,
+    'Save ID must compare with the album row, not with a picked release');
+
 // A failed release lookup is recoverable in the window, not by closing it.
 assert.match(dialogHtml, /data-id="btnRetry"/, 'a failed lookup must offer a retry');
 assert.match(dialogCode, /function retryRelease/, 'the retry must reload the release in place');
@@ -215,10 +367,14 @@ assert.match(dialogCode, /function beginWork/, 'work must be counted, not flagge
 assert.match(dialogCode, /function trackWork/, 'lookups must run under the ring');
 assert.match(dialogCode, /function endWork/, 'the ring must clear when the work ends');
 assert.match(dialogCode, /trackWork\(loadTagRowsAsync/, 'a reload must show the ring');
-assert.match(dialogCode, /trackWork\(window\.localPromise\(mbz\.setAlbumGuidAsync/,
+assert.match(dialogCode, /var work = window\.localPromise\(mbz\.setAlbumGuidAsync/,
     'saving a release ID must show the ring');
-assert.match(dialogCode, /trackWork\(window\.localPromise\(apply\.applySelectionAsync/,
+assert.match(dialogCode, /var work = window\.localPromise\(apply\.applySelectionAsync/,
     'Apply must show the ring');
+assert.match(dialogCode, /function handledInWindow/,
+    'a failure must be reported inside the window promise chain, not after trackWork');
+assert.match(dialogCode, /trackWork\(handledInWindow\(work, function \(error\)/,
+    'Apply, Save ID and the pick must handle their failures before trackWork wraps them');
 assert.match(dialogCode, /createElement\('style'\)/, 'a page older than the script must still get the ring');
 
 // The ring has to survive the host's skin sheet and an engine that ignores the
@@ -246,6 +402,9 @@ assert.match(buildScript, /tag-path\.test\.js/, 'the packager must run this guar
 assert.match(buildScript, /process\.exit\(1\)/, 'a failed guard must stop the build');
 assert.doesNotMatch(buildScript, /stamped === source/,
     'stamping twice in the same minute must not look like a missing slot');
+assert.match(buildScript, /BUILD_CHANNEL/, 'a test build must name its channel in the package');
+assert.match(buildScript, /'LovesMBz-' \+ version \+ '-' \+ channel \+ '\.mmip'/,
+    'the channel belongs in the package name, beside the release package');
 
 // No MediaMonkey dialog integration survives.
 assert.strictEqual(fs.existsSync(path.join(root, 'dialogs', 'dlgTrackProperties')), false,
@@ -334,6 +493,82 @@ function releaseFixture() {
         }]
     };
 }
+
+/* -------------------------------------------------------------------------- *
+ * The release group listing
+ * -------------------------------------------------------------------------- */
+
+assert.match(fetchSource, /'release\?release-group=' \+ encodeURIComponent\(id\)/,
+    'the group listing is one release browse by release group');
+assert.match(fetchSource, /inc=media/,
+    'the listing must ask for media, or it carries no track count');
+assert.doesNotMatch(fetchSource, /release-group\/' \+ encodeURIComponent\(id\) \+\s*\n?\s*'\?inc=releases'/,
+    'a release-group inc=releases listing has no media and no track counts');
+assert.strictEqual(typeof mbzFetch.fetchReleaseGroupReleasesAsync, 'function',
+    'mbzFetch must list a release group\'s releases');
+assert.strictEqual(typeof mbzFetch.releaseGroupReleases, 'function',
+    'the group response must be parsed into rows');
+
+const groupFixture = {
+    id: '22222222-2222-4222-8222-222222222222',
+    title: 'An Album',
+    releases: [{
+        id: 'BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB',
+        title: 'An Album',
+        date: '2004-05-01',
+        country: 'GB',
+        status: 'Official',
+        media: [{ 'track-count': 10, format: 'CD' }, { 'track-count': 2, format: 'CD' }]
+    }, {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        title: 'An Album (remaster)',
+        date: '1999-03-01',
+        country: 'US',
+        status: 'Official',
+        disambiguation: 'remastered',
+        media: [{ tracks: [{}, {}, {}], format: '12" Vinyl' }]
+    }, {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        title: 'An Album (remaster)',
+        date: '1999-03-01'
+    }, {
+        title: 'No ID at all',
+        date: '1970'
+    }, {
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        title: 'Undated',
+        status: 'Bootleg'
+    }]
+};
+
+const groupList = mbzFetch.releaseGroupReleases(groupFixture);
+assert.strictEqual(groupList.title, 'An Album');
+assert.strictEqual(groupList.id, '22222222-2222-4222-8222-222222222222');
+assert.deepStrictEqual(
+    groupList.releases.map((release) => release.id),
+    [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    ],
+    'the group is oldest first, deduplicated, canonical and skips id-less rows'
+);
+assert.strictEqual(groupList.releases[0].trackCount, 3, 'a medium without track-count is counted');
+assert.strictEqual(groupList.releases[1].trackCount, 12, 'a medium with track-count is summed');
+assert.strictEqual(groupList.releases[1].format, 'CD', 'the media format is named once, not per disc');
+assert.strictEqual(groupList.releases[0].format, '12" Vinyl', 'a vinyl pressing keeps its format');
+assert.strictEqual(groupList.releases[2].format, '', 'a release with no media has no format');
+assert.strictEqual(groupList.releases[0].date, '1999-03-01');
+assert.strictEqual(groupList.releases[0].disambiguation, 'remastered');
+assert.strictEqual(groupList.releases[2].trackCount, 0, 'a release with no media has no count');
+assert.strictEqual(groupList.releases[2].date, '', 'an undated release stays empty, not year zero');
+assert.deepStrictEqual(mbzFetch.releaseGroupReleases(null).releases, []);
+assert.deepStrictEqual(mbzFetch.releaseGroupReleases({ releases: [] }).releases, []);
+assert.deepStrictEqual(
+    mbzFetch.releaseGroupReleases({ releases: [{ id: 'short', title: 'bad id' }] }).releases,
+    [],
+    'a value that is not a UUID is not a release to offer'
+);
 
 function makeTrack(options) {
     const log = options.log;

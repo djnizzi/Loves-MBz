@@ -12,6 +12,10 @@
  * That stamp, next to the version in the window footer, is what tells two
  * builds of the same version apart.
  *
+ * The package is named after the build: `LovesMBz.mmip` for a release build,
+ * `LovesMBz-0.6.1-rc1.mmip` while the dialog carries a channel, so a test
+ * build does not overwrite the release package next to it.
+ *
  * The save-path regression test runs first, and nothing is packaged when it
  * fails. Afterwards the archive is opened again and checked entry by entry: a
  * package that carried the dialog script but not the dialog page installs
@@ -25,8 +29,8 @@ var path = require('path');
 var execFileSync = require('child_process').execFileSync;
 
 var ROOT = path.resolve(__dirname, '..');
-var OUTPUT = path.join(ROOT, 'LovesMBz.mmip');
 var GUARD = path.join(ROOT, 'tests', 'tag-path.test.js');
+var DIALOG = path.join('dialogs', 'dlgMBzTag.js');
 
 /* Everything the add-on needs; the archive holds these at its root. */
 var ENTRIES = [
@@ -44,6 +48,20 @@ var ENTRIES = [
 
 function pad(value) {
     return String(value).padStart(2, '0');
+}
+
+/**
+ * The package name, from the dialog itself: the version and channel in the
+ * window footer are the same two values `info.json` cannot express.
+ */
+function outputFile() {
+    var source = fs.readFileSync(path.join(ROOT, DIALOG), 'utf8');
+    var version = (source.match(/var ADDON_VERSION = '([^']*)';/) || [])[1] || '';
+    var channel = (source.match(/var BUILD_CHANNEL = '([^']*)';/) || [])[1] || '';
+
+    return path.join(ROOT, channel
+        ? 'LovesMBz-' + version + '-' + channel + '.mmip'
+        : 'LovesMBz.mmip');
 }
 
 /** `YYYY-MM-DD HH:MM`, local time, minute precision. */
@@ -176,6 +194,7 @@ function main() {
 
     var staging = fs.mkdtempSync(path.join(os.tmpdir(), 'lovesmbz-'));
     var stamp = buildTime();
+    var output = outputFile();
 
     try {
         ENTRIES.forEach(function (entry) {
@@ -184,25 +203,24 @@ function main() {
             copyInto(source, path.join(staging, entry));
         });
 
-        var dialog = path.join('dialogs', 'dlgMBzTag.js');
-        stampDialog(path.join(staging, dialog), stamp);
-        stampDialog(path.join(ROOT, dialog), stamp);
+        stampDialog(path.join(staging, DIALOG), stamp);
+        stampDialog(path.join(ROOT, DIALOG), stamp);
 
-        if (fs.existsSync(OUTPUT)) fs.unlinkSync(OUTPUT);
+        if (fs.existsSync(output)) fs.unlinkSync(output);
 
         try {
-            execFileSync('zip', ['-qr', OUTPUT].concat(ENTRIES), { cwd: staging });
+            execFileSync('zip', ['-qr', output].concat(ENTRIES), { cwd: staging });
         } catch (noZip) {
             // No zip on this machine: PowerShell makes the same archive.
             var list = ENTRIES.map(function (entry) { return '.\\' + entry; }).join(',');
             execFileSync('powershell.exe', ['-NoProfile', '-Command',
-                'Compress-Archive -Path ' + list + ' -DestinationPath "' + OUTPUT + '" -Force'
+                'Compress-Archive -Path ' + list + ' -DestinationPath "' + output + '" -Force'
             ], { cwd: staging });
         }
 
-        var checked = verifyArchive(OUTPUT, staging);
+        var checked = verifyArchive(output, staging);
 
-        console.log('Packaged ' + path.basename(OUTPUT) + ' (' + checked.files + ' files)');
+        console.log('Packaged ' + path.basename(output) + ' (' + checked.files + ' files)');
         console.log('Dialog page: dialogs/dlgMBzTag.html (' + checked.page + ' bytes)');
         console.log('Build time: ' + stamp);
     } finally {

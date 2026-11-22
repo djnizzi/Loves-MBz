@@ -28,6 +28,14 @@ button in MediaMonkey's toolbar. It works on one album at a time.
   **Apply** the footer counts exactly what that click will do — for example
   `Will write 9 field changes on 5 tracks · 2 tag edits`. Untick a field to
   keep your value.
+- **The exact release, not just the right group.** MediaMonkey often matches
+  the release group's best-known release rather than the pressing the album is.
+  The window's first card lists every release of the group with its date,
+  country, format and track count, under the album's release ID field;
+  **use this** loads one in place, and the fields, the track comparison and
+  **Apply** follow it. A list that could not be read says why and offers
+  **Retry**. Nothing is written to the album by picking: **Save ID** is still
+  what changes the album's release ID.
 - **Tracks are matched by disc and track number, never by title.** A library
   track with no counterpart in the release is skipped and counted, so a partial
   match cannot put the wrong title on a track.
@@ -70,8 +78,8 @@ album or artist behind the selected track. Right-click a track — or use
 **Edit → Tag Tools** — and pick **MusicBrainz links** to open its release,
 release group or artist page on musicbrainz.org.
 
-Current version: **0.5.3** "Responsive". A test build names its channel (for
-example `0.5.3-rc1`) in the window footer and in the package.
+Current version: **0.6.1** "We just getting started". A test build names its channel (for
+example `0.6.1-rc1`) in the window footer and in the package.
 
 ---
 
