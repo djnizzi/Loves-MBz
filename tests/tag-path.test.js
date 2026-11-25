@@ -1123,6 +1123,208 @@ global.app = {
     assert.strictEqual(loadIdSlice.indexOf('setAlbumGuidAsync'), -1,
         'loading a release outside the library must not write an album row');
 
+    /* ---------------------------------------------------------------------- *
+     * 0.7.0: a fetched release outlives the window that fetched it
+     * ---------------------------------------------------------------------- */
+
+    // init.js creates the container on the main window and a dialog can only
+    // read it. This fake main window is that contract; a fresh module load with
+    // a fresh `window` is the next dialog.
+    const mainWindowValues = {};
+    const cacheContainer = {};
+    mainWindowValues.lovesMBzFetchCache = cacheContainer;      // what init.js does
+    global.app = {
+        dialogs: {
+            getMainWindow: () => ({ getValue: (name) => mainWindowValues[name] })
+        }
+    };
+
+    // Time is how an entry is aged without reaching into the cache's shape.
+    const realNow = Date.now;
+    let clock = 1700000000000;
+    Date.now = () => clock;
+
+    const releaseOne = '11111111-1111-4111-8111-111111111111';
+    const releaseTwo = '22222222-2222-4222-8222-222222222222';
+    const releaseThree = '33333333-3333-4333-8333-333333333333';
+    const groupId = '44444444-4444-4444-8444-444444444444';
+    const releaseTitles = {
+        [releaseOne]: 'An Album',
+        [releaseTwo]: 'Another Album',
+        [releaseThree]: 'Third Album'
+    };
+
+    let releaseRequests = 0;
+    let groupRequests = 0;
+
+    function releaseBodyFor(url) {
+        const id = (String(url).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/) || [''])[0];
+
+        return JSON.stringify({
+            id,
+            title: releaseTitles[id] || 'Unknown',
+            'artist-credit': [{ name: 'An Artist', artist: { id: '55555555-5555-4555-8555-555555555555', name: 'An Artist' } }],
+            // A Discogs link keeps the extra release-group request out of the way.
+            relations: [{ type: 'discogs', url: { resource: 'https://www.discogs.com/release/1' } }],
+            media: [{
+                position: 1,
+                format: 'CD',
+                'track-count': 1,
+                tracks: [{
+                    id: '66666666-6666-4666-8666-666666666666',
+                    number: '1',
+                    title: 'One',
+                    recording: { id: '77777777-7777-4777-8777-777777777777', title: 'One', isrcs: [] }
+                }]
+            }]
+        });
+    }
+
+    global.XMLHttpRequest = class FakeXhr {
+        open(method, url) { this.url = url; }
+        setRequestHeader() {}
+        abort() {}
+        send() {
+            const isGroup = String(this.url).indexOf('release?release-group=') >= 0;
+            if (isGroup) groupRequests++; else releaseRequests++;
+            clock += 5000;          // well past the 1.1 s spacing, so no waiting
+
+            setTimeout(() => {
+                this.readyState = 4;
+                this.status = 200;
+                this.responseText = isGroup
+                    ? JSON.stringify({
+                        id: groupId,
+                        title: 'An Album',
+                        releases: [{
+                            id: releaseOne,
+                            title: 'An Album',
+                            date: '2004',
+                            media: [{ 'track-count': 10, format: 'CD' }]
+                        }]
+                    })
+                    : releaseBodyFor(this.url);
+                if (this.onreadystatechange) this.onreadystatechange();
+            }, 0);
+        }
+    };
+
+    function openWindow() {
+        delete require.cache[require.resolve(path.join(root, 'mbzFetch.js'))];
+        global.window = {};
+        require(path.join(root, 'mbzFetch.js'));
+        return global.window.mbzFetch;
+    }
+
+    // One release is one request, and the next window reuses it.
+    const firstWindow = openWindow();
+    const firstRelease = await firstWindow.fetchReleaseAsync(releaseOne);
+
+    assert.strictEqual(firstRelease.title, 'An Album');
+    assert.strictEqual(releaseRequests, 1);
+    assert.strictEqual(mainWindowValues.lovesMBzFetchCache, cacheContainer,
+        'the parsed release must go into the container the main window holds');
+
+    const secondWindow = openWindow();
+    const reusedRelease = await secondWindow.fetchReleaseAsync(releaseOne);
+
+    assert.strictEqual(reusedRelease.title, 'An Album', 'the stored release must be usable');
+    assert.strictEqual(releaseRequests, 1,
+        'a second window must reuse the parsed release instead of asking again');
+
+    // The lifetime is a rule: an entry past it is read again.
+    clock += 31 * 60 * 1000;
+
+    const thirdWindow = openWindow();
+    await thirdWindow.fetchReleaseAsync(releaseOne);
+
+    assert.strictEqual(releaseRequests, 2, 'a release past 30 minutes must be read again');
+
+    // Bounded, oldest fetch out: eight more releases push the oldest entry away,
+    // so it alone costs a request, while the newest is still served from memory.
+    const fillIds = [];
+    for (let i = 0; i < 8; i++) fillIds.push('88888888-8888-4888-8888-00000000000' + i);
+    for (const id of fillIds) await openWindow().fetchReleaseAsync(id);
+
+    const requestsBeforeOldest = releaseRequests;
+    await openWindow().fetchReleaseAsync(releaseOne);
+    assert.strictEqual(releaseRequests, requestsBeforeOldest + 1,
+        'the oldest entry must be the one dropped when the bound is reached');
+
+    const requestsAfterOldest = releaseRequests;
+    await openWindow().fetchReleaseAsync(fillIds[fillIds.length - 1]);
+    assert.strictEqual(releaseRequests, requestsAfterOldest,
+        'the newest entry must survive the bound');
+
+    // A container written by another build is emptied, not trusted, and it is
+    // the same object afterwards.
+    const otherBuildContainer = {
+        version: 999,
+        releases: { [releaseOne]: { at: clock, value: { title: 'Stale' } } },
+        groups: {}
+    };
+    mainWindowValues.lovesMBzFetchCache = otherBuildContainer;
+
+    const otherBuildWindow = openWindow();
+    const freshRelease = await otherBuildWindow.fetchReleaseAsync(releaseOne);
+
+    assert.strictEqual(freshRelease.title, 'An Album',
+        "another build's entries must not be served");
+    assert.strictEqual(mainWindowValues.lovesMBzFetchCache, otherBuildContainer,
+        'the container must be emptied in place, not replaced');
+
+    const requestsAfterReset = releaseRequests;
+    await openWindow().fetchReleaseAsync(releaseOne);
+    assert.strictEqual(releaseRequests, requestsAfterReset,
+        'after the reset the next window shares again');
+
+    // A group listing is shared the same way.
+    const groupWindow = openWindow();
+    const firstGroup = await groupWindow.fetchReleaseGroupReleasesAsync(groupId);
+    const requestsAfterFirstGroup = groupRequests;
+    const secondGroupWindow = openWindow();
+    const reusedGroup = await secondGroupWindow.fetchReleaseGroupReleasesAsync(groupId);
+
+    assert.strictEqual(groupRequests, requestsAfterFirstGroup,
+        'a group listing must be reused across windows');
+    assert.strictEqual(reusedGroup.releases[0].trackCount, firstGroup.releases[0].trackCount);
+
+    // A build installed without a restart has no container: one diagnostic, and
+    // the lookups still work exactly as before.
+    const diagnostics = [];
+    global.ODS = (message) => diagnostics.push(String(message));
+    delete mainWindowValues.lovesMBzFetchCache;
+
+    const requestsBeforeMissing = releaseRequests;
+    const loneWindow = openWindow();
+    const loneRelease = await loneWindow.fetchReleaseAsync(releaseTwo);
+    await loneWindow.fetchReleaseGroupReleasesAsync(groupId);
+
+    assert.strictEqual(loneRelease.title, 'Another Album',
+        'a window without the container must still read the release');
+    assert.strictEqual(releaseRequests, requestsBeforeMissing + 1,
+        'it must fetch as before, not fail');
+    assert.strictEqual(diagnostics.length, 1,
+        'a missing container is reported once, not per fetch');
+    assert.match(diagnostics[0], /^Loves MBz: .*no release cache yet/);
+
+    // With the container back, the diagnostic stays quiet.
+    mainWindowValues.lovesMBzFetchCache = cacheContainer;
+    await openWindow().fetchReleaseAsync(releaseOne);
+    assert.strictEqual(diagnostics.length, 1, 'an available container must not warn');
+
+    // clearCache drops the shared copy, not just this window's.
+    const requestsBeforeClear = releaseRequests;
+    const clearingWindow = openWindow();
+    await clearingWindow.fetchReleaseAsync(releaseThree);
+    clearingWindow.clearCache();
+    await openWindow().fetchReleaseAsync(releaseThree);
+
+    assert.strictEqual(releaseRequests, requestsBeforeClear + 2,
+        'clearCache must empty the shared cache too');
+
+    Date.now = realNow;
+
     console.log('tag-path regression test passed');
 })().catch((error) => {
     console.error(error);

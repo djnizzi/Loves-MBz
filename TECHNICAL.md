@@ -413,7 +413,19 @@ still reports the disagreement but shows no buttons.
   request when the album has no ID; `fetchReleaseAsync` validates the UUID,
   serializes lookups through a queue (at least 1.1 s apart), sends a
   `User-Agent`, retries `503`/`429` with backoff, stops once the dialog has
-  closed, and caches the parsed release by ID. `recording-level-rels`,
+  closed, and caches the parsed release by ID — in the window, and then in a
+  cache that `init.js` puts on the main window (`window.lovesMBzFetchCache`,
+  read here through `app.dialogs.getMainWindow().getValue`), the only object two
+  dialog windows share. A dialog cannot install a value on the main window, so
+  the container is created by the main window's script and filled in place. That
+  shared copy is what makes reopening the window free: an entry is valid for **30
+  minutes** and for the life of the MediaMonkey process, the store keeps at most
+  8 releases and 4 group listings (oldest out), an expired entry is dropped on
+  read, and a store written by another build is emptied instead of trusted. A
+  build installed without restarting MediaMonkey has no container yet, so its
+  windows cache separately until the restart — the same rule as the dialog
+  page — and the window reports that once in the diagnostic log (`ODS`), so the
+  sharing cannot look like it is working when it is not. `recording-level-rels`,
   `work-rels`, `work-level-rels` and `artist-rels` are part of the lookup, so
   work composers and lyricists and release/recording producers and remixers are
   available; `url-rels` supplies the release's Discogs page. When the release

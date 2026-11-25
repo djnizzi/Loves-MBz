@@ -395,7 +395,7 @@ more than the window offers, and several fields are one include away. 0.7.1 is
 the window: which of those fields Apply offers becomes a saved setting that any
 selection can override, and the window's cards move into tabs.
 
-### 0.7.0 — the field audit
+### 0.7.0 — the field audit, and a release that outlives the window
 
 The lookup asks for
 
@@ -474,11 +474,24 @@ Checklist:
 - [ ] Alias collapse for every field MusicBrainz spells more than one way. Today
       that is country, status and type; each new field is checked for a second
       spelling before it is offered.
-- [ ] Cache across dialog openings (the 0.4.0 leftover). Decide where it lives —
-      an object on the main window, or a file-backed cache under the add-on's
-      settings folder — with a size bound and a clear rule for reference data
-      that changes (a release is fetched once per session, and the group
-      listing with it).
+- [x] Cache across dialog openings (the 0.4.0 leftover). It lives in a
+      container `init.js` creates on the main window — read by every dialog
+      through `app.dialogs.getMainWindow().getValue`, the mechanism
+      MediaMonkey's own `windowsCache` uses — under `lovesMBzFetchCache`, the
+      only object two dialog windows share. A dialog cannot install a value on
+      the main window, so the container is owned there and filled in place. A
+      file cache was rejected: reference data must not be mistaken for library data, and
+      300 KB per release does not belong in a settings file. A parsed release
+      and a group listing are valid for **30 minutes** and for the life of the
+      process, capped at 8 releases and 4 groups (oldest out), and a store from
+      another build is emptied rather than read. Without a restart the new
+      container does not exist yet, so windows cache separately until then —
+      the same rule as the dialog page — and the window says so once in the
+      diagnostic log, rather than silently caching alone.
+- [x] Test the reuse: a second window opening the same album makes no request,
+      an entry older than its lifetime is fetched again, the bound drops the
+      oldest, a store from another build is replaced, and `clearCache()` empties
+      both halves.
 - [ ] Not offered, with the reason in the table: `SCRIPT` (the write contract
       bars it, even though `text-representation.script` arrives anyway), user
       ratings, user tags and collections (need the user's OAuth), annotations
@@ -560,6 +573,42 @@ cover art in the header (3.3); a filter for large selections (3.4); copy depth
 still leaves — a confirmation sheet above a threshold, and whether a close
 window may guard unsaved edits. The All/None control (3.2) is partly answered
 by the tag set and only needs the per-scope counts.
+
+## 0.9.0 — cover art
+
+Not scoped yet; the shape is already visible in what the lookup returns.
+
+- **What MusicBrainz reports is free.** `cover-art-archive` arrives in every
+  release lookup (`artwork`, `front`, `back`, `count`, `darkened`) and the
+  add-on currently reads none of it. That is enough to say whether artwork
+  exists without another request — see the field table in
+  [TECHNICAL.md](TECHNICAL.md#the-release-response-field-by-field).
+- **The images themselves are another service.** The Cover Art Archive
+  (`coverartarchive.org`, backed by archive.org) is a different host with its
+  own rate limits and its own failure modes, so it goes behind the same queue
+  and `User-Agent` as the release lookup, and its errors are reported as its
+  own, not as MusicBrainz ones.
+- **Two separate jobs.** Show the front cover in the window so the release in
+  hand is obvious at a glance (UI-ROADMAP 3.3, which is where the header work
+  already sits), and write artwork into the library or the files, which is the
+  larger half and needs its own decision.
+- **Artwork is not a tag.** MediaMonkey keeps artwork as its own record, so
+  whatever writes it does **not** go through `mbzApply.applySelectionAsync` —
+  the one write path in `AGENTS.md` stays the only writer of tags and native
+  fields. Nothing may silently replace existing artwork: a release that
+  already has a cover keeps it unless the user says otherwise.
+- Open questions to settle before this is numbered: write to the file or to
+  the library row; front only, or every image the archive holds; which size
+  and quality; what the window shows when the archive has nothing or is
+  unreachable; and whether a download is cached the way parsed releases are
+  (0.7.0's shared cache is the obvious place for the *availability*, not the
+  bytes).
+
+Checklist, once the questions above are answered:
+
+- [ ] The window's header shows the front cover, or says the archive has none.
+- [ ] Artwork writes are a separate, confirmed path outside the tag write path.
+- [ ] One request at a time, spaced and attributed like every other request.
 
 ## Nice to have
 

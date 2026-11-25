@@ -29,6 +29,16 @@ var TOOLBAR_ICON = 'lovesMBz';
 var TOOLBAR_ACTION_KEY = 'lovesMBzTag';
 var TOOLBAR_ADD_DELAY_MS = 2000;
 
+/*
+ * The fetched-release cache that every Tag from MusicBrainz window shares. A
+ * dialog cannot install a value on the main window, so the container is created
+ * here; each window reaches the same object through
+ * `app.dialogs.getMainWindow().getValue('lovesMBzFetchCache')` and mbzFetch
+ * fills it in place. It holds parsed MusicBrainz responses only, its own
+ * lifetime rule, and it dies with MediaMonkey.
+ */
+window.lovesMBzFetchCache = window.lovesMBzFetchCache || {};
+
 var refreshTimer = null;
 
 var pendingSongIds = {};

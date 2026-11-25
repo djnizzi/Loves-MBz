@@ -16,8 +16,10 @@
  * recording/work relationships. When that release has no Discogs URL, one
  * `release-group/{id}` URL lookup follows, because MusicBrainz keeps the
  * Discogs master page on the release group. The parsed release is cached by
- * ID for the lifetime of this window, so previewing the same album twice
- * costs one release request and at most one group lookup.
+ * ID — in this window, and then on the main window's value store, so the next
+ * window to open the same album costs no request at all. That shared copy is
+ * reference data with a fixed life (CACHE_TTL_MS) and a size cap, and it is
+ * replaced rather than read when it is missing or older than this build.
  *
  * 0.6.1 adds the group's other releases: `release?release-group={id}` with
  * `inc=media` lists every release of the group, with the media that carries
@@ -40,14 +42,127 @@
 
     var GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+    /*
+     * A parsed release has to outlive the window that fetched it. The dialog's
+     * own Map dies with its window, so each parsed release and group listing is
+     * also kept in a cache object the main window owns — `init.js` creates it,
+     * because a dialog can only read a main-window value, never install one —
+     * which lives for the whole MediaMonkey process. MediaMonkey's own
+     * `windowsCache` shares state the same way. This is reference data, not a
+     * snapshot of the library: one fetch is reused until it is CACHE_TTL_MS old,
+     * and the store is bounded so a long session cannot grow without limit. The
+     * store carries a version, and a store written by another build is emptied
+     * rather than read.
+     */
+    var CACHE_KEY = 'lovesMBzFetchCache';
+    var CACHE_VERSION = 1;
+    var CACHE_TTL_MS = 30 * 60 * 1000;     // 30 minutes
+    var MAX_CACHED_RELEASES = 8;
+    var MAX_CACHED_GROUPS = 4;
+
     var cache = new Map();          // release MBID -> parsed release
     var groupCache = new Map();     // release group MBID -> parsed release list
+    var cacheReported = false;      // one missing-container diagnostic per window
     var queue = Promise.resolve();
     var lastRequestAt = 0;
     var requestCount = 0;
 
     function now() {
         return Date.now();
+    }
+
+    /** The main window's cache container, or null when this window has none. */
+    function sharedCache() {
+        var main = null;
+        try {
+            main = app.dialogs.getMainWindow();
+        } catch (e) {
+            return null;                        // no host window in this context
+        }
+
+        if (!main || typeof main.getValue !== 'function') return null;
+
+        var store = null;
+        try {
+            store = main.getValue(CACHE_KEY);
+        } catch (e) {
+            store = null;
+        }
+
+        if (!store || typeof store !== 'object') {
+            reportMissingContainer();
+            return null;
+        }
+
+        // Another build wrote it: empty that object, because the main window
+        // has to keep handing out the same one.
+        if (store.version !== CACHE_VERSION || !store.releases || !store.groups) {
+            store.version = CACHE_VERSION;
+            store.releases = {};
+            store.groups = {};
+        }
+
+        return store;
+    }
+
+    /**
+     * `init.js` creates the container when MediaMonkey starts. A build installed
+     * since then has none, so this window can only cache on its own; say so once
+     * rather than letting the feature look like it works.
+     */
+    function reportMissingContainer() {
+        if (cacheReported) return;
+        cacheReported = true;
+
+        var message = 'Loves MBz: the main window has no release cache yet; ' +
+            'Tag from MusicBrainz reads each release again in every window ' +
+            'until MediaMonkey restarts.';
+
+        try {
+            if (typeof ODS === 'function') {
+                ODS(message);
+            } else if (typeof window !== 'undefined' && window.console && window.console.log) {
+                window.console.log(message);
+            }
+        } catch (e) {
+            // A diagnostic that cannot be printed must not break the lookup.
+        }
+    }
+
+    /** A cached release or group listing, or null when missing or expired. */
+    function readCached(kind, id) {
+        var store = sharedCache();
+        if (!store) return null;
+
+        var entry = store[kind][id];
+        if (!entry || !entry.value) return null;
+
+        if (typeof entry.at !== 'number' || now() - entry.at > CACHE_TTL_MS) {
+            delete store[kind][id];
+            return null;
+        }
+
+        return entry.value;
+    }
+
+    /** Keeps `kind` within its cap, the oldest fetch going first. */
+    function writeCached(kind, id, value) {
+        var store = sharedCache();
+        if (!store) return;
+
+        var bag = store[kind];
+        var max = kind === 'releases' ? MAX_CACHED_RELEASES : MAX_CACHED_GROUPS;
+
+        bag[id] = { at: now(), value: value };
+
+        var ids = Object.keys(bag);
+        if (ids.length <= max) return;
+
+        ids.sort(function (a, b) {
+            return bag[a].at - bag[b].at;
+        });
+
+        for (var i = 0; i < ids.length - max; i++) delete bag[ids[i]];
     }
 
     function wait(ms) {
@@ -300,6 +415,12 @@
 
         if (cache.has(id)) return cache.get(id);
 
+        var remembered = readCached('releases', id);
+        if (remembered) {
+            cache.set(id, remembered);
+            return remembered;
+        }
+
         return enqueueAsync(async function () {
             if (cache.has(id)) return cache.get(id);
 
@@ -313,6 +434,7 @@
 
             await attachReleaseGroupUrlRelationsAsync(release);
             cache.set(id, release);
+            writeCached('releases', id, release);
             return release;
         });
     }
@@ -430,6 +552,12 @@
 
         if (groupCache.has(id)) return groupCache.get(id);
 
+        var remembered = readCached('groups', id);
+        if (remembered) {
+            groupCache.set(id, remembered);
+            return remembered;
+        }
+
         return enqueueAsync(async function () {
             if (groupCache.has(id)) return groupCache.get(id);
 
@@ -448,6 +576,7 @@
             if (!parsed.id) parsed.id = id;
 
             groupCache.set(id, parsed);
+            writeCached('groups', id, parsed);
             return parsed;
         });
     }
@@ -507,6 +636,12 @@
         clearCache: function () {
             cache.clear();
             groupCache.clear();
+
+            var store = sharedCache();
+            if (store) {
+                store.releases = {};
+                store.groups = {};
+            }
         },
         getState: function () {
             return {
