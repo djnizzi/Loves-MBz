@@ -24,8 +24,23 @@ The contract:
    the tag write happens once even when a fill and a tag edit touch the same
    track.
 3. **Nothing runs inside MediaMonkey's dialogs.** The add-on registers no
-   `propertiesTabs` tab, never stages values into a MediaMonkey dialog, and
-   never relies on MediaMonkey's group save.
+   `propertiesTabs` tab, never stages track, tag or native-field values into a
+   MediaMonkey dialog, and never relies on MediaMonkey's group save.
+
+   The one exception is the add-on's **configuration page** (`info.json`'s
+   `config`, `config.js`): MediaMonkey draws it inside its Addons dialog, so
+   the page runs there. It may stage exactly one thing — the field set,
+   `lovesMBzFieldSet` — written when the host's OK is pressed. It loads none of
+   the add-on's modules: MediaMonkey evaluates it inside the Addons dialog,
+   where `localRequirejs` resolves against MediaMonkey's own scripts, so asking
+   for `mbzApply` raises the host's exception dialog before the page exists
+   (that was rc1). The package writes the field list into the page from the
+   engine's own tables, so the page carries no list of its own and the guard
+   fails when that list is stale; the page keeps only the set rule, which the
+   guard holds to the engine's fixture by fixture. Where the engine is on that
+   window the page uses it. It reads no track and writes no tag, native field or
+   file: `applySelectionAsync` is still the only writer. A page that cannot draw
+   its list says why on the panel and saves nothing.
 4. **One album at a time.** `resolveTagScope` is the only place that decides the
    scope. A selection spanning more than one album ID is refused unless the user
    insists; then the first album's release is used and tracks are matched by

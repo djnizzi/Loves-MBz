@@ -502,7 +502,7 @@ Checklist:
       destination), the README's field list matches it, and the changelog names
       what was added and what was refused.
 
-### 0.7.1 — "MBZ tags to use": a saved set, and tabs instead of cards
+### 0.7.1 — "MBZ tags to use": a saved set, tabs, and a configuration page
 
 The user chooses once which fields the add-on offers; any selection can
 override that choice; and the window stops being one long scroll of cards.
@@ -535,14 +535,15 @@ host draws.
   `suppliedFields(release)` — the release before any comparison — and not the
   plan: the plan carries only the fields that differ, so a field equal to the
   library's value would otherwise read as one MusicBrainz never sent.
-- **Decided: the window draws its own tab bar.** MediaMonkey's `Tabs` control
-  belongs to its properties modal, where a tab is `{name, order, load(track,
-  dialog)}` and the host hands it the track being edited; this window edits one
-  selection, not one track, and already draws its own cards, buttons and
-  tables. So the tab bar is two `.mbzButton` elements and the two panels are
-  plain divs in the page the package ships. The host control would add a
-  per-track loader this window has no use for, and its behaviour cannot be
-  checked by the guard; the window's own split can.
+- **The strip is the host's `Tabs` control.** The `{name, order, load(track,
+  dialog)}` model belongs to the properties dialog's own tab list, not to the
+  control: `Tabs` takes a title and any content panel (`addTab(title, panel)`),
+  which is exactly the two panels this window has. So the window hands it the
+  panels and the host draws the strip, the selection and the keyboard
+  behaviour. A host without the control gets the window's own `.mbzButton` bar
+  instead, with `showTab` as its switch, so a missing control costs the native
+  look and nothing else. The guard can check the wiring, not the host's
+  drawing.
 - **The stale page.** `AGENTS.md`'s rule applies in full: MediaMonkey keeps the
   dialog page it loaded at start-up, so the tab bar and the first panel are
   built from `dlgMBzTag.js` when the installed page has neither — exactly like
@@ -575,6 +576,56 @@ host draws.
 - [ ] Open the window in MediaMonkey on a fresh install (no setting) and with
       every field turned off: both tabs draw, the catalogue marks what the
       release did not supply, and an old page still gets the tabs.
+
+#### The add-on's configuration page
+
+The saved set's first editor was the tag window's second tab, so the general
+setting could not be reached from where MediaMonkey keeps add-on settings: a
+fresh install had no Configure button and the window was the only way in. The
+same setting now has a page of its own.
+
+- **One setting, two views.** `info.json` names `config.js`, so **Tools →
+  Addons → Loves MBz → Configure** opens a panel that lists the catalogue and
+  writes `lovesMBzFieldSet`; the window's tab reads and writes the same key, so
+  neither view can drift from the other. Nothing here touches tracks or tags.
+- **The tab strip is the host's.** The window first drew its own buttons, on
+  the reading that `Tabs` needs a per-track loader; `addTab(title, panel)` takes
+  any panel, so the two panels are handed to the control and the window's bar
+  stays only as the fallback for a host that has none.
+- **The list is the engine's, written into the page.** One checkbox per
+  catalogue entry, in two groups (album fields, track fields), each labelled
+  with the Picard tag or native column it is written as and marked `extended
+  tag` or `MediaMonkey field`. The page cannot load
+  `mbzApply` from the Addons dialog, so `tools/build-mmip.js` writes
+  `fieldCatalogue()` into the page's `data-fields` when it builds — into the
+  source page too, like `BUILD_TIME` — and the guard fails when that list is
+  stale. The page keeps only the set rule, held to `readFieldSet()` fixture by
+  fixture; where the engine is on that window it asks it instead.
+- **rc1's crash was the loader, not the install.** Inside the Addons dialog
+  `localRequirejs` resolves against MediaMonkey's own scripts, so
+  `localRequirejs('mbzApply')` asked for `//mediamonkey5/mbzApply.js` and raised
+  the host's exception dialog before `window.configInfo` existed. The page calls
+  no loader at all, and the guard fails if one comes back.
+- **A failed page says why, and writes nothing.** A control that will not
+  initialise replaces the rows with a sentence naming the failure, and `save`
+  returns before touching the setting: a failure must never be saved as "every
+  field off", nor look like an add-on with no fields.
+- **The guardrail is stated, not stretched.** `AGENTS.md` records the one
+  exception: the page runs inside MediaMonkey's Addons dialog, stages only
+  `lovesMBzFieldSet` for the host's OK, and touches no track, tag or file.
+  Writing each tick would not narrow the exception — the page would still run
+  in the host's dialog — and would make Cancel lie.
+- [x] `config.js` and `config.html`, named in `info.json` and carried by the
+      packager.
+- [x] The guard drives `load` and `save` through `window.configInfo`: the rows
+      are the catalogue, the ticks are the saved set, save writes exactly those
+      keys, and a page without the engine leaves the setting alone.
+- [ ] Open **Tools → Addons → Loves MBz → Configure** in MediaMonkey: the panel
+      draws every field in two groups, OK saves, and reopening shows the same
+      ticks. Pull `mbzApply.js` out of the install and reopen it: the panel must
+      say the engine did not load and change nothing.
+- [x] `README.md` and `TECHNICAL.md` describe the page, and the changelog entry
+      is written for the release.
 
 ## 0.8.0 — general UI revision (TBD)
 

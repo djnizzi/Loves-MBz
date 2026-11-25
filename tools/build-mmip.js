@@ -26,6 +26,7 @@
 var fs = require('fs');
 var os = require('os');
 var path = require('path');
+var vm = require('vm');
 var execFileSync = require('child_process').execFileSync;
 
 var ROOT = path.resolve(__dirname, '..');
@@ -35,6 +36,8 @@ var DIALOG = path.join('dialogs', 'dlgMBzTag.js');
 /* Everything the add-on needs; the archive holds these at its root. */
 var ENTRIES = [
     'info.json',
+    'config.js',
+    'config.html',
     'init.js',
     'mbzMbgid.js',
     'mbzFetch.js',
@@ -189,7 +192,46 @@ function verifyArchive(file, staging) {
     return { files: files.length, page: page };
 }
 
+/**
+ * The configuration page's field list, generated from the engine's tables.
+ *
+ * The page cannot load `mbzApply` inside the Addons dialog, and a hand-kept
+ * second list would drift, so the package writes the catalogue into the page
+ * instead. The same list is written into the source page, like BUILD_TIME, so a
+ * hand-copied install carries it too.
+ */
+function writeFieldTable() {
+    var page = path.join(ROOT, 'config.html');
+    var source = fs.readFileSync(page, 'utf8');
+    var slot = /data-fields="[^"]*"/;
+    var sandbox = { window: {}, _: function (text) { return text; } };
+
+    if (!slot.test(source)) throw new Error('No data-fields slot in config.html');
+
+    vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'mbzApply.js'), 'utf8'), sandbox,
+        { filename: 'mbzApply.js' });
+
+    var table = sandbox.window.mbzApply.fieldCatalogue().map(function (field) {
+        return {
+            key: field.key,
+            label: field.label,
+            scope: field.scope,
+            target: field.target,
+            kind: field.kind
+        };
+    });
+
+    var attribute = JSON.stringify(table)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    fs.writeFileSync(page, source.replace(slot, 'data-fields="' + attribute + '"'));
+}
+
 function main() {
+    writeFieldTable();
     runGuard();
 
     var staging = fs.mkdtempSync(path.join(os.tmpdir(), 'lovesmbz-'));

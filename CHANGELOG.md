@@ -4,6 +4,50 @@ All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags. A test build names its channel in the window
 footer and in the package, because `info.json` must stay three numbers.
 
+## 0.7.1 (2026-11-25)
+
+The 0.7 job: every field the audit found is reachable, the window offers only
+the ones you choose, and that choice — like the window's tabs — is drawn by
+MediaMonkey rather than by the add-on. The shared release cache from the
+unreleased 0.7.0 ships here too.
+
+- **A fetched release is reused across windows.** Reopening an album, or opening
+  a second window on one already fetched, no longer asks MusicBrainz again: the
+  parsed release is kept in a store that is bounded, timestamped, dropped when
+  the build changes and emptied by `clearCache()`, so a stale entry is never
+  served as news.
+- **You choose which fields the window offers, once.** `lovesMBzFieldSet` is one
+  versioned setting — a missing key, another version, or a key this build does
+  not declare all fall back to the whole catalogue, so installing changes
+  nothing until the set is edited. An empty list is a real answer, not a missing
+  setting.
+- **Two levels, not two settings.** The saved set decides which rows **Fields to
+  write** offers; its ticks still decide what this Apply writes and never touch
+  the setting. **Save as default** writes the set and **Reset to saved** reloads
+  it. Nothing in that path writes a tag.
+- **The tab strip is MediaMonkey's own `Tabs` control**, the strip the
+  properties modal draws: the window hands it the two panels it already has, so
+  the cards, their wiring and the one scrolling column are unchanged. A host
+  without the control gets the window's own button bar, so neither panel is ever
+  unreachable.
+- **The same set from Tools → Addons → Loves MBz → Configure.** `info.json`
+  names `config.js`, which lists the catalogue in two groups — each row naming
+  the column or Picard tag it is written as and whether that is an extended tag
+  or one of MediaMonkey's own fields — and writes the same setting the window's
+  tab writes. MediaMonkey evaluates it inside the Addons
+  dialog, where the add-on's loader cannot find its own files — that is what
+  crashed rc1 with `mbzApply.js can't be loaded!` —   so the packager writes
+  the engine's catalogue into the page and the page keeps only the set rule; the
+  guard fails if either is stale or wrong, and the page calls no loader. It is settings only — no track, tag or native value is
+  read or staged, and Apply is still the only writer of the files — the one
+  exception `AGENTS.md` records to "nothing runs inside MediaMonkey's dialogs".
+  A page that cannot draw its list says why and saves nothing, so a failure can
+  never be mistaken for an add-on with no fields.
+- **A field that already matches is not "not supplied".** The catalogue's mark
+  comes from `mbzApply.suppliedFields(release)`, read before any comparison. The
+  plan carries only the fields that differ, so reading it there marked every
+  already-correct field as one MusicBrainz never sent.
+
 ## 0.6.2 (2026-11-25)
 
 The second of the two 0.6 jobs: the window now tags files MediaMonkey has no

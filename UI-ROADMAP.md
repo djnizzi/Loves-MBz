@@ -273,9 +273,14 @@ Goal: the window still works when there is a lot to read.
   bar and the first panel when the installed page has none, and
   `buildFieldSetPanel()` draws the catalogue card into its mount point for a
   fresh page and an old one alike, so the card exists once. The
-  host's `Tabs` control was rejected — it is built around the properties
-  modal's `load(track, dialog)`, and this window edits a selection, not a
-  track. Recorded in ROADMAP 0.7.1.
+  strip is the host's `Tabs` control, which takes any content panel; the
+  `load(track, dialog)` model belongs to the properties dialog's own tab list,
+  not to the control. The drawn `.mbzButton` bar stays as the fallback for a
+  host without it. Corrected in ROADMAP 0.7.1.
+- **Also in 0.7.1:** the saved set gets a page in **Tools → Addons →
+  Configure**, so the general setting is reachable without opening the window.
+  The tab stays as the in-context view of the same setting, with the
+  "this release" column the configuration page has no release to fill.
 
 ### 3.2 Field selection controls · S
 - Add `All` / `None` per scope, and show `9 of 12 selected` in the section

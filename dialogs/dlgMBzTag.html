@@ -222,11 +222,9 @@
 
         <div class="mbzLinks mbzHidden" data-id="linksBar"></div>
 
-        <div class="flex row mbzTabBar" data-id="tabBar">
-            <div class="button mbzButton mbzTab mbzTabActive" data-id="tabChanges" data-tab="changes" data-localize>ID and changes</div>
-            <div class="button mbzButton mbzTab" data-id="tabTagSet" data-tab="tagSet" data-localize>MBZ tags to use</div>
-        </div>
-
+        <!-- The tab strip is not in the page: the script hands the two panels
+             below to the host's own Tabs control, or draws its own bar on a
+             host that has none. A page older than that still gets both. -->
         <div class="mbzTagScroll" data-id="scrollColumn">
             <div class="mbzPanel" data-id="panelChanges">
             <!-- The other releases of the loaded release's group, first: a

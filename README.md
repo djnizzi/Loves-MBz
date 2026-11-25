@@ -36,6 +36,13 @@ button in MediaMonkey's toolbar. It works on one album at a time.
   stores the set and **Reset to saved** puts the ticks back. The ticks in
   **Fields to write** still decide what this Apply writes, so turning a field
   off is a setting, not a write.
+- **The same set from the add-on's own settings.** **Tools → Addons → Loves
+  MBz → Configure** opens the field list on a page of its own, saved with OK.
+  It edits the one setting the window's **MBZ tags to use** tab edits, so a
+  field turned off in either place is off in both. Each row names the column or
+  Picard tag it is written as and marks it as an **extended tag** or a
+  **MediaMonkey field**. A fresh install opens the page once, with every field
+  ticked.
 - **The exact release, not just the right group.** MediaMonkey often matches
   the release group's best-known release rather than the pressing the album is.
   The window's first card lists every release of the group with its date,

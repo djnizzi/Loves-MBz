@@ -2,9 +2,10 @@
     "title": "Loves MBz",
     "id": "lovesMBz",
     "description": "a MediaMonkey addon for total control over your semi automated tagging thanks to the MusicBrainz API",
-    "version": "0.6.2",
+    "version": "0.7.1",
     "author": "NiZDesign",
     "type": "metadata",
     "icon": "loves-mbz.png",
+    "config": "config.js",
     "minAppVersion": "5.0.0"
 }

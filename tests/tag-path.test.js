@@ -1423,10 +1423,12 @@ global.app = {
     apply.writeFieldSet([]);
     assert.deepStrictEqual(apply.readFieldSet(), [], 'an empty set survives the round trip');
 
-    // The window: two tabs over the one scrolling column, one panel each.
-    assert.match(dialogHtml, /data-id="tabBar"/, 'the window needs a tab bar');
-    assert.match(dialogHtml, />ID and changes</, 'the first tab is named');
-    assert.match(dialogHtml, />MBZ tags to use</, 'the second tab is named');
+    // The window: two panels over the one scrolling column. The strip itself is
+    // not in the page — the script hands the panels to the host's Tabs control,
+    // or draws its own bar — so an installed page that predates the split gets
+    // the same two panels.
+    assert.doesNotMatch(dialogHtml, /data-id="tabBar"|data-tab=/,
+        'the tab strip is drawn by the script, never pinned in a page an install may keep');
 
     const changesPanel = dialogHtml.slice(
         dialogHtml.indexOf('data-id="panelChanges"'),
@@ -1466,15 +1468,29 @@ global.app = {
     assert.ok(dialogHtml.indexOf('data-id="panelChanges"') < dialogHtml.indexOf('data-id="groupCard"'),
         'the cards come after the panel that holds them');
 
-    // The tabs are the window's own: each button names the panel it shows, so
-    // the page and the script cannot disagree about the two keys.
-    assert.match(dialogHtml, /data-id="tabChanges" data-tab="changes"/,
-        'the first tab names its panel');
-    assert.match(dialogHtml, /data-id="tabTagSet" data-tab="tagSet"/,
-        'the second tab names its panel');
+    // The strip is the host's own Tabs control, the one the properties modal
+    // draws: one tab per panel, and the panels handed over as content.
+    assert.match(dialogCode, /setAttribute\('data-control-class', 'Tabs'\)/,
+        'the strip is the host\'s Tabs control');
+    assert.match(dialogCode, /tabs\.addTab\(_\(/, 'one tab per panel');
+    assert.match(dialogCode, /panels\[count - 2\]\.appendChild\(UI\.panelChanges\)/,
+        'the first panel is the first tab\'s content');
+    assert.match(dialogCode, /panels\[count - 1\]\.appendChild\(UI\.panelTagSet\)/,
+        'the second panel is the second tab\'s content');
+    assert.match(dialogCode, /while \(tabs\.length\) tabs\.closeTab\(tabs\.items\[0\]\)/,
+        'a starting tab the control brings is cleared, so the window draws exactly two');
+
+    // A host that draws no such control still gets a strip, so neither panel is
+    // ever unreachable.
+    assert.match(dialogCode, /if \(!UI\.tabs && !UI\.tabBar && !buildHostTabs\(\)\) buildTabBar\(\)/,
+        'the drawn bar is the fallback, not the only way in');
+    assert.match(dialogCode, /function buildHostTabs[\s\S]{0,900}?removeNode\(host\)[\s\S]{0,900}?return false;/,
+        'a host without the control leaves the window as it was found');
     assert.match(dialogCode, /getAttribute\('data-tab'\)/,
-        'the click reads the panel name from the button');
-    assert.match(dialogCode, /function showTab[\s\S]{0,600}?fitScrollColumn\(\)/,
+        'the fallback bar still names the panel it shows');
+    assert.match(dialogCode, /function showTab\(name\)[\s\S]{0,200}?if \(UI\.tabs\) return;/,
+        'the host control shows and hides its own panels');
+    assert.match(dialogCode, /function listenTabChange[\s\S]{0,500}?fitScrollColumn\(\)/,
         'a panel that is shown again is sized again');
 
     assert.match(dialogCode, /function renderFields\(plan\)[\s\S]*?isOffered\(field\.key\)/,
@@ -1501,6 +1517,201 @@ global.app = {
         'Save as default writes the setting');
     assert.doesNotMatch(saveFieldSetCode, /applySelectionAsync|setExtendedTagsAsync|commitAsync/,
         'saving the set must not write tags');
+
+    /* ---------------------------------------------------------------------- *
+     * 0.7.1: the add-on's configuration page
+     * ---------------------------------------------------------------------- */
+
+    // MediaMonkey only offers a Configure button when info.json names a config
+    // script, and the packager has to carry both files or the button leads
+    // nowhere.
+    const infoJson = JSON.parse(read('info.json'));
+
+    assert.strictEqual(infoJson.config, 'config.js',
+        'info.json must name the configuration script');
+
+    for (const file of ['config.js', 'config.html']) {
+        assert.ok(fs.existsSync(path.join(root, file)), file + ' must exist');
+        assert.ok(read(path.join('tools', 'build-mmip.js')).includes("'" + file + "'"),
+            file + ' must be in the package');
+    }
+
+    const configSource = read('config.js');
+
+    // rc1 crashed here: inside the Addons dialog `localRequirejs` resolves
+    // against MediaMonkey's own scripts, so the page asked for
+    // `//mediamonkey5/mbzApply.js`, raised the host's exception dialog and never
+    // reached `window.configInfo`.
+    assert.doesNotMatch(stripComments(configSource), /localRequirejs|requirejs\(/,
+        'the page must not go through a loader that cannot see the add-on');
+
+    // The host evaluates this file in the Addons dialog's own window, so a
+    // top-level name would sit beside MediaMonkey's own; only configInfo may.
+    assert.match(configSource, /\(function \(\) \{[\s\S]*\}\)\(\);/,
+        'the page keeps its names to itself');
+
+    // One description, not two: the list lives in the engine and the package
+    // writes it into the page, so the page must not carry a second one.
+    assert.doesNotMatch(stripComments(configSource), /albumArtist|MUSICBRAINZ_ALBUMID/,
+        'the page must not carry a field list of its own');
+    assert.match(read(path.join('tools', 'build-mmip.js')), /data-fields/,
+        'the packager owns the page\'s field list and fills it from the engine');
+    assert.doesNotMatch(configSource, /applySelectionAsync|setExtendedTagsAsync|commitAsync/,
+        'the configuration page must not write tags');
+
+    // Driven the way the host drives it: load() when the panel opens, save()
+    // when OK is pressed, both with the panel's node.
+    const configSettings = {};
+
+    global.app = {
+        getValue: (key, fallback) => (key in configSettings ? configSettings[key] : fallback),
+        setValue: (key, value) => { configSettings[key] = value; }
+    };
+
+    // The host turns each box into a control, and the page reads it back through
+    // controlClass, so the test does the same.
+    global.initializeControl = (box) => { box.controlClass = { checked: false }; };
+
+    function fakeNode(tag) {
+        return {
+            tag,
+            className: '',
+            textContent: '',
+            children: [],
+            style: {},
+            attrs: {},
+            setAttribute(name, value) { this.attrs[name] = value; },
+            getAttribute(name) { return this.attrs[name]; },
+            appendChild(child) { this.children.push(child); return child; },
+            querySelector() { return null; }
+        };
+    }
+
+    // The list the package writes into config.html. The page carries it as an
+    // attribute, so the HTML parser hands getAttribute the decoded text; the
+    // test decodes it the same way before standing in for that attribute.
+    const pageBlob = (read('config.html').match(/data-fields="([^"]*)"/) || [])[1] || '';
+    const pageJson = pageBlob
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+    const pageList = JSON.parse(pageJson);
+
+    const configDoc = { createElement: (tag) => fakeNode(tag) };
+    const rowsHost = Object.assign(fakeNode('div'), { ownerDocument: configDoc });
+
+    rowsHost.attrs['data-fields'] = pageJson;
+    const configPanel = {
+        ownerDocument: configDoc,
+        querySelector: () => rowsHost,
+        appendChild() {}
+    };
+
+    function openConfig(withEngine) {
+        global.window = {};
+        if (withEngine) global.window.mbzApply = apply;
+        delete require.cache[require.resolve(path.join(root, 'config.js'))];
+        require(path.join(root, 'config.js'));
+        return global.window.configInfo;
+    }
+
+    const configInfo = openConfig(false);
+
+    assert.ok(configInfo && typeof configInfo.load === 'function'
+        && typeof configInfo.save === 'function',
+        'the page defines window.configInfo with load and save');
+
+    // The generated list is the engine's, entry by entry.
+    assert.deepStrictEqual(
+        pageList.map((field) => [field.key, field.label, field.target, field.scope, field.kind]),
+        catalogue.map((field) => [field.key, field.label, field.target, field.scope, field.kind]),
+        'the page\'s field list is the engine\'s catalogue, field for field '
+        + '(run tools/build-mmip.js to regenerate it)');
+
+    assert.strictEqual(configInfo.fields.length, 0,
+        'nothing is listed before the panel is loaded');
+
+    const ticks = (info) => (info.rows || [])
+        .filter((row) => row.box.controlClass.checked)
+        .map((row) => row.key);
+
+    // The page's copy of the set rule and the engine's must read every stored
+    // value the same way.
+    for (const stored of [
+        undefined,
+        { version: 99, keys: ['title'] },
+        { version: 1, keys: ['title', 'gone'] },
+        { version: 1, keys: [] },
+        { version: 1, keys: ['title', 'barcode'] }
+    ]) {
+        if (stored === undefined) delete configSettings.lovesMBzFieldSet;
+        else configSettings.lovesMBzFieldSet = stored;
+
+        configInfo.load(configPanel, {});
+
+        assert.deepStrictEqual(ticks(configInfo), apply.readFieldSet(),
+            'the page reads ' + JSON.stringify(stored) + ' as the engine does');
+    }
+
+    assert.deepStrictEqual(configInfo.fields.map((field) => field.key), allFieldKeys,
+        'the page drew the list the package wrote into it');
+
+    // Every row says where the value goes, and which kind of destination that
+    // is: the file's own tag, or one of MediaMonkey's fields.
+    for (const field of catalogue) {
+        const row = configInfo.rows.find((entry) => entry.key === field.key);
+        const kind = field.kind === 'tag' ? /extended tag: / : /MediaMonkey field: /;
+
+        assert.ok(row, field.key + ' must be listed');
+        assert.match(row.text, kind, field.key + ' must say which kind of destination it writes');
+        assert.ok(row.text.includes(field.target), field.key + ' must name its destination');
+    }
+
+    // The box the reader clicks is the one save reads back, and only those keys
+    // are written.
+    configSettings.lovesMBzFieldSet = { version: 1, keys: ['title', 'barcode'] };
+    configInfo.load(configPanel, {});
+
+    configInfo.rows.find((row) => row.key === 'title').box.controlClass.checked = false;
+    configInfo.rows.find((row) => row.key === 'composer').box.controlClass.checked = true;
+
+    configInfo.save(configPanel, {});
+
+    assert.deepStrictEqual(configSettings.lovesMBzFieldSet,
+        { version: 1, keys: ['composer', 'barcode'] },
+        'save writes exactly the ticks, in catalogue order, under the version');
+
+    // Where the host does have the engine on this window, the page asks it
+    // rather than using its copy.
+    const delegated = openConfig(true);
+
+    configSettings.lovesMBzFieldSet = { version: 1, keys: ['title', 'barcode'] };
+    delegated.load(configPanel, {});
+
+    assert.deepStrictEqual(ticks(delegated), ['title', 'barcode'],
+        'with the engine present the page draws the engine\'s answer');
+
+    // A control that will not initialise must say so, keep no rows to save, and
+    // leave the setting alone.
+    configSettings.lovesMBzFieldSet = { version: 1, keys: ['title'] };
+
+    const realInitialize = global.initializeControl;
+
+    global.initializeControl = () => { throw new Error('the control would not initialise'); };
+    configInfo.load(configPanel, {});
+    global.initializeControl = realInitialize;
+
+    const said = rowsHost.children[rowsHost.children.length - 1];
+
+    assert.ok(said, 'a page that cannot draw its list must say so on the panel');
+    assert.match(said.textContent, /could not be drawn/, 'and name the failure');
+    assert.deepStrictEqual(ticks(configInfo), [], 'a failed draw leaves no rows to save');
+
+    configInfo.save(configPanel, {});
+
+    assert.deepStrictEqual(configSettings.lovesMBzFieldSet, { version: 1, keys: ['title'] },
+        'a page that drew no rows keeps the setting it did not edit');
 
     console.log('tag-path regression test passed');
 })().catch((error) => {

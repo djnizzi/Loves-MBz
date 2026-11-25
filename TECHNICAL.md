@@ -230,15 +230,51 @@ The window is two tabs over the one scrolling column the guard pins.
   as default** writes the catalogue's ticks to the setting and **Reset to
   saved** reloads them. Neither writes a tag: `applySelectionAsync` is still
   the only writer.
-- **The window draws its own tab bar.** The two tab buttons and the two panels
-  are plain elements the script shows and hides; the one scrolling column stays
-  the only one, `fitScrollColumn()` runs again when a panel is shown. The
+- **The strip is the host's `Tabs` control.** `addTab(title, panel)` takes any
+  content panel — the `load(track, dialog)` model belongs to the properties
+  dialog's own tab list, not to the control — so the window hands it the two
+  panels it already has, and the host draws the strip, the selection and the
+  keyboard behaviour. The one scrolling column stays the only one, and the
+  column is measured again for the panel that is shown. A host without the
+  control gets the window's own `.mbzButton` bar instead, with `showTab` as its
+  switch, so neither panel is ever unreachable. The
   catalogue card is not in the page at all: `panelTagSet` is a mount point and
   `buildFieldSetPanel()` draws the card, its table and its buttons into it, so a
   page installed before the tab gets the same panel and there is no second copy
   to drift from the first. The tab bar and the first panel are built by
   `ensureTabs()` only when the page has neither, like the group card. Why not
   the host's `Tabs` control is recorded in ROADMAP's 0.7.1.
+- **The configuration page.** `info.json` names `config.js`, so MediaMonkey
+  gives the add-on a panel under **Tools → Addons**, opened once after install.
+  `window.configInfo.load` draws a checkbox per field in two groups — album
+  fields and track fields, each labelled with the native column or Picard tag it
+  is written as and marked `MediaMonkey field` or `extended tag` — ticked from
+  the saved set; `save` writes the ticked keys. The
+  page cannot load `mbzApply`: MediaMonkey evaluates it from
+  `dialogs/dlgAddonConfig.js`, where `localRequirejs` resolves against
+  MediaMonkey's own scripts, so `localRequirejs('mbzApply')` asked for
+  `//mediamonkey5/mbzApply.js` and raised the host's exception dialog before the
+  page existed — rc1's crash. The page now calls no loader at all. It carries no
+  field list: `tools/build-mmip.js` writes `fieldCatalogue()` into the page's
+  `data-fields` when it builds — into the source page as well as the packed one,
+  like `BUILD_TIME` — so the engine's tables are the only description of the
+  fields and there is no second list to keep. The guard reads that list back and
+  compares it with `fieldCatalogue()` entry by entry, so a stale page fails the
+  build; the one rule the page keeps, which keys a stored set offers, is held to
+  `readFieldSet()` for every stored shape, and where the engine is on that
+  window the page asks it instead. `config.html` holds the note, the generated
+  list and the mount point; the page draws the rows with the host's checkbox
+  control, or a plain checkbox if the host will not make one. The page is settings only — no track, tag or native value is read or
+  staged, and the host's OK writes `lovesMBzFieldSet`, never a file — so the one
+  write path is untouched. It is the single exception to *nothing runs inside
+  MediaMonkey's dialogs*, stated in `AGENTS.md`. Writing each tick instead of
+  staging would not narrow that — the page would still run in the host's dialog
+  — and it would make Cancel claim to undo work it had already saved.
+
+  A page that cannot draw its list says so on the panel: a control that will not
+  initialise replaces the rows with a sentence naming the failure, and `save`
+  returns before writing, because an empty list is a real answer and must never
+  be produced by a failure. The guard covers both.
 
 ### The toolbar button
 

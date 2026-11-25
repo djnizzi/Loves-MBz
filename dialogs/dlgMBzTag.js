@@ -23,11 +23,11 @@ localRequirejs('mbzMbgid');
  * MediaMonkey only accepts a three-number manifest version, so a test build
  * carries its channel separately and reads as 0.6.3-rc1 in the footer.
  */
-var ADDON_VERSION = '0.6.2';
-var BUILD_CHANNEL = '';      // '' for a release build
+var ADDON_VERSION = '0.7.1';
+var BUILD_CHANNEL = 'rc4';   // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-25 17:49';
+var BUILD_TIME = '2026-11-25 20:09';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
@@ -282,9 +282,6 @@ function init(params) {
         pendingSummary: qid('pendingSummary'),
         buildStamp: qid('buildStamp'),
         applyStatus: qid('applyStatus'),
-        tabBar: qid('tabBar'),
-        tabChanges: qid('tabChanges'),
-        tabTagSet: qid('tabTagSet'),
         panelChanges: qid('panelChanges'),
         panelTagSet: qid('panelTagSet'),
         note: qid('note')
@@ -1722,6 +1719,10 @@ function init(params) {
      * one scrolling column the guard pins.
      */
     function showTab(name) {
+        // With the host's control the panels are its own: it shows and hides
+        // them, and listens for the switch itself.
+        if (UI.tabs) return;
+
         var changes = name !== 'tagSet';
 
         show(UI.panelChanges, changes);
@@ -1897,6 +1898,108 @@ function init(params) {
         return panel;
     }
 
+    function removeNode(node) {
+        if (node && node.parentNode) node.parentNode.removeChild(node);
+    }
+
+    /** Drops the window's own hiding, so the host control can show a panel. */
+    function clearHidden(node) {
+        if (!node) return;
+
+        node.classList.remove('mbzHidden');
+
+        if (node.style) {
+            if (node.style.removeProperty) node.style.removeProperty('display');
+            else node.style.display = '';
+        }
+    }
+
+    /**
+     * The host's own tab strip, the one the properties modal draws: a `Tabs`
+     * control with one content panel per tab. The window hands it the two
+     * panels it already has, so the cards, their wiring and the one scrolling
+     * column stay exactly as they are and only the strip is the host's.
+     *
+     * @returns {boolean} false when this host cannot draw one; the window then
+     *          falls back to its own bar, so no panel is ever unreachable.
+     */
+    function buildHostTabs() {
+        if (!UI.scrollColumn || !UI.panelChanges || !UI.panelTagSet) return false;
+        if (typeof document === 'undefined' || typeof initializeControl !== 'function') return false;
+
+        var host = makeNode('div', 'mbzTabs', 'tabsHost');
+        host.setAttribute('data-control-class', 'Tabs');
+        UI.scrollColumn.insertBefore(host, UI.panelChanges);
+
+        try {
+            initializeControl(host);
+        } catch (e) {
+            removeNode(host);
+            return false;
+        }
+
+        var tabs = host.controlClass;
+        if (!tabs || typeof tabs.addTab !== 'function') {
+            removeNode(host);
+            return false;
+        }
+
+        // A fresh control may arrive with a starting tab; this window draws
+        // exactly the two it has panels for.
+        if (tabs.length && typeof tabs.closeTab === 'function') {
+            while (tabs.length) tabs.closeTab(tabs.items[0]);
+        }
+
+        try {
+            tabs.addTab(_('ID and changes'));
+            tabs.addTab(_('MBZ tags to use'));
+        } catch (e) {
+            removeNode(host);
+            return false;
+        }
+
+        var panels = tabs.panels || [];
+        var count = panels.length;
+
+        if (count < 2) {
+            removeNode(host);
+            return false;
+        }
+
+        // The panels are moved after the control exists, so a host that draws
+        // no panels leaves the window's own layout untouched for the fallback.
+        clearHidden(UI.panelChanges);
+        clearHidden(UI.panelTagSet);
+        panels[count - 2].appendChild(UI.panelChanges);
+        panels[count - 1].appendChild(UI.panelTagSet);
+
+        UI.tabsHost = host;
+        UI.tabs = tabs;
+        return true;
+    }
+
+    /** The column has a fixed height, so a panel that is shown is sized again. */
+    function listenTabChange() {
+        if (!UI.tabs) return;
+
+        var onTab = function () {
+            scheduleTableSync();
+            fitScrollColumn();
+        };
+
+        try {
+            if (typeof app !== 'undefined' && app.listen) {
+                app.listen(UI.tabs, 'selected', onTab);
+                return;
+            }
+
+            if (typeof UI.tabs.localListen === 'function') UI.tabs.localListen(UI.tabs, 'selected', onTab);
+        } catch (e) {
+            // A host that will not listen still shows the panel; it is then
+            // measured on resize and after the next render, not on the switch.
+        }
+    }
+
     function buildTabBar() {
         var host = UI.scrollColumn && UI.scrollColumn.parentNode;
         if (!host || !host.insertBefore) return;
@@ -1943,13 +2046,16 @@ function init(params) {
             if (!host) UI.scrollColumn.appendChild(panel);
         }
 
-        if (!UI.tabBar) buildTabBar();
+        // The host's strip first, the window's own bar only when there is none:
+        // either way both panels are reachable.
+        if (!UI.tabs && !UI.tabBar && !buildHostTabs()) buildTabBar();
 
         if (UI.tabBar) window.localListen(UI.tabBar, 'click', onTabClick);
         if (UI.btnSaveFieldSet) window.localListen(UI.btnSaveFieldSet, 'click', saveFieldSet);
         if (UI.btnResetFieldSet) window.localListen(UI.btnResetFieldSet, 'click', resetFieldSet);
 
-        showTab('changes');
+        if (UI.tabs) listenTabChange();
+        else showTab('changes');
     }
 
     function renderFields(plan) {
