@@ -23,13 +23,15 @@
  * `mbzApply.readFieldSet()` fixture for fixture. Where the engine happens to be
  * on this window, the page uses it instead.
  *
- * The page edits one thing: which fields the Tag from MusicBrainz window
- * offers. No track, no tag and no native field is read or written here.
+ * The page edits two settings: which fields the Tag from MusicBrainz window
+ * offers, and whether its toolbar button is drawn. No track, no tag and no
+ * native field is read or written here.
  */
 
 (function () {
     var SETTINGS_KEY = 'lovesMBzFieldSet';
     var SETTINGS_VERSION = 1;
+    var TOOLBAR_SETTING_KEY = 'lovesMBzToolbarButton';
 
     /** The host's localiser, or the plain sentence on a host that has none. */
     function phrase(text) {
@@ -102,6 +104,37 @@
         return true;
     }
 
+    /**
+     * The toolbar switch, the same rule `init.js` applies: only a stored
+     * `false` turns the button off, so a missing or unreadable value leaves it
+     * where a fresh install puts it. The button is added at start-up, so the
+     * answer is read when MediaMonkey next starts.
+     */
+    function readToolbarButton() {
+        var stored = null;
+
+        try {
+            if (typeof app !== 'undefined' && app.getValue) {
+                stored = app.getValue(TOOLBAR_SETTING_KEY, true);
+            }
+        } catch (e) {
+            stored = null;
+        }
+
+        return stored !== false;
+    }
+
+    function writeToolbarButton(on) {
+        try {
+            if (typeof app === 'undefined' || !app.setValue) return false;
+            app.setValue(TOOLBAR_SETTING_KEY, !!on);
+        } catch (e) {
+            return false;
+        }
+
+        return true;
+    }
+
     function group(doc, title) {
         var box = doc.createElement('fieldset');
         var legend = doc.createElement('legend');
@@ -142,6 +175,22 @@
         return !!(input && input.checked);
     }
 
+    /** One drawn option: the host's checkbox, its sentence, and the row. */
+    function controlRow(doc, checked, text) {
+        var row = doc.createElement('div');
+        var box = checkbox(doc, checked);
+        var label = doc.createElement('label');
+
+        row.className = 'mbzConfigRow';
+        row.style.padding = '2px 0';
+        label.textContent = text;
+
+        row.appendChild(box);
+        row.appendChild(label);
+
+        return { box: box, label: label, text: text, row: row };
+    }
+
     /** Says why the list is not there, in the place the list would have been. */
     function drawMessage(target, message) {
         if (!target) return;
@@ -168,6 +217,9 @@
         /* The table the package wrote into the page, as it was read. */
         fields: [],
 
+        /* The toolbar switch: { box, label, text, row }, or null. */
+        toolbar: null,
+
         load: function (pnlDiv) {
             var doc = pnlDiv && (pnlDiv.ownerDocument
                 || (typeof document === 'undefined' ? null : document));
@@ -178,6 +230,7 @@
 
             this.rows = [];
             this.fields = [];
+            this.toolbar = null;
 
             if (!doc || !host) return;
 
@@ -187,6 +240,7 @@
                 // A control that will not initialise must not leave a blank
                 // panel, and the rows it managed to draw are not a list to save.
                 this.rows = [];
+                this.toolbar = null;
                 drawMessage(host, phrase('The field list could not be drawn. Nothing was changed.'));
             }
         },
@@ -195,52 +249,61 @@
             var fields = fieldTable(host);
             var all = fields.map(function (field) { return field.key; });
             var keys = readSet(all);
+            var options = group(doc, phrase('This window'));
+            var list = doc.createElement('div');
             var album = group(doc, phrase('Album fields'));
             var track = group(doc, phrase('Track fields'));
             var self = this;
 
             this.rows = [];
             this.fields = [];
+            this.toolbar = null;
+
+            host.textContent = '';
+
+            // The toolbar switch needs nothing from the generated list, so it
+            // is drawn even when that list is missing or will not draw.
+            this.toolbar = controlRow(doc, readToolbarButton(),
+                phrase('Show Tag from MusicBrainz on the MediaMonkey toolbar'));
+
+            options.appendChild(this.toolbar.row);
+            host.appendChild(options);
+            host.appendChild(list);
 
             if (!fields.length) {
-                drawMessage(host, phrase('This build carries no field list, so there is nothing to configure here. Nothing was changed.'));
+                drawMessage(list, phrase('This build carries no field list, so there is nothing to configure here. Nothing was changed.'));
                 return;
             }
 
             this.fields = fields;
-            host.textContent = '';
 
             fields.forEach(function (field) {
-                var row = doc.createElement('div');
-                var box = checkbox(doc, keys.indexOf(field.key) !== -1);
-                var label = doc.createElement('label');
-
-                row.className = 'mbzConfigRow';
-                row.style.padding = '2px 0';
-
                 // Where the value goes, and which kind of destination it is:
                 // MediaMonkey's own field, or a tag the file carries.
-                label.textContent = phrase(field.label) + '  \u2014  '
+                var row = controlRow(doc, keys.indexOf(field.key) !== -1,
+                    phrase(field.label) + '  \u2014  '
                     + phrase(field.kind === 'tag' ? 'extended tag' : 'MediaMonkey field')
-                    + ': ' + field.target;
+                    + ': ' + field.target);
 
-                row.appendChild(box);
-                row.appendChild(label);
-                (field.scope === 'album' ? album : track).appendChild(row);
+                (field.scope === 'album' ? album : track).appendChild(row.row);
 
-                self.rows.push({ key: field.key, box: box, text: label.textContent });
+                self.rows.push({ key: field.key, box: row.box, text: row.text });
             });
 
-            host.appendChild(album);
-            host.appendChild(track);
+            list.appendChild(album);
+            list.appendChild(track);
         },
 
         save: function () {
             var keys = [];
             var rows = this.rows || [];
 
-            // A page that drew no rows has no answer to save: an empty list is
-            // a real answer and must never be produced by a failure.
+            // The toolbar switch is the page's own, so it is written even when
+            // the field list drew nothing. A page that drew no rows has no
+            // answer for the set: an empty list is a real answer and must never
+            // be produced by a failure.
+            if (this.toolbar) writeToolbarButton(isChecked(this.toolbar.box));
+
             if (!rows.length) return;
 
             rows.forEach(function (row) {

@@ -27,6 +27,7 @@ var REFRESH_DELAY_MS = 1200;
  */
 var TOOLBAR_ICON = 'lovesMBz';
 var TOOLBAR_ACTION_KEY = 'lovesMBzTag';
+var TOOLBAR_SETTING_KEY = 'lovesMBzToolbarButton';
 var TOOLBAR_ADD_DELAY_MS = 2000;
 
 /*
@@ -281,8 +282,26 @@ function openTagWindow() {
  * MediaMonkey's `addToolButton` is the supported way in: it builds the
  * ToolButton control, its tooltip and its click handler.
  */
+/**
+ * The configuration page can turn the button off. Only a stored `false` turns
+ * it off: a missing, unreadable or unexpected value leaves the button where a
+ * fresh install puts it, so installing the build changes nothing.
+ */
+function toolbarButtonWanted() {
+    try {
+        if (typeof app !== 'undefined' && app.getValue) {
+            return app.getValue(TOOLBAR_SETTING_KEY, true) !== false;
+        }
+    } catch (e) {
+        return true;
+    }
+
+    return true;
+}
+
 function ensureToolbarButton() {
     if (window._cleanUpCalled) return;
+    if (!toolbarButtonWanted()) return;
     if (typeof uitools === 'undefined' || typeof uitools.addToolButton !== 'function') return;
     if (findToolbarButton()) return;
 

@@ -29,8 +29,9 @@ The contract:
 
    The one exception is the add-on's **configuration page** (`info.json`'s
    `config`, `config.js`): MediaMonkey draws it inside its Addons dialog, so
-   the page runs there. It may stage exactly one thing — the field set,
-   `lovesMBzFieldSet` — written when the host's OK is pressed. It loads none of
+   the page runs there. It may stage exactly two settings — the field set,
+   `lovesMBzFieldSet`, and whether the toolbar button is drawn,
+   `lovesMBzToolbarButton` — written when the host's OK is pressed. It loads none of
    the add-on's modules: MediaMonkey evaluates it inside the Addons dialog,
    where `localRequirejs` resolves against MediaMonkey's own scripts, so asking
    for `mbzApply` raises the host's exception dialog before the page exists

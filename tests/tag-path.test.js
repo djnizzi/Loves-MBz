@@ -1335,13 +1335,18 @@ global.app = {
     const allFieldKeys = catalogue.map((field) => field.key);
 
     assert.deepStrictEqual(allFieldKeys, [
-        'albumArtist', 'date', 'year', 'origDate', 'publisher',
+        'albumArtist', 'date', 'origDate', 'publisher',
         'title', 'discNumber', 'artist', 'composer', 'lyricist', 'isrc',
         'albumid', 'releasegroupid', 'albumartistid', 'albumartists', 'barcode',
         'status', 'type', 'country', 'catalognumber', 'discogs', 'originaldate',
         'recordingid', 'releasetrackid', 'artistid', 'artists', 'writer',
         'producer', 'remixer'
     ], 'the catalogue is every declared field, in table order');
+
+    // MediaMonkey keeps one date, with the year as its first four digits;
+    // writing "year" writes a year-only date over the month and day.
+    assert.ok(!allFieldKeys.includes('year'),
+        'year must not be a field of its own, because setting it erases the month and day');
 
     for (const field of catalogue) {
         assert.ok(field.label, field.key + ' must have a label');
@@ -1632,6 +1637,11 @@ global.app = {
     assert.strictEqual(configInfo.fields.length, 0,
         'nothing is listed before the panel is loaded');
 
+    // The Addons dialog's skin sheet stretches body text; the note pins its own
+    // leading, inline, so the three sentences do not sit a line apart.
+    assert.match(read('config.html'), /line-height: 1\.35/,
+        'the configuration note must pin its own line height');
+
     const ticks = (info) => (info.rows || [])
         .filter((row) => row.box.controlClass.checked)
         .map((row) => row.key);
@@ -1682,6 +1692,34 @@ global.app = {
         { version: 1, keys: ['composer', 'barcode'] },
         'save writes exactly the ticks, in catalogue order, under the version');
 
+    // The toolbar switch is the page's own: on unless the setting says off, and
+    // read by init.js, which adds the button at start-up.
+    delete configSettings.lovesMBzToolbarButton;
+    configInfo.load(configPanel, {});
+
+    assert.ok(configInfo.toolbar && configInfo.toolbar.box,
+        'the page draws the toolbar switch');
+    assert.match(configInfo.toolbar.text, /toolbar/,
+        'the switch must say what it turns on');
+    assert.strictEqual(configInfo.toolbar.box.controlClass.checked, true,
+        'the toolbar button is on until the setting says otherwise');
+    assert.match(initSource, /'lovesMBzToolbarButton'/,
+        'init.js must read the setting the page writes, not one of its own');
+    assert.match(initSource, /if \(!toolbarButtonWanted\(\)\) return;/,
+        'init.js must skip the button when the page turned it off');
+
+    configInfo.toolbar.box.controlClass.checked = false;
+    configInfo.save(configPanel, {});
+
+    assert.strictEqual(configSettings.lovesMBzToolbarButton, false,
+        'save writes the toolbar switch');
+
+    configSettings.lovesMBzToolbarButton = true;
+    configInfo.load(configPanel, {});
+
+    assert.strictEqual(configInfo.toolbar.box.controlClass.checked, true,
+        'a stored true draws the switch ticked');
+
     // Where the host does have the engine on this window, the page asks it
     // rather than using its copy.
     const delegated = openConfig(true);
@@ -1695,6 +1733,7 @@ global.app = {
     // A control that will not initialise must say so, keep no rows to save, and
     // leave the setting alone.
     configSettings.lovesMBzFieldSet = { version: 1, keys: ['title'] };
+    configSettings.lovesMBzToolbarButton = false;
 
     const realInitialize = global.initializeControl;
 
@@ -1712,6 +1751,8 @@ global.app = {
 
     assert.deepStrictEqual(configSettings.lovesMBzFieldSet, { version: 1, keys: ['title'] },
         'a page that drew no rows keeps the setting it did not edit');
+    assert.strictEqual(configSettings.lovesMBzToolbarButton, false,
+        'a page that drew nothing leaves the toolbar switch alone too');
 
     console.log('tag-path regression test passed');
 })().catch((error) => {

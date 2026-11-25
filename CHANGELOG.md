@@ -21,6 +21,11 @@ unreleased 0.7.0 ships here too.
   not declare all fall back to the whole catalogue, so installing changes
   nothing until the set is edited. An empty list is a real answer, not a missing
   setting.
+- **Year is not a field of its own.** MediaMonkey keeps one date with the year
+  as its first four digits, and setting the year writes a year-only date — so
+  the old **Year** row wrote the same value a second time and could erase the
+  month and day the **Date** row had just written. The row is gone; a release
+  dated only `1982` arrives as `19820000` through **Date**.
 - **Two levels, not two settings.** The saved set decides which rows **Fields to
   write** offers; its ticks still decide what this Apply writes and never touch
   the setting. **Save as default** writes the set and **Reset to saved** reloads
@@ -30,6 +35,12 @@ unreleased 0.7.0 ships here too.
   the cards, their wiring and the one scrolling column are unchanged. A host
   without the control gets the window's own button bar, so neither panel is ever
   unreachable.
+- **The toolbar button can be turned off.** The configuration page opens with
+  **Show Tag from MusicBrainz on the MediaMonkey toolbar** ticked; unticking it
+  and pressing OK stops the button being added to the right-hand strip. Only a
+  stored `false` hides it, so a fresh install and an untouched setting show it
+  as before. The button is added at start-up, so the switch takes effect the
+  next time MediaMonkey starts; the action keeps its menu entries and hotkey.
 - **The same set from Tools → Addons → Loves MBz → Configure.** `info.json`
   names `config.js`, which lists the catalogue in two groups — each row naming
   the column or Picard tag it is written as and whether that is an extended tag

@@ -24,10 +24,10 @@ localRequirejs('mbzMbgid');
  * carries its channel separately and reads as 0.6.3-rc1 in the footer.
  */
 var ADDON_VERSION = '0.7.1';
-var BUILD_CHANNEL = 'rc4';   // '' for a release build
+var BUILD_CHANNEL = 'rc7';   // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-25 20:09';
+var BUILD_TIME = '2026-11-25 20:23';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');

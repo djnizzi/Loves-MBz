@@ -137,7 +137,7 @@ multi-disc releases too: MediaMonkey gives each disc its own album row.
 | Written to | Fields |
 |---|---|
 | Native track tags | title, artist, composer, lyricist, ISRC, disc number |
-| Native album-level tags | album artist and artist as `; `-separated names, date, year, original date, all labels joined into `publisher` |
+| Native album-level tags | album artist and artist as `; `-separated names, date, original date, all labels joined into `publisher` |
 | Extended tags, album-wide | `MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASEGROUPID`, `MUSICBRAINZ_ALBUMARTISTID`, `ALBUMARTISTS`, `BARCODE`, `RELEASESTATUS`, `RELEASETYPE`, `RELEASECOUNTRY`, `CATALOGNUMBER`, `originaldate`, `discogs_url` |
 | Extended tags, per track | `MUSICBRAINZ_TRACKID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `ARTISTS`, `WRITER`, `PRODUCER`, `REMIXER` |
 
@@ -246,10 +246,13 @@ The window is two tabs over the one scrolling column the guard pins.
   the host's `Tabs` control is recorded in ROADMAP's 0.7.1.
 - **The configuration page.** `info.json` names `config.js`, so MediaMonkey
   gives the add-on a panel under **Tools → Addons**, opened once after install.
-  `window.configInfo.load` draws a checkbox per field in two groups — album
-  fields and track fields, each labelled with the native column or Picard tag it
-  is written as and marked `MediaMonkey field` or `extended tag` — ticked from
-  the saved set; `save` writes the ticked keys. The
+  `window.configInfo.load` draws one switch of its own — **Show Tag from
+  MusicBrainz on the MediaMonkey toolbar**, on unless `lovesMBzToolbarButton`
+  is `false`, read by `init.js` when it adds the button — and a checkbox per
+  field in two groups — album fields and track fields, each labelled with the
+  native column or Picard tag it is written as and marked `MediaMonkey field`
+  or `extended tag` — ticked from the saved set; `save` writes the switch and
+  the ticked keys. The
   page cannot load `mbzApply`: MediaMonkey evaluates it from
   `dialogs/dlgAddonConfig.js`, where `localRequirejs` resolves against
   MediaMonkey's own scripts, so `localRequirejs('mbzApply')` asked for
@@ -265,16 +268,16 @@ The window is two tabs over the one scrolling column the guard pins.
   window the page asks it instead. `config.html` holds the note, the generated
   list and the mount point; the page draws the rows with the host's checkbox
   control, or a plain checkbox if the host will not make one. The page is settings only — no track, tag or native value is read or
-  staged, and the host's OK writes `lovesMBzFieldSet`, never a file — so the one
-  write path is untouched. It is the single exception to *nothing runs inside
+  staged, and the host's OK writes `lovesMBzFieldSet` and
+  `lovesMBzToolbarButton`, never a file — so the one write path is untouched. It is the single exception to *nothing runs inside
   MediaMonkey's dialogs*, stated in `AGENTS.md`. Writing each tick instead of
   staging would not narrow that — the page would still run in the host's dialog
   — and it would make Cancel claim to undo work it had already saved.
 
   A page that cannot draw its list says so on the panel: a control that will not
   initialise replaces the rows with a sentence naming the failure, and `save`
-  returns before writing, because an empty list is a real answer and must never
-  be produced by a failure. The guard covers both.
+  writes only the toolbar switch before returning, because an empty list is a
+  real answer and must never be produced by a failure. The guard covers both.
 
 ### The toolbar button
 
@@ -283,7 +286,12 @@ add-on icon, a tooltip, and is greyed out when nothing is selected. The add-on
 places a button for it in the right-hand toolbar strip, beside MediaMonkey's own
 tool buttons, when MediaMonkey starts: it is added with
 `uitools.addToolButton('righttoolbuttons', …)`, the same call the host uses, so
-it behaves like a built-in button and survives layout changes.
+it behaves like a built-in button and survives layout changes. The
+configuration page can turn the button off (`lovesMBzToolbarButton`); only a
+stored `false` hides it, so a missing or unreadable value leaves it where a
+fresh install puts it. The button is added at start-up, so the switch takes
+effect the next time MediaMonkey starts; the action itself stays in **Edit →
+Tag Tools** and under **Options → Layout → Toolbar** either way.
 
 The action is also listed under **Options → Layout → Toolbar** and can be given
 a hotkey there. A `toolbarItems` entry left by a 0.5.0 test build — which put
@@ -373,7 +381,7 @@ only after a confirmation — except when it fills an empty library field, which
 overwrites nothing and happens immediately.
 
 The **Fields to write** table covers the release side of the same window: native
-fields (`; `-separated album artist and artist, composer, lyricist, date, year,
+fields (`; `-separated album artist and artist, composer, lyricist, date,
 original date, every label joined into `publisher`, title, ISRC, disc number)
 and the extended tags, including the joined credit in
 `ARTISTS`/`ALBUMARTISTS`, `WRITER`, `PRODUCER`, `REMIXER`, `originaldate` and
@@ -539,8 +547,8 @@ still reports the disagreement but shows no buttons.
   reported beside the fetched one. `aggregateFields` turns the per-track work
   into one row per field, collapsing values that differ per track.
 - **Writing** — `mbzApply.applySelectionAsync` is the only write path. Per
-  track: the ticked native fields (dates as `YYYYMMDD`, years and disc numbers
-  as numbers, `discNumberInt` rather than the string property), then one read
+  track: the ticked native fields (dates as `YYYYMMDD`, disc numbers as
+  numbers, `discNumberInt` rather than the string property), then one read
   and one merged `ExtendedTags` write (`mergeTags` for the fill,
   `applyTagEdits` for the tag table), then `track.commitAsync()`. A failing
   track is collected and the rest still commit; at the end
@@ -591,7 +599,7 @@ Davis *Kind of Blue* (`e32a3f0b…`, CD with five disc IDs), Karajan/Beethoven 9
 |---|---|---|---|---|
 | Release title | `title` | — the album name belongs to the library | refused | every sample |
 | Artist credit | `artist-credit[]` | native Album artist, `ALBUMARTISTS`, `MUSICBRAINZ_ALBUMARTISTID` | read | Daft Punk; Bach / Glenn Gould |
-| Date | `date` | native Date and Year | read | `2013-05`, `1982`, `2005` |
+| Date | `date` | native Date (the year is its first four digits) | read | `2013-05`, `1982`, `2005` |
 | Country | `country` | `RELEASECOUNTRY` | read | `KR`, `XE` |
 | Every release event | `release-events[]` (area + date) | `RELEASECOUNTRY` as a list | dropped | one area per sample |
 | Status, status ID | `status`, `status-id` | `RELEASESTATUS` (status only) | read | Official |

@@ -42,7 +42,10 @@ button in MediaMonkey's toolbar. It works on one album at a time.
   field turned off in either place is off in both. Each row names the column or
   Picard tag it is written as and marks it as an **extended tag** or a
   **MediaMonkey field**. A fresh install opens the page once, with every field
-  ticked.
+  ticked. The page also carries **Show Tag from MusicBrainz on the MediaMonkey
+  toolbar**: untick it and press OK to stop the button being added to the
+  right-hand strip. That takes effect the next time MediaMonkey starts; the
+  action stays in **Edit → Tag Tools**, the context menu and its hotkey.
 - **The exact release, not just the right group.** MediaMonkey often matches
   the release group's best-known release rather than the pressing the album is.
   The window's first card lists every release of the group with its date,

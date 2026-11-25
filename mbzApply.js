@@ -23,7 +23,9 @@
     var NATIVE_FIELDS = [
         { key: 'albumArtist', label: _('Album artist'), scope: 'album', native: 'albumArtist' },
         { key: 'date', label: _('Date'), scope: 'album', native: 'date', kind: 'date', force: true },
-        { key: 'year', label: _('Year'), scope: 'album', native: 'year', kind: 'year' },
+        // Year is deliberately not offered: MediaMonkey keeps one date with the
+        // year as its first four digits, and setting the year writes a
+        // year-only date over the month and day the date row just wrote.
         { key: 'origDate', label: _('Original date'), scope: 'album', native: 'origDate', kind: 'date' },
         // Original year is deliberately not offered: it lands in the same
         // library field as the original date and overwrote what was there.
@@ -307,11 +309,6 @@
         return types.join(' + ');
     }
 
-    function yearOf(date) {
-        var match = /^(\d{4})/.exec(text(date));
-        return match ? match[1] : '';
-    }
-
     function discogsUrls(release) {
         if (window.mbzFetch && window.mbzFetch.discogsUrls) {
             return window.mbzFetch.discogsUrls(release);
@@ -364,9 +361,7 @@
                     values: {
                         albumArtist: albumArtist,
                         date: date,
-                        year: yearOf(date),
                         origDate: origDate,
-                        origYear: yearOf(origDate),
                         publisher: labelText(release),
                         title: text(item.title || recording.title),
                         // Read-only metadata for the track table.
@@ -499,7 +494,7 @@
 
             if (def.kind === 'date') return isoFromMmDate(raw);
 
-            if (def.kind === 'int' || def.kind === 'year') {
+            if (def.kind === 'int') {
                 var number = parseInt(raw, 10);
                 return number > 0 ? String(number) : '';
             }
@@ -777,7 +772,7 @@
 
             result.native[def.native] = def.kind === 'date'
                 ? mmDateFromIso(value)
-                : (def.kind === 'year' || def.kind === 'int') ? parseInt(value, 10) : value;
+                : def.kind === 'int' ? parseInt(value, 10) : value;
             addField(def, 'native', value, current);
         });
 
