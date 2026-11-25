@@ -1325,6 +1325,183 @@ global.app = {
 
     Date.now = realNow;
 
+    /* ---------------------------------------------------------------------- *
+     * 0.7.1: the saved field set, and the two tabs
+     * ---------------------------------------------------------------------- */
+
+    // The catalogue is the field tables, in declaration order, with the name
+    // each value is written as.
+    const catalogue = apply.fieldCatalogue();
+    const allFieldKeys = catalogue.map((field) => field.key);
+
+    assert.deepStrictEqual(allFieldKeys, [
+        'albumArtist', 'date', 'year', 'origDate', 'publisher',
+        'title', 'discNumber', 'artist', 'composer', 'lyricist', 'isrc',
+        'albumid', 'releasegroupid', 'albumartistid', 'albumartists', 'barcode',
+        'status', 'type', 'country', 'catalognumber', 'discogs', 'originaldate',
+        'recordingid', 'releasetrackid', 'artistid', 'artists', 'writer',
+        'producer', 'remixer'
+    ], 'the catalogue is every declared field, in table order');
+
+    for (const field of catalogue) {
+        assert.ok(field.label, field.key + ' must have a label');
+        assert.ok(field.target, field.key + ' must name the column or tag it is written as');
+        assert.ok(field.scope === 'album' || field.scope === 'track', field.key + ' must have a scope');
+        assert.ok(field.kind === 'native' || field.kind === 'tag',
+            field.key + ' must be a native field or a tag');
+    }
+
+    // "Supplied" is a fact about the release, not about the diff: the plan only
+    // holds the fields whose value differs from the library, so reading it here
+    // marked every already-matching field as not supplied.
+    const supplyRelease = {
+        id: '99999999-9999-4999-8999-999999999999',
+        title: 'An Album',
+        date: '2004-03-23',
+        country: 'GB',
+        'artist-credit': [{
+            name: 'An Artist',
+            artist: { id: '55555555-5555-4555-8555-555555555555', name: 'An Artist' }
+        }],
+        media: [{
+            position: 1,
+            tracks: [{
+                id: '66666666-6666-4666-8666-666666666666',
+                number: '1',
+                title: 'One',
+                recording: {
+                    id: '77777777-7777-4777-8777-777777777777',
+                    title: 'One',
+                    isrcs: ['GBAYE0400001']
+                }
+            }]
+        }]
+    };
+
+    const supplied = apply.suppliedFields(supplyRelease);
+
+    assert.strictEqual(supplied.title, true, 'the release supplies the track title');
+    assert.strictEqual(supplied.date, true, 'and the date, even when the library already has it');
+    assert.strictEqual(supplied.country, true, 'and the country');
+    assert.strictEqual(supplied.discNumber, true, 'the medium supplies the disc number');
+    assert.strictEqual(supplied.albumid, true, 'the release supplies its own ID');
+    assert.strictEqual(supplied.barcode, false, 'a release with no barcode supplies none');
+    assert.strictEqual(supplied.composer, false, 'no work relation means no composer');
+    assert.strictEqual(supplied.releasegroupid, false, 'this fixture carries no release group');
+
+    // One setting, versioned, and the rules a window's read applies — driven
+    // through the reader the window calls, not an internal helper.
+    const settings = {};
+
+    global.app = {
+        getValue: (key, fallback) => (key in settings ? settings[key] : fallback),
+        setValue: (key, value) => { settings[key] = value; }
+    };
+
+    function savedSet(stored) {
+        settings.lovesMBzFieldSet = stored;
+        return apply.readFieldSet();
+    }
+
+    assert.deepStrictEqual(apply.readFieldSet(), allFieldKeys,
+        'a window with nothing saved offers every field');
+    assert.deepStrictEqual(savedSet({ version: 99, keys: ['title'] }), allFieldKeys,
+        'a set from another version falls back to every field');
+    assert.deepStrictEqual(savedSet({ version: 1, keys: ['title', 'gone'] }), allFieldKeys,
+        'a key this build does not know falls back too');
+    assert.deepStrictEqual(savedSet({ version: 1, keys: ['title', 'barcode'] }),
+        ['title', 'barcode'], 'a known set is offered as saved');
+    assert.deepStrictEqual(savedSet({ version: 1, keys: [] }), [],
+        'turning every field off is a saved answer, not a missing setting');
+
+    assert.strictEqual(apply.writeFieldSet(['title', 'barcode']), true);
+    assert.deepStrictEqual(settings.lovesMBzFieldSet, { version: 1, keys: ['title', 'barcode'] },
+        'Save as default stores the keys under a version');
+    assert.deepStrictEqual(apply.readFieldSet(), ['title', 'barcode'],
+        'what was saved is what the next window offers');
+
+    apply.writeFieldSet([]);
+    assert.deepStrictEqual(apply.readFieldSet(), [], 'an empty set survives the round trip');
+
+    // The window: two tabs over the one scrolling column, one panel each.
+    assert.match(dialogHtml, /data-id="tabBar"/, 'the window needs a tab bar');
+    assert.match(dialogHtml, />ID and changes</, 'the first tab is named');
+    assert.match(dialogHtml, />MBZ tags to use</, 'the second tab is named');
+
+    const changesPanel = dialogHtml.slice(
+        dialogHtml.indexOf('data-id="panelChanges"'),
+        dialogHtml.indexOf('data-id="panelTagSet"')
+    );
+
+    assert.ok(changesPanel.length > 0, 'both panels must be in the page');
+    for (const id of ['groupCard', 'releaseCard', 'fieldsSection', 'trackSection', 'tagSection']) {
+        assert.ok(changesPanel.includes('data-id="' + id + '"'), id + ' belongs to ID and changes');
+    }
+
+    // The catalogue lives in one place only: the page is a mount point and the
+    // script draws the card, so a stale install and a fresh one cannot drift.
+    assert.match(dialogHtml, /data-id="panelTagSet"><\/div>/,
+        'the catalogue panel is a mount point, not a second copy of the card');
+    assert.doesNotMatch(dialogHtml, /fieldSetRows|btnSaveFieldSet|btnResetFieldSet/,
+        'the catalogue markup must not also live in the page');
+
+    const buildPanelCode = dialogCode.slice(
+        dialogCode.indexOf('function buildFieldSetPanel'),
+        dialogCode.indexOf('function buildTabBar')
+    );
+
+    assert.match(buildPanelCode, /function buildFieldSetPanel\(host\)/,
+        'the builder takes the page mount point');
+
+    for (const id of ['fieldSetRows', 'fieldSetStatus', 'btnSaveFieldSet', 'btnResetFieldSet']) {
+        assert.ok(buildPanelCode.includes("'" + id + "'"),
+            id + ' must be created by the one builder');
+    }
+
+    assert.match(buildPanelCode, /_\('Save as default'\)/, 'Save as default says what it does');
+    assert.match(buildPanelCode, /'mbzSection mbzCard'/, 'the catalogue is a card like the others');
+    assert.match(dialogCode, /var host = UI\.panelTagSet;\s*var panel = buildFieldSetPanel\(host\);/,
+        'a page with the mount point and one without get the same panel');
+
+    assert.ok(dialogHtml.indexOf('data-id="panelChanges"') < dialogHtml.indexOf('data-id="groupCard"'),
+        'the cards come after the panel that holds them');
+
+    // The tabs are the window's own: each button names the panel it shows, so
+    // the page and the script cannot disagree about the two keys.
+    assert.match(dialogHtml, /data-id="tabChanges" data-tab="changes"/,
+        'the first tab names its panel');
+    assert.match(dialogHtml, /data-id="tabTagSet" data-tab="tagSet"/,
+        'the second tab names its panel');
+    assert.match(dialogCode, /getAttribute\('data-tab'\)/,
+        'the click reads the panel name from the button');
+    assert.match(dialogCode, /function showTab[\s\S]{0,600}?fitScrollColumn\(\)/,
+        'a panel that is shown again is sized again');
+
+    assert.match(dialogCode, /function renderFields\(plan\)[\s\S]*?isOffered\(field\.key\)/,
+        'Fields to write offers only the saved set');
+    assert.match(dialogCode, /function renderFieldSet\(\)[\s\S]*?not supplied/,
+        'a field this release did not supply is still listed');
+
+    const renderFieldSetCode = dialogCode.slice(
+        dialogCode.indexOf('function renderFieldSet'),
+        dialogCode.indexOf('function markFieldSetDirty')
+    );
+
+    assert.doesNotMatch(renderFieldSetCode, /plan\.fields/,
+        'the plan holds only differing fields, so it cannot say what was supplied');
+
+    // Saving the set writes a setting, never a tag: the window has one tag
+    // write, and it is Apply through the engine.
+    const saveFieldSetCode = dialogCode.slice(
+        dialogCode.indexOf('function saveFieldSet'),
+        dialogCode.indexOf('function resetFieldSet')
+    );
+
+    assert.match(saveFieldSetCode, /apply\.writeFieldSet\(keys\)/,
+        'Save as default writes the setting');
+    assert.doesNotMatch(saveFieldSetCode, /applySelectionAsync|setExtendedTagsAsync|commitAsync/,
+        'saving the set must not write tags');
+
     console.log('tag-path regression test passed');
 })().catch((error) => {
     console.error(error);

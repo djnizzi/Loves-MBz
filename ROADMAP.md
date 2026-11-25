@@ -507,6 +507,11 @@ Checklist:
 The user chooses once which fields the add-on offers; any selection can
 override that choice; and the window stops being one long scroll of cards.
 
+**Started and in place:** the saved set, both tabs, the catalogue, and the
+panels built from script when the page has neither. Not yet verified in
+MediaMonkey — the guard checks the set's round trip and the split, not what the
+host draws.
+
 - **The saved set.** Stored with the add-on's own settings (`app.getValue` /
   `app.setValue`, the way `init.js` remembers the toolbar offer): one key
   holding field keys from `NATIVE_FIELDS` and `TAG_FIELDS`, versioned so a
@@ -526,37 +531,50 @@ override that choice; and the window stops being one long scroll of cards.
   each with its native column or Picard tag name beside it, the saved-set ticks,
   **Save as default**, **Reset to saved**, and one sentence saying what the set
   is for. A field the release did not supply is still listed, marked as not
-  supplied by this release, so it cannot look like a lost setting.
-- **Copy MediaMonkey's own tab pattern** (its properties modal, in
-  `../src/js/dialogs/dlgTrackProperties.html` and `.js`): the host draws the
-  whole thing from one
-  `<div data-id="tabs" data-control-class="Tabs" data-init-params="{resizeable: true}"></div>`;
-  each tab is an object with `name`, `order` and `load(track, dialog)`, its
-  panel is built once and attached with `tabs.controlClass.setTabPanel(key,
-  panel)`, and an `isLoaded` flag keeps the second visit free. The add-on keeps
-  both panels in `dlgMBzTag.html` — the package already ships that page — and
-  attaches them the same way. *Verify in app* which loader the add-on's dialog
-  may use for a panel file if the panels are split out.
+  supplied by this release, so it cannot look like a lost setting. That mark is
+  `suppliedFields(release)` — the release before any comparison — and not the
+  plan: the plan carries only the fields that differ, so a field equal to the
+  library's value would otherwise read as one MusicBrainz never sent.
+- **Decided: the window draws its own tab bar.** MediaMonkey's `Tabs` control
+  belongs to its properties modal, where a tab is `{name, order, load(track,
+  dialog)}` and the host hands it the track being edited; this window edits one
+  selection, not one track, and already draws its own cards, buttons and
+  tables. So the tab bar is two `.mbzButton` elements and the two panels are
+  plain divs in the page the package ships. The host control would add a
+  per-track loader this window has no use for, and its behaviour cannot be
+  checked by the guard; the window's own split can.
 - **The stale page.** `AGENTS.md`'s rule applies in full: MediaMonkey keeps the
-  dialog page it loaded at start-up, so the tab container and both panels must
-  be creatable from `dlgMBzTag.js` when the installed page has neither —
-  exactly like the release-group card and the busy ring. Otherwise installing
-  the build appears to do nothing.
+  dialog page it loaded at start-up, so the tab bar and the first panel are
+  built from `dlgMBzTag.js` when the installed page has neither — exactly like
+  the release-group card and the busy ring. The catalogue card is never written
+  into the page: `panelTagSet` is a mount point and `buildFieldSetPanel()` draws
+  the card for a fresh page and an older one alike, so the fallback cannot drift
+  from a second copy of the markup.
 - **The guard has to be changed deliberately.** `tests/tag-path.test.js` pins
   one `.mbzTagScroll` with `overflow-y: auto`, `fitScrollColumn` sized from
   `basis * 0.68`, the `.mbzSection` rhythm and `qid()` ↔ `data-id` parity. Two
   panels mean one scroll column per panel (or one inside the tab body); that is
   a guard update with its own test, not a workaround, and `fitScrollColumn`
   has to run again when a tab is first shown.
-- [ ] The saved set: read, fall back, version, write on **Save as default**.
-- [ ] Per-selection ticks that never touch the setting; **Reset to saved**.
-- [ ] The two tab keys, and which cards sit in which panel.
-- [ ] The panels built by script when the page has none.
-- [ ] The footer pending-work summary (UI 1.1) counts the rows that exist, and
+- [x] The saved set: read, fall back, version, write on **Save as default**.
+      `lovesMBzFieldSet` as `{version, keys}`, read and written only by
+      `mbzApply.readFieldSet` / `writeFieldSet`; a missing setting, another
+      version or an unknown key falls back to the whole catalogue, and an empty
+      list is kept as the user's answer.
+- [x] Per-selection ticks that never touch the setting; **Reset to saved**.
+- [x] The two tab keys, and which cards sit in which panel.
+- [x] The panels built by script when the page has none; the catalogue card is
+      always drawn by the script into its mount point, never duplicated in the
+      page.
+- [x] The footer pending-work summary (UI 1.1) counts the rows that exist, and
       says so when the saved set leaves nothing to offer.
-- [ ] Guard: tab split, saved-set round trip, no tag write from the tag-set tab.
-- [ ] `TECHNICAL.md`, `README.md` and the changelog describe the setting and the
-      two tabs; UI-ROADMAP's 3.1 closes with this release.
+- [x] Guard: tab split, saved-set round trip, no tag write from the tag-set tab.
+- [ ] `TECHNICAL.md` and `README.md` describe the setting and the two tabs
+      (written); the changelog entry is due at release, as usual. UI-ROADMAP's
+      3.1 closes with this release.
+- [ ] Open the window in MediaMonkey on a fresh install (no setting) and with
+      every field turned off: both tabs draw, the catalogue marks what the
+      release did not supply, and an old page still gets the tabs.
 
 ## 0.8.0 — general UI revision (TBD)
 

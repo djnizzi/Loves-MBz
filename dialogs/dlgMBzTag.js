@@ -282,6 +282,11 @@ function init(params) {
         pendingSummary: qid('pendingSummary'),
         buildStamp: qid('buildStamp'),
         applyStatus: qid('applyStatus'),
+        tabBar: qid('tabBar'),
+        tabChanges: qid('tabChanges'),
+        tabTagSet: qid('tabTagSet'),
+        panelChanges: qid('panelChanges'),
+        panelTagSet: qid('panelTagSet'),
         note: qid('note')
     };
 
@@ -310,7 +315,8 @@ function init(params) {
         fileSeparator: '; ',
         addTagChoices: false,
         busy: false,
-        readOnly: false
+        readOnly: false,
+        offered: null           // the saved set: the fields the window offers
     };
 
     var searchUrl = '';
@@ -1687,8 +1693,264 @@ function init(params) {
     }
 
     /* ---------------------------------------------------------------- *
-     * Fields to write
+     * The two tabs and the saved field set (0.7.1)
      * ---------------------------------------------------------------- */
+
+    var FIELD_SET_NOTE = _('Choose the fields the window offers. The ticks in Fields to write still decide what this Apply writes.');
+
+    /** The saved set, read once. */
+    function offeredKeys() {
+        if (!state.offered) {
+            state.offered = (apply && apply.readFieldSet) ? apply.readFieldSet() : [];
+        }
+
+        return state.offered;
+    }
+
+    function isOffered(key) {
+        return offeredKeys().indexOf(key) !== -1;
+    }
+
+    function setFieldSetStatus(text) {
+        if (UI.fieldSetStatus) UI.fieldSetStatus.textContent = text || '';
+    }
+
+    /**
+     * One tab at a time. The window switches its own panels: the host's tab
+     * control belongs to its properties modal, whose tabs load a track, and
+     * this window loads its own selection, so the split is two panels in the
+     * one scrolling column the guard pins.
+     */
+    function showTab(name) {
+        var changes = name !== 'tagSet';
+
+        show(UI.panelChanges, changes);
+        show(UI.panelTagSet, !changes);
+
+        if (UI.tabChanges) UI.tabChanges.classList.toggle('mbzTabActive', changes);
+        if (UI.tabTagSet) UI.tabTagSet.classList.toggle('mbzTabActive', !changes);
+
+        // The column's height is fixed, so it is measured again now that the
+        // other panel is under it.
+        fitScrollColumn();
+    }
+
+    function onTabClick(event) {
+        var target = event && event.target;
+        var name = target && target.getAttribute ? target.getAttribute('data-tab') : '';
+
+        if (name) showTab(name);
+    }
+
+    /** The catalogue: every declared field, and what this release supplied. */
+    function renderFieldSet() {
+        scheduleTableSync();
+
+        if (!UI.fieldSetRows || !apply) return;
+
+        // What the release carries, not what the plan has left: the plan holds
+        // only the fields that differ, so a match would read as "not supplied".
+        var supplied = state.release ? apply.suppliedFields(state.release) : null;
+
+        UI.fieldSetRows.textContent = '';
+
+        apply.fieldCatalogue().forEach(function (field) {
+            var row = document.createElement('tr');
+            var checkCell = document.createElement('td');
+            checkCell.className = 'mbzNowrap';
+
+            var box = document.createElement('div');
+            box.setAttribute('data-control-class', 'Checkbox');
+            box.setAttribute('data-id', 'mbzFieldSet' + field.key);
+            box.setAttribute('data-key', field.key);
+            checkCell.appendChild(box);
+            row.appendChild(checkCell);
+
+            row.appendChild(mbzTagCell(field.label));
+            row.appendChild(mbzTagCell(field.scope === 'album' ? _('Album') : _('Track'), 'mbzNowrap'));
+            row.appendChild(mbzTagCell(field.target, 'mbzNowrap'));
+
+            // A field this release did not supply is still listed: a missing
+            // row would read as a lost setting.
+            row.appendChild(mbzTagCell(supplied && !supplied[field.key]
+                ? _('not supplied') : '', 'mbzNote'));
+
+            UI.fieldSetRows.appendChild(row);
+
+            if (typeof initializeControl === 'function') initializeControl(box);
+            if (box.controlClass) box.controlClass.checked = isOffered(field.key);
+
+            window.localListen(box, 'click', markFieldSetDirty);
+            window.localListen(box, 'change', markFieldSetDirty);
+        });
+
+        lockFieldSet();
+    }
+
+    function markFieldSetDirty() {
+        setFieldSetStatus(_('Not saved yet \u2014 press Save as default.'));
+    }
+
+    /**
+     * Save as default writes a setting, never a tag: Apply stays the only
+     * writer, and the ticks in Fields to write are untouched.
+     */
+    function saveFieldSet() {
+        if (!apply || state.readOnly || state.busy) return;
+
+        var keys = checkedKeysIn(UI.fieldSetRows);
+
+        if (!apply.writeFieldSet(keys)) {
+            setFieldSetStatus(_('Could not save the field set.'));
+            return;
+        }
+
+        state.offered = keys;
+        renderFields(state.plan);
+        setFieldSetStatus(keys.length
+            ? sprintf(_('Saved: %d fields offered.'), keys.length)
+            : _('Saved: the window offers no field until you tick one here.'));
+    }
+
+    /** Puts the ticks back the way the setting has them. */
+    function resetFieldSet() {
+        if (!apply || state.readOnly || state.busy) return;
+
+        state.offered = apply.readFieldSet();
+        renderFieldSet();
+        renderFields(state.plan);
+        setFieldSetStatus(_('The ticks are the saved set again.'));
+    }
+
+    /** Party Mode and a running write lock the catalogue like the field rows. */
+    function lockFieldSet() {
+        var boxes = UI.fieldSetRows ? UI.fieldSetRows.querySelectorAll('[data-key]') : [];
+
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].controlClass) boxes[i].controlClass.disabled = !!state.busy || state.readOnly;
+        }
+
+        if (UI.btnSaveFieldSet) {
+            UI.btnSaveFieldSet.classList.toggle('mbzDisabled', !!state.busy || state.readOnly);
+        }
+
+        if (UI.btnResetFieldSet) {
+            UI.btnResetFieldSet.classList.toggle('mbzDisabled', !!state.busy || state.readOnly);
+        }
+    }
+
+    function makeNode(tag, className, id, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (id) node.setAttribute('data-id', id);
+        if (text) node.textContent = text;
+        return node;
+    }
+
+    /**
+     * The catalogue, drawn by the window rather than written into the page: one
+     * description, so an install whose page predates the tab gets the same
+     * panel instead of a second, thinner copy that would drift from the page's.
+     *
+     * `host` is the page's mount point; a page older than the tab has none and
+     * gets one built here.
+     */
+    function buildFieldSetPanel(host) {
+        var panel = host || makeNode('div', 'mbzPanel mbzHidden', 'panelTagSet');
+        var card = makeNode('fieldset', 'mbzSection mbzCard');
+
+        card.appendChild(makeNode('legend', 'mbzCardTitle', '', _('MBZ tags to use')));
+        card.appendChild(makeNode('label', 'mbzInfo', '', FIELD_SET_NOTE));
+
+        var table = makeNode('table', 'mbzTable');
+        var thead = makeNode('thead');
+        var head = makeNode('tr');
+        var titles = ['', _('Field'), _('Scope'), _('Written as'), _('This release')];
+
+        for (var i = 0; i < titles.length; i++) head.appendChild(makeNode('th', '', '', titles[i]));
+
+        thead.appendChild(head);
+        table.appendChild(thead);
+
+        var rows = makeNode('tbody', '', 'fieldSetRows');
+        table.appendChild(rows);
+        card.appendChild(table);
+
+        var bar = makeNode('div', 'flex row mbzFieldSetBar');
+        var save = makeNode('div', 'button mbzButton', 'btnSaveFieldSet', _('Save as default'));
+        var reset = makeNode('div', 'button mbzButton', 'btnResetFieldSet', _('Reset to saved'));
+        var status = makeNode('label', 'mbzNote fill', 'fieldSetStatus');
+
+        bar.appendChild(save);
+        bar.appendChild(reset);
+        bar.appendChild(status);
+        card.appendChild(bar);
+
+        panel.appendChild(card);
+
+        UI.panelTagSet = panel;
+        UI.fieldSetRows = rows;
+        UI.fieldSetStatus = status;
+        UI.btnSaveFieldSet = save;
+        UI.btnResetFieldSet = reset;
+
+        return panel;
+    }
+
+    function buildTabBar() {
+        var host = UI.scrollColumn && UI.scrollColumn.parentNode;
+        if (!host || !host.insertBefore) return;
+
+        var bar = makeNode('div', 'flex row mbzTabBar', 'tabBar');
+        var changes = makeNode('div', 'button mbzButton mbzTab mbzTabActive', 'tabChanges', _('ID and changes'));
+        var tagSet = makeNode('div', 'button mbzButton mbzTab', 'tabTagSet', _('MBZ tags to use'));
+
+        changes.setAttribute('data-tab', 'changes');
+        tagSet.setAttribute('data-tab', 'tagSet');
+
+        bar.appendChild(changes);
+        bar.appendChild(tagSet);
+        host.insertBefore(bar, UI.scrollColumn);
+
+        UI.tabBar = bar;
+        UI.tabChanges = changes;
+        UI.tabTagSet = tagSet;
+    }
+
+    /**
+     * The tab bar and the first panel, built when the installed page has
+     * neither, and the catalogue filled into its mount point (or into a panel
+     * built here): MediaMonkey keeps the page it loaded at start-up, so a build
+     * whose page is newer would otherwise look like it did not install.
+     */
+    function ensureTabs() {
+        if (typeof document === 'undefined') return;
+
+        if (!UI.panelChanges && UI.scrollColumn) {
+            var changes = makeNode('div', 'mbzPanel', 'panelChanges');
+
+            // The cards the page already has become the first panel.
+            while (UI.scrollColumn.firstChild) changes.appendChild(UI.scrollColumn.firstChild);
+
+            UI.scrollColumn.appendChild(changes);
+            UI.panelChanges = changes;
+        }
+
+        if (!UI.fieldSetRows && UI.scrollColumn) {
+            var host = UI.panelTagSet;
+            var panel = buildFieldSetPanel(host);
+
+            if (!host) UI.scrollColumn.appendChild(panel);
+        }
+
+        if (!UI.tabBar) buildTabBar();
+
+        if (UI.tabBar) window.localListen(UI.tabBar, 'click', onTabClick);
+        if (UI.btnSaveFieldSet) window.localListen(UI.btnSaveFieldSet, 'click', saveFieldSet);
+        if (UI.btnResetFieldSet) window.localListen(UI.btnResetFieldSet, 'click', resetFieldSet);
+
+        showTab('changes');
+    }
 
     function renderFields(plan) {
         scheduleTableSync();
@@ -1697,7 +1959,12 @@ function init(params) {
 
         UI.fieldRows.textContent = '';
 
-        var fields = (plan && plan.fields) || [];
+        // The saved set decides which rows are offered; the ticks stay per
+        // selection.
+        var fields = ((plan && plan.fields) || []).filter(function (field) {
+            return isOffered(field.key);
+        });
+
         if (!fields.length) {
             show(UI.fieldsSection, false);
             updatePending();
@@ -1738,11 +2005,12 @@ function init(params) {
         updatePending();
     }
 
-    function checkedKeys() {
+    /** The ticked keys in one table of controls: the field rows or the catalogue. */
+    function checkedKeysIn(rows) {
         var keys = [];
-        if (!UI.fieldRows) return keys;
+        if (!rows) return keys;
 
-        var boxes = UI.fieldRows.querySelectorAll('[data-key]');
+        var boxes = rows.querySelectorAll('[data-key]');
         for (var i = 0; i < boxes.length; i++) {
             var checked = boxes[i].controlClass
                 ? boxes[i].controlClass.checked
@@ -1751,6 +2019,10 @@ function init(params) {
         }
 
         return keys;
+    }
+
+    function checkedKeys() {
+        return checkedKeysIn(UI.fieldRows);
     }
 
     /* ---------------------------------------------------------------- *
@@ -1809,7 +2081,15 @@ function init(params) {
         var work = pendingWork();
 
         if (!work.fields && !work.tags) {
-            UI.pendingSummary.textContent = _('Nothing to apply yet \u2014 tick a field or edit a tag.');
+            // A saved set that offers nothing is a setting, not a mistake: say
+            // where to turn a field back on instead of asking for a tick that
+            // has nowhere to go.
+            var nothingOffered = !state.readOnly && !!state.plan
+                && ((state.plan.fields || []).length) && !offeredKeys().length;
+
+            UI.pendingSummary.textContent = nothingOffered
+                ? _('No field is on in MBZ tags to use \u2014 turn one on, or edit a tag.')
+                : _('Nothing to apply yet \u2014 tick a field or edit a tag.');
             UI.pendingSummary.removeAttribute('title');
             return;
         }
@@ -3277,6 +3557,7 @@ function init(params) {
             state.plan = plan;
             refreshApply();
             renderFields(plan);
+            renderFieldSet();
             renderTracks(plan);
             renderWarnings(plan);
         }, function (error) {
@@ -3430,6 +3711,8 @@ function init(params) {
             }
         }
 
+        lockFieldSet();
+
         var chips = UI.suggestBar ? UI.suggestBar.querySelectorAll('.mbzChip') : [];
 
         for (var c = 0; c < chips.length; c++) {
@@ -3509,6 +3792,7 @@ function init(params) {
             canEdit = true;
         }
         state.readOnly = !canEdit || !!window.isReadOnly;
+        lockFieldSet();
 
         show(UI.btnApply, !state.readOnly);
         show(UI.addBar, !state.readOnly);
@@ -3586,9 +3870,11 @@ function init(params) {
     if (UI.btnRetry) UI.btnRetry.title = _('Look the release up again without closing the window.');
 
     ensureGroupCard();
+    ensureTabs();
     pinCardSpacing();
     italicizeInfo();
     resetView();
+    renderFieldSet();
 
     if (UI.btnSearch) window.localListen(UI.btnSearch, 'click', openSearch);
     if (UI.btnRetry) window.localListen(UI.btnRetry, 'click', retryRelease);

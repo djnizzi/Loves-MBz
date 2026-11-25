@@ -152,6 +152,10 @@
         .mbzLabel { opacity: 0.7; font-size: 0.95em; }
         .mbzWarning { color: #d9534f; white-space: normal; font-style: italic !important; }
         .mbzHidden { display: none !important; }
+        .mbzTabBar { align-items: center; gap: 8px; }
+        .mbzTab { opacity: 0.6; }
+        .mbzTabActive { opacity: 1; font-weight: 600 !important; }
+        .mbzFieldSetBar { align-items: center; gap: 8px; padding-top: 8px; }
         .mbzDisabled { opacity: 0.5; pointer-events: none; }
         .mbzButton { padding: 0 14px; line-height: 24px; white-space: nowrap; }
 
@@ -218,7 +222,13 @@
 
         <div class="mbzLinks mbzHidden" data-id="linksBar"></div>
 
+        <div class="flex row mbzTabBar" data-id="tabBar">
+            <div class="button mbzButton mbzTab mbzTabActive" data-id="tabChanges" data-tab="changes" data-localize>ID and changes</div>
+            <div class="button mbzButton mbzTab" data-id="tabTagSet" data-tab="tagSet" data-localize>MBZ tags to use</div>
+        </div>
+
         <div class="mbzTagScroll" data-id="scrollColumn">
+            <div class="mbzPanel" data-id="panelChanges">
             <!-- The other releases of the loaded release's group, first: a
                  pick is what the window exists for. MediaMonkey often matches
                  the group's best-known release, not the pressing the album
@@ -326,6 +336,12 @@
             </fieldset>
 
             <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply. Closing the window writes nothing.</label>
+            </div>
+
+            <!-- A mount point, not a second copy: the script draws the card, its
+                 table and its buttons, so a page installed before this tab gets
+                 the same panel and there is nothing to keep in step. -->
+            <div class="mbzPanel mbzHidden" data-id="panelTagSet"></div>
         </div>
 
         <div class="flex row mbzFooter">

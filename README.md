@@ -28,6 +28,14 @@ button in MediaMonkey's toolbar. It works on one album at a time.
   **Apply** the footer counts exactly what that click will do — for example
   `Will write 9 field changes on 5 tracks · 2 tag edits`. Untick a field to
   keep your value.
+- **Two tabs, and a field set you choose once.** **ID and changes** holds every
+  card the window draws; **MBZ tags to use** lists every field the add-on can
+  write, with the column or Picard tag name beside it and whether this release
+  supplied it. A field you turn off there is not offered again — in any
+  window, for any album — until you turn it back on; **Save as default**
+  stores the set and **Reset to saved** puts the ticks back. The ticks in
+  **Fields to write** still decide what this Apply writes, so turning a field
+  off is a setting, not a write.
 - **The exact release, not just the right group.** MediaMonkey often matches
   the release group's best-known release rather than the pressing the album is.
   The window's first card lists every release of the group with its date,

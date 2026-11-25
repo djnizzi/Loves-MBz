@@ -266,10 +266,16 @@ Goal: the window still works when there is a lot to read.
   **ID and changes**, keeps every card the window has today; tab 2, **MBZ tags
   to use**, holds the saved set of fields the add-on offers. Moved to
   ROADMAP.md **0.7.1**, because the tab exists to hold that setting.
-- **Pattern to copy:** MediaMonkey's own properties modal
-  (`../src/js/dialogs/dlgTrackProperties.html` / `.js`) draws tabs from one
-  `data-control-class="Tabs"` element and registers each tab as an object with
-  `name`, `order` and `load(track, dialog)`.
+- **Implemented in 0.7.1:** two `.mbzButton` tabs above the one scrolling
+  column, with `panelChanges` holding today's cards and `panelTagSet` holding
+  the catalogue. The window shows and hides the panels itself and runs
+  `fitScrollColumn()` again for the panel it shows; `ensureTabs()` builds the
+  bar and the first panel when the installed page has none, and
+  `buildFieldSetPanel()` draws the catalogue card into its mount point for a
+  fresh page and an old one alike, so the card exists once. The
+  host's `Tabs` control was rejected — it is built around the properties
+  modal's `load(track, dialog)`, and this window edits a selection, not a
+  track. Recorded in ROADMAP 0.7.1.
 
 ### 3.2 Field selection controls · S
 - Add `All` / `None` per scope, and show `9 of 12 selected` in the section

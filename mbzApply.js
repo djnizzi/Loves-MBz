@@ -60,6 +60,72 @@
         { key: 'remixer', label: _('Remixer'), scope: 'track', tag: 'REMIXER' }
     ];
 
+    /* ---------------------------------------------------------------- *
+     * The saved set of fields (0.7.1)
+     * ---------------------------------------------------------------- */
+
+    var FIELD_SET_KEY = 'lovesMBzFieldSet';
+    var FIELD_SET_VERSION = 1;
+
+    /** Every declared field, in table order, with the name it is written as. */
+    function fieldCatalogue() {
+        return NATIVE_FIELDS.concat(TAG_FIELDS).map(function (def) {
+            return {
+                key: def.key,
+                label: def.label,
+                scope: def.scope,
+                kind: def.native ? 'native' : 'tag',
+                target: def.native || def.tag
+            };
+        });
+    }
+
+    /**
+     * The keys a stored set offers. Nothing stored, another version, or a key
+     * this build does not declare all mean today's list: the whole catalogue.
+     * An empty list is a real answer — the user turned every field off — and the
+     * window has to say so rather than quietly offering them again.
+     */
+    function fieldSetKeys(stored) {
+        var all = fieldCatalogue().map(function (field) { return field.key; });
+
+        if (!stored || typeof stored !== 'object') return all;
+        if (stored.version !== FIELD_SET_VERSION || !Array.isArray(stored.keys)) return all;
+
+        for (var i = 0; i < stored.keys.length; i++) {
+            if (all.indexOf(stored.keys[i]) === -1) return all;
+        }
+
+        return stored.keys.slice();
+    }
+
+    /** The saved set, or today's list. Reads a setting, never a tag. */
+    function readFieldSet() {
+        var stored = null;
+
+        try {
+            if (typeof app !== 'undefined' && app.getValue) stored = app.getValue(FIELD_SET_KEY, null);
+        } catch (e) {
+            stored = null;
+        }
+
+        return fieldSetKeys(stored);
+    }
+
+    /** @returns {boolean} false when the setting could not be written. */
+    function writeFieldSet(keys) {
+        var list = Array.isArray(keys) ? keys.slice() : [];
+
+        try {
+            if (typeof app === 'undefined' || !app.setValue) return false;
+            app.setValue(FIELD_SET_KEY, { version: FIELD_SET_VERSION, keys: list });
+        } catch (e) {
+            return false;
+        }
+
+        return true;
+    }
+
     function text(value) {
         return String(value === undefined || value === null ? '' : value).trim();
     }
@@ -336,6 +402,38 @@
             mediaCount: media.length,
             firstDisc: leadingInt(media[0] && media[0].position) || 1
         };
+    }
+
+    /**
+     * Which declared fields the release itself supplies, read before any
+     * comparison with the library. The window marks its catalogue from this,
+     * not from the plan: the plan carries only the fields that *differ*, so a
+     * field that already equals the library's value would otherwise look like
+     * a field MusicBrainz did not send.
+     *
+     * A track-scope field counts as supplied when any track carries it: one
+     * track without a composer does not mean the release has no credits.
+     */
+    function suppliedFields(release) {
+        var described = describeRelease(release);
+        var tracks = described.tracks || [];
+        var supplied = {};
+
+        fieldCatalogue().forEach(function (field) {
+            var values;
+
+            if (field.kind === 'tag') {
+                values = field.scope === 'album'
+                    ? [described.albumTags[field.target]]
+                    : tracks.map(function (track) { return track.trackTags[field.target]; });
+            } else {
+                values = tracks.map(function (track) { return track.values[field.key]; });
+            }
+
+            supplied[field.key] = values.some(function (value) { return !!text(value); });
+        });
+
+        return supplied;
     }
 
     function parseTags(value) {
@@ -1120,6 +1218,10 @@
     }
 
     window.mbzApply = {
+        fieldCatalogue: fieldCatalogue,
+        suppliedFields: suppliedFields,
+        readFieldSet: readFieldSet,
+        writeFieldSet: writeFieldSet,
         describeRelease: describeRelease,
         collectTracks: collectTracks,
         collectSelectionAsync: collectSelectionAsync,

@@ -203,6 +203,43 @@ place, so the tag edits and every other value in the window stay; when the
 release ID points at a release MusicBrainz does not have, the message says to
 check the ID instead of offering a retry that cannot help.
 
+### The field set and the two tabs
+
+The window is two tabs over the one scrolling column the guard pins.
+
+- **ID and changes** holds every card: the release group with its release ID
+  field, the release, **Fields to write**, **Selected tracks** and the
+  MusicBrainz tags editor. **MBZ tags to use** holds the catalogue: every field
+  in `NATIVE_FIELDS` and `TAG_FIELDS`, with its scope, the native column or
+  Picard tag name it is written as, and whether this release supplied a value.
+  A field the release did not supply is still listed, so it cannot read as a
+  lost setting. Both marks come from `mbzApply.suppliedFields(release)` — the
+  release described before any comparison — never from the plan: the plan holds
+  only the fields whose value **differs**, so a field that already matches the
+  library is supplied, it just has nothing to change.
+- **The saved set** is one setting, `lovesMBzFieldSet`, written as
+  `{ version: 1, keys: [...] }`. `mbzApply.readFieldSet()` and
+  `mbzApply.writeFieldSet()` are its only reader and writer. A missing setting,
+  another version, or a key this build does not declare all fall back to the
+  whole catalogue, so installing the build changes nothing until the set is
+  edited. An empty list is a real answer: the window offers no field, and the
+  footer says where to turn one on instead of asking for a tick that has
+  nowhere to go.
+- **Two levels.** The saved set decides which rows **Fields to write** offers;
+  its ticks decide what *this* Apply writes and never touch the setting. **Save
+  as default** writes the catalogue's ticks to the setting and **Reset to
+  saved** reloads them. Neither writes a tag: `applySelectionAsync` is still
+  the only writer.
+- **The window draws its own tab bar.** The two tab buttons and the two panels
+  are plain elements the script shows and hides; the one scrolling column stays
+  the only one, `fitScrollColumn()` runs again when a panel is shown. The
+  catalogue card is not in the page at all: `panelTagSet` is a mount point and
+  `buildFieldSetPanel()` draws the card, its table and its buttons into it, so a
+  page installed before the tab gets the same panel and there is no second copy
+  to drift from the first. The tab bar and the first panel are built by
+  `ensureTabs()` only when the page has neither, like the group card. Why not
+  the host's `Tabs` control is recorded in ROADMAP's 0.7.1.
+
 ### The toolbar button
 
 The Tag from MusicBrainz action is a normal MediaMonkey action: it has the
