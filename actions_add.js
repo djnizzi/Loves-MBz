@@ -186,7 +186,22 @@ actions.lovesMBzLinks = {
  * @returns {Promise<Object|null>} the scope, or null when the user cancelled
  */
 function mbzTagScopeAsync(scope) {
-    if (!scope || !scope.multiAlbum) return Promise.resolve(scope);
+    if (!scope) return Promise.resolve(null);
+
+    // Files outside the library have no album row to be scoped by, so their
+    // album name is the scope: one name for the whole selection, or none at
+    // all. Two different records in one window have no release to agree on.
+    if (scope.outOfLibrary && scope.albumNameConflict) {
+        if (typeof messageDlg === 'function') {
+            messageDlg(
+                _('These tracks do not carry the same album name. Tag from MusicBrainz works on one album at a time: select tracks whose album name matches (or where it is empty on all of them).'),
+                'Warning', ['btnOK'], { title: _('Loves MBz') });
+        }
+
+        return Promise.resolve(null);
+    }
+
+    if (!scope.multiAlbum) return Promise.resolve(scope);
     if (typeof messageDlg !== 'function') return Promise.resolve(null);
 
     var message = sprintf(

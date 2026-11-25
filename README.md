@@ -78,8 +78,8 @@ album or artist behind the selected track. Right-click a track — or use
 **Edit → Tag Tools** — and pick **MusicBrainz links** to open its release,
 release group or artist page on musicbrainz.org.
 
-Current version: **0.6.1** "We just getting started". A test build names its channel (for
-example `0.6.1-rc1`) in the window footer and in the package.
+Current version: **0.6.2**. A test build names its channel (for
+example `0.6.2-rc1`) in the window footer and in the package.
 
 ---
 

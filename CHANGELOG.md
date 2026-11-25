@@ -4,6 +4,122 @@ All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags. A test build names its channel in the window
 footer and in the package, because `info.json` must stay three numbers.
 
+## 0.6.2 (2026-11-25)
+
+The second of the two 0.6 jobs: the window now tags files MediaMonkey has no
+library row for — a file picked from the Folders node — and writes nothing but
+their own tags.
+
+- **Scoped by album name, not album ID.** A selection with no album row is
+  scoped by the album name its files carry: every selected track must have the
+  same one, and all of them carrying none is allowed. Two different names do
+  not open the window; the entry point says why before it opens, and the window
+  applies the same rule again. `resolveTagScope` reports `albumName`,
+  `albumNameConflict`, `tagOnly` and `outOfLibrary`.
+- **A file with no library row is planned from its own tags.**
+  `buildSelectionPlanAsync` used to skip a track without a song row as
+  `noLibrary`; it now reads that file's `ExtendedTags` from the track itself,
+  matches it by disc and track number like any other, and counts only a track
+  with neither a row nor a file as skipped.
+- **The release ID field starts from the files, and its button says Load.**
+  Outside the library there is no `Albums.MBGID`, so the field shows the
+  `MUSICBRAINZ_ALBUMID` tag the files carry, empty when they carry none,
+  instead of refusing the lookup. **Load** fetches the release into the window
+  and changes nothing; Apply then writes the release's tags, the release ID tag
+  included, onto the files through `applySelectionAsync`.
+- **Reading the files' tags can no longer hang the window.** Reading a file
+  that is not in the library goes through MediaMonkey's own reader, which can
+  stall the way a save does. Every read now has a deadline
+  (`mbzApply.readTrackTagsAsync`, 5 s in the engine, 4 s per file when the
+  window lists them) and the whole listing has a 15 s budget; a file that does
+  not answer is reported as unreadable instead of being waited for forever. The
+  plan builder reads through the same deadline, so a tag-only plan cannot stall
+  either. The release ID field and **Search MusicBrainz** appear as soon as the
+  scope is known rather than after the last file's tags came back, and no
+  release is looked up on its own: the field and the group card are the whole
+  way in.
+- **Nothing outside the library touches the library.** No album or artist row is
+  read for suggestions or for the disagreement strip, `setAlbumGuidAsync` is
+  never called from that path, and the window says the only thing it will write
+  is the files' own tags.
+- **The write path is unchanged.** Every write still goes through
+  `mbzApply.applySelectionAsync`: per track, native fields, one merged tag
+  write, one commit, with per-track failure isolation.
+
+### Upgrading from 0.6.1
+
+Nothing changes for library albums: the scope, the release lookup, the group
+card and the write path are the same. This release adds a second scope, for
+selections MediaMonkey has no album row for. Install over 0.6.1 and restart
+MediaMonkey, so the dialog page is read again.
+
+## 0.6.2-rc3 (2026-11-23)
+
+Test build for the 0.6.2 line, fixing what rc2 did while reading the files'
+tags.
+
+- **Reading the files' tags can no longer hang the window.** Reading a file
+  that is not in the library goes through MediaMonkey's own reader, which can
+  stall the way a save does. Every read now has a deadline
+  (`mbzApply.readTrackTagsAsync`, 5 s in the engine, 4 s per file when the
+  window lists them) and the whole listing has a 15 s budget; a file that does
+  not answer is reported as unreadable instead of being waited for forever. The
+  plan builder reads through the same deadline, so a tag-only plan cannot stall
+  either.
+- **The way in is usable before the tags are read.** Outside the library the
+  release ID field and **Search MusicBrainz** now appear as soon as the scope is
+  known, instead of after the last file's tags came back.
+
+## 0.6.2-rc2 (2026-11-23)
+
+Test build for the 0.6.2 line, fixing what rc1 did when the window opened on
+files outside the library.
+
+- **No release lookup without a release ID.** rc1's window read a release by
+  itself whenever it opened, and on files with no `MUSICBRAINZ_ALBUMID` tag the
+  footer sat on "Reading the release from MusicBrainz..." while nothing of the
+  sort was happening. Outside the library the window now reads a release only
+  when the user presses **Load** in the release ID field or picks one from the
+  group card; until then it says the files' tags are being read, and then that
+  no release is loaded. Search MusicBrainz and the release ID field are the
+  whole way in, as they are for an album with no release ID.
+- **A release loaded in the field survives the reload.** Reloading after Apply
+  keeps the release that is on screen instead of reading it again.
+
+## 0.6.2-rc1 (2026-11-22)
+
+Test build for the 0.6.2 line. The window only worked on albums MediaMonkey
+already had: a file selected from the Folders node had no album row, so the
+selection had no release to look up. This build tags those files too, and
+nothing in it writes to the library.
+
+- **Scoped by album name, not album ID.** `resolveTagScope` now scopes a
+  selection with no album row by the **album name** the selected files carry:
+  every track must have the same one, and all of them carrying none is allowed.
+  Two different names do not open the window; the entry point says why before it
+  opens, and the window applies the same rule again.
+- **A file with no library row is planned from its own tags.**
+  `buildSelectionPlanAsync` used to skip a track without a song row as
+  `noLibrary`; it now reads that file's `ExtendedTags` from the track itself,
+  matches it by disc and track number like any other, and counts only a track
+  with neither a row nor a file as skipped.
+- **The release ID field starts from the files.** Outside the library there is
+  no `Albums.MBGID`, so the field shows the `MUSICBRAINZ_ALBUMID` tag the files
+  carry, empty when they carry none, instead of refusing the lookup. Its button
+  says **Load**, not **Save ID**: it fetches the release into the window and
+  changes nothing. Apply then writes the release's tags, the release ID tag
+  included, onto the files through `applySelectionAsync`.
+- **Nothing outside the library touches the library.** No album or artist row is
+  read for suggestions or for the disagreement strip, `setAlbumGuidAsync` is
+  never called from that path, and the window says the only thing it will write
+  is the files' own tags.
+
+### Upgrading from 0.6.1
+
+Nothing changes for library albums: the scope, the release lookup, the group
+card and the write path are the same. This build adds a second scope, for
+selections MediaMonkey has no album row for.
+
 ## 0.6.1 "We just getting started" (2026-11-22)
 
 MediaMonkey matches the release group well and then points the album at the

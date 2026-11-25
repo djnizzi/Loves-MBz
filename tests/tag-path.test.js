@@ -579,6 +579,7 @@ function makeTrack(options) {
         idalbum: options.idalbum === undefined ? 10 : options.idalbum,
         trackNumber: String(options.number),
         title: options.title,
+        album: options.album === undefined ? 'An Album' : options.album,
         path: options.path || 'C:\\music\\song.flac',
         discNumber: options.discNumber || '',
         albumArtist: '',
@@ -733,6 +734,33 @@ global.app = {
     };
     const fromList = await apply.resolveTagScope(list);
     assert.deepStrictEqual(fromList.songIds, [1, 2]);
+
+    // Files outside the library: no album row and no song row, so the album
+    // name is the scope and the files' own tags are all there is to write.
+    const fileOne = makeTrack({ id: 0, idalbum: 0, number: 1, title: 'One', album: 'Exact Release', log: scopeLog });
+    const fileTwo = makeTrack({ id: 0, idalbum: 0, number: 2, title: 'Two', album: 'Exact Release', log: scopeLog });
+    const fileOther = makeTrack({ id: 0, idalbum: 0, number: 3, title: 'Three', album: 'Another Record', log: scopeLog });
+    const fileUnnamed = makeTrack({ id: 0, idalbum: 0, number: 4, title: 'Four', album: '', log: scopeLog });
+
+    const files = await apply.resolveTagScope([fileOne, fileTwo]);
+    assert.strictEqual(files.tagOnly, true, 'no album row means the tags are the only thing to write');
+    assert.strictEqual(files.outOfLibrary, true);
+    assert.deepStrictEqual(files.albumIds, [], 'a file outside the library has no album row');
+    assert.deepStrictEqual(files.songIds, [], 'and no song row');
+    assert.strictEqual(files.albumName, 'Exact Release', 'the scope is the album name the files carry');
+    assert.strictEqual(files.albumNameConflict, false, 'one album name is one scope');
+    assert.strictEqual(files.releaseId, '', 'a file with no ID tag starts from an empty release ID');
+
+    const unnamed = await apply.resolveTagScope([fileUnnamed]);
+    assert.strictEqual(unnamed.albumName, '');
+    assert.strictEqual(unnamed.albumNameConflict, false, 'all the names being empty is allowed');
+
+    const namesDiffer = await apply.resolveTagScope([fileOne, fileOther]);
+    assert.strictEqual(namesDiffer.albumNameConflict, true, 'two album names are two albums');
+
+    const mixed = await apply.resolveTagScope([fileOne, albumOne]);
+    assert.strictEqual(mixed.outOfLibrary, true, 'one file outside the library is enough');
+    assert.strictEqual(mixed.tagOnly, false, 'a library album row still makes it a library scope');
 
     /* ---------------------------------------------------------------------- *
      * Selection plan and aggregation
@@ -999,6 +1027,35 @@ global.app = {
     assert.deepStrictEqual(tagsOnlyLog, ['getTags', 'setTags', 'commit']);
 
     /* ---------------------------------------------------------------------- *
+     * Files outside the library
+     * ---------------------------------------------------------------------- */
+
+    const fileTagsLog = [];
+    const fileTags = { value: '[]' };
+    const fileTrack = makeTrack({
+        id: 0, idalbum: 0, number: 1, title: 'One (file)', album: 'An Album',
+        log: fileTagsLog, tags: fileTags
+    });
+
+    const filePlan = await apply.buildSelectionPlanAsync([fileTrack], releaseFixture());
+
+    assert.strictEqual(filePlan.entries.length, 1, 'a file outside the library is still planned');
+    assert.strictEqual(filePlan.skipped.noLibrary, 0,
+        'a track with a file is planned even without a library row');
+    assert.strictEqual(filePlan.entries[0].songId, 0);
+    assert.strictEqual(filePlan.work.length, 1, 'the release offers changes for the file');
+    assert.ok(fileTagsLog.indexOf('getTags') >= 0, 'the tags come from the file itself');
+
+    const fileApplied = await apply.applySelectionAsync(
+        filePlan, [], [{ title: 'BARCODE', value: '999', add: true }]
+    );
+
+    assert.strictEqual(fileApplied.updated, 1, 'a file outside the library is written like any other');
+    assert.strictEqual(fileApplied.tagWrites, 1);
+    assert.deepStrictEqual(fileTagsLog, ['getTags', 'getTags', 'setTags', 'commit'],
+        'planning reads the file once, then Apply reads, writes and commits it');
+
+    /* ---------------------------------------------------------------------- *
      * Nothing to do
      * ---------------------------------------------------------------------- */
 
@@ -1012,6 +1069,59 @@ global.app = {
     assert.strictEqual(idleResult.updated, 0);
     assert.strictEqual(idleResult.noMatch, 1);
     assert.deepStrictEqual(idleLog, [], 'an unmatched track is never read or written');
+
+    /* ---------------------------------------------------------------------- *
+     * 0.6.2: files outside the library, scoped by album name
+     * ---------------------------------------------------------------------- */
+
+    // The scope is resolved by name in the engine, so the entry point and the
+    // window cannot disagree about what one album is.
+    assert.match(applySource, /function albumNameScope/,
+        'files outside the library are scoped by their album name');
+    assert.match(applySource, /tagOnly: albumIds.length === 0/,
+        'no album row means a tag-only scope');
+    assert.match(applySource, /!\(songId > 0\) && !text\(track && track\.path\)/,
+        'a file with no library row is planned from its own tags');
+    assert.match(actionsCode, /scope\.outOfLibrary && scope\.albumNameConflict/,
+        'the entry point refuses files that do not share one album name');
+
+    // Outside the library there is no album row to save, so the field only
+    // loads the release and Apply writes the tags. Nothing may call
+    // setAlbumGuidAsync from that path.
+    assert.match(dialogCode, /function loadReleaseIdIntoWindow/,
+        'the ID field must load a release when there is no album row');
+    assert.match(dialogCode, /albumRow \? _\('Save ID'\) : _\('Load'\)/,
+        'the same field says Load when there is no album row of its own');
+    assert.match(dialogCode, /function loadFileTagsAsync/,
+        'the tags of a file outside the library are read from the file');
+    assert.match(dialogCode, /state\.fileReleaseId = tagTextFrom\(lists\[0\], 'MUSICBRAINZ_ALBUMID'\)/,
+        'a file starts from the release ID its own tags carry');
+    assert.match(applySource, /function readTrackTagsAsync/,
+        'reading a file\'s tags goes through the engine, under a deadline');
+    assert.match(dialogCode, /apply\.readTrackTagsAsync\(track, FILE_TAGS_TIMEOUT_MS\)/,
+        'the window reads a file\'s tags with a deadline');
+    assert.match(dialogCode, /if \(scope\.tagOnly\) showFileLookup\(\);/,
+        'the release ID field and the search link appear before the tags are read');
+    assert.match(dialogCode, /scope\.tagOnly && scope\.albumNameConflict/,
+        'the window refuses files that do not share one album name');
+
+    // No release ID means no request: files outside the library are read from
+    // MusicBrainz only when the user loads a release in the field.
+    const tagOnlyReleaseSlice = dialogCode.slice(
+        dialogCode.indexOf('if (!(scope.albumId > 0)) {'),
+        dialogCode.indexOf('if (state.pickedReleaseId) {')
+    );
+    assert.ok(tagOnlyReleaseSlice.length > 0, 'the tag-only release branch must exist');
+    assert.strictEqual(tagOnlyReleaseSlice.indexOf('fetchReleaseAsync'), -1,
+        'loading the window outside the library must not read a release by itself');
+
+    const loadIdSlice = dialogCode.slice(
+        dialogCode.indexOf('function loadReleaseIdIntoWindow'),
+        dialogCode.indexOf('function onAlbumIdKey')
+    );
+    assert.ok(loadIdSlice.length > 0, 'the loader must sit between those two functions');
+    assert.strictEqual(loadIdSlice.indexOf('setAlbumGuidAsync'), -1,
+        'loading a release outside the library must not write an album row');
 
     console.log('tag-path regression test passed');
 })().catch((error) => {

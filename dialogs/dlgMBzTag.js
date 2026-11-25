@@ -21,13 +21,13 @@ localRequirejs('mbzMbgid');
  * The build this window belongs to, shown in the footer. Keep it equal to
  * info.json: tests/tag-path.test.js fails when the two disagree.
  * MediaMonkey only accepts a three-number manifest version, so a test build
- * carries its channel separately and reads as 0.6.1-rc1 in the footer.
+ * carries its channel separately and reads as 0.6.3-rc1 in the footer.
  */
-var ADDON_VERSION = '0.6.1';
-var BUILD_CHANNEL = '';         // '' for a release build
+var ADDON_VERSION = '0.6.2';
+var BUILD_CHANNEL = '';      // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-22 21:31';
+var BUILD_TIME = '2026-11-25 17:49';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
@@ -298,6 +298,8 @@ function init(params) {
         suggestions: [],
         tagsById: null,
         tagsUnreadable: false,
+        fileTagLists: null,
+        fileReleaseId: '',
         lookup: null,
         natives: null,
         groupIds: [],
@@ -689,6 +691,8 @@ function init(params) {
         if (UI.suggestBar) UI.suggestBar.textContent = '';
         if (UI.linksBar) UI.linksBar.textContent = '';
         if (UI.albumIdStatus) UI.albumIdStatus.textContent = '';
+        state.fileTagLists = null;
+        state.fileReleaseId = '';
 
         show(UI.linksBar, false);
         show(UI.albumIdRow, false);
@@ -1079,10 +1083,27 @@ function init(params) {
             return;
         }
 
-        setSummary(_('This album has no MusicBrainz release ID. Nothing was requested.'), true);
+        var files = !!(state.scope && state.scope.tagOnly);
+        var fileId = files ? mbzTagText(state.fileReleaseId) : '';
+
+        // Nothing went wrong here: the window simply has no release yet, and
+        // the field is how one arrives.
+        setSummary(files
+            ? (fileId
+                ? sprintf(_('These files carry release ID %s. Nothing was requested.'), fileId)
+                : _('These files are outside the library: no release is loaded.'))
+            : _('This album has no MusicBrainz release ID. Nothing was requested.'), !files);
+
         var info = searchTerms();
         if (info) setSearch(mbzTagSearchUrl(info.album, info.artist));
-        setNote(_('Search MusicBrainz for this album, then add its release ID to the album. Tag from MusicBrainz still does not query MusicBrainz by name.'));
+
+        if (files) {
+            setNote(fileId
+                ? _('Press Load to read that release. Apply writes it onto the files: outside the library there is no album row to keep it in.')
+                : _('Paste a release ID below and press Load, or search MusicBrainz for it. Apply writes the result onto the files: outside the library there is no album row to keep it in.'));
+        } else {
+            setNote(_('Search MusicBrainz for this album, then add its release ID to the album. Tag from MusicBrainz still does not query MusicBrainz by name.'));
+        }
     }
 
     /* ---------------------------------------------------------------- *
@@ -1092,17 +1113,19 @@ function init(params) {
     /** The release ID the album row actually holds; Save ID compares to it. */
     function storedAlbumReleaseId() {
         var scope = state.scope;
-        if (!scope) return '';
+        if (!scope || !(scope.albumId > 0)) return '';
         return mbzTagText(scope.releaseIds ? scope.releaseIds[scope.albumId] : '');
     }
 
     /**
      * The release ID to show in the field: the loaded release, which is the
-     * album's own unless the user picked another one of its release group.
+     * album's own unless the user picked another one of its release group. A
+     * file outside the library starts from the ID its own tags carry.
      */
     function shownAlbumReleaseId() {
         if (state.hasRelease && state.release && state.release.id) return mbzTagText(state.release.id);
         if (state.natives && state.natives.releaseId) return mbzTagText(state.natives.releaseId);
+        if (state.fileReleaseId) return mbzTagText(state.fileReleaseId);
 
         return storedAlbumReleaseId();
     }
@@ -1112,15 +1135,28 @@ function init(params) {
     }
 
     /**
-     * The field is the lookup key, so it is only offered when there is one
-     * album behind the window and the add-on may write.
+     * The field is the lookup key. It is offered while the add-on may write or
+     * load, whether the selection has an album row or is files outside the
+     * library: there it is the only way in to a release.
      */
     function syncAlbumIdInput() {
-        var editable = !state.readOnly && !!(state.scope && state.scope.albumId > 0);
+        var albumRow = !!(state.scope && state.scope.albumId > 0);
+        var tagOnly = !!(state.scope && state.scope.tagOnly);
+        var editable = !state.readOnly && !!state.scope && (albumRow || tagOnly);
+
         show(UI.albumIdRow, editable);
         syncGroupCard();
 
         if (!editable) return;
+
+        // The button saves the album row. Outside the library there is no row,
+        // so it loads the ID into the window and Apply writes the tags.
+        if (UI.btnSaveAlbumId) {
+            UI.btnSaveAlbumId.textContent = albumRow ? _('Save ID') : _('Load');
+            UI.btnSaveAlbumId.title = albumRow
+                ? _('Save this release ID on the album.')
+                : _('Load this release into the window. Nothing is written until Apply.');
+        }
 
         mbzTagSetFieldValue(UI.albumIdValue, shownAlbumReleaseId());
         syncWorking();
@@ -1134,7 +1170,17 @@ function init(params) {
      * new ID is then loaded instead of the old one's.
      */
     function saveAlbumId() {
-        if (state.readOnly || state.busy || !mbz || !state.scope || !(state.scope.albumId > 0)) return;
+        if (state.readOnly || state.busy || !state.scope) return;
+
+        // The selection is files outside the library: there is no album row to
+        // save, so the field only loads the release, and Apply writes its tags
+        // (the release ID tag included) onto the files.
+        if (!(state.scope.albumId > 0)) {
+            loadReleaseIdIntoWindow();
+            return;
+        }
+
+        if (!mbz) return;
 
         var raw = mbzTagFieldValue(UI.albumIdValue);
         var value = raw ? mbz.normalizeGuid(raw) : '';
@@ -1195,6 +1241,71 @@ function init(params) {
         // the disagreement strip still asks, because it acts on the tag's value
         // rather than on something typed here.
         write();
+    }
+
+    /**
+     * A release ID typed or pasted for a selection outside the library. It is a
+     * load like a pick from the group card: the files are untouched until
+     * Apply, which writes the release's tags and the ID tag itself.
+     */
+    function loadReleaseIdIntoWindow() {
+        if (!fetch || state.readOnly || state.busy) return;
+
+        var raw = mbzTagFieldValue(UI.albumIdValue);
+        var value = raw && mbz ? mbz.normalizeGuid(raw) : mbzTagText(raw);
+
+        if (raw && mbz && !value) {
+            setAlbumIdStatus(_('That is not a valid MusicBrainz release ID.'));
+            return;
+        }
+
+        if (!value) {
+            setAlbumIdStatus(_('Paste a release ID first.'));
+            return;
+        }
+
+        var loaded = state.hasRelease && state.release && state.release.id
+            ? mbzTagText(state.release.id)
+            : '';
+
+        if (value === loaded) {
+            setAlbumIdStatus(_('That release is already loaded.'));
+            return;
+        }
+
+        setBusy(true);
+        setStatus(_('Reading the release from MusicBrainz...'));
+        setAlbumIdStatus('');
+
+        var work = window.localPromise(fetch.fetchReleaseAsync(value)).then(function (release) {
+            if (window._cleanUpCalled || !release) return null;
+
+            state.release = release;
+            state.hasRelease = true;
+            state.fileReleaseId = value;
+            if (state.scope) state.scope.releaseId = value;
+
+            renderRelease({ release: release, releaseId: value });
+            setAlbumIdStatus(_('This release is loaded here. Apply writes its tags onto the files.'));
+            syncAlbumIdInput();
+            renderGroupReleases();
+            loadGroupReleasesAsync(release);
+
+            return buildPlanAsync(release).then(function () {
+                if (window._cleanUpCalled) return;
+                setStatus('');
+            });
+        });
+
+        trackWork(handledInWindow(work, function (error) {
+            setStatus(sprintf(_('Could not read that release: %s'), mbzTagErrorText(error)));
+            setAlbumIdStatus(state.fileReleaseId
+                ? sprintf(_('Showing release %s.'), state.fileReleaseId)
+                : _('No release is loaded.'));
+        })).then(function () {
+            if (window._cleanUpCalled) return;
+            setBusy(false);
+        });
     }
 
     function onAlbumIdKey(event) {
@@ -2087,7 +2198,11 @@ function init(params) {
 
     function emptyTagText() {
         if (state.tagsUnreadable) {
-            return _('The extended tags of at least one selected track could not be read as JSON.');
+            return _('The extended tags of at least one selected track could not be read.');
+        }
+
+        if (state.scope && state.scope.tagOnly) {
+            return _('These files carry no MusicBrainz extended tags. Add one below to set it on every file.');
         }
 
         if (state.scope && state.scope.songIds.length > 1) {
@@ -2853,9 +2968,98 @@ function init(params) {
      * Loading
      * ---------------------------------------------------------------- */
 
+    /**
+     * The selected files' own extended tags, in selection order. Outside the
+     * library this is where the tags live: there is no Songs row to read, and
+     * Apply writes them back with commitAsync.
+     */
+    var FILE_TAGS_TIMEOUT_MS = 4000;    // one file's tags
+    var FILE_TAGS_BUDGET_MS = 15000;    // the whole selection
+
+    function loadFileTagsAsync(scope) {
+        var tracks = (scope && scope.tracks) || [];
+        var lists = [];
+        var deadline = Date.now() + FILE_TAGS_BUDGET_MS;
+
+        function skipRest(index) {
+            while (index < tracks.length) {
+                lists.push([]);
+                index++;
+            }
+
+            return lists;
+        }
+
+        function next(index) {
+            if (index >= tracks.length) return Promise.resolve(lists);
+
+            var track = tracks[index];
+            if (!track || typeof track.getExtendedTagsAsync !== 'function') {
+                lists.push([]);
+                return next(index + 1);
+            }
+
+            // A file whose tags never come back must not hold the window open:
+            // the release ID field and Search MusicBrainz are already usable.
+            if (Date.now() > deadline) {
+                state.tagsUnreadable = true;
+                return Promise.resolve(skipRest(index));
+            }
+
+            var read = apply && typeof apply.readTrackTagsAsync === 'function'
+                ? apply.readTrackTagsAsync(track, FILE_TAGS_TIMEOUT_MS)
+                : track.getExtendedTagsAsync();
+
+            return window.localPromise(read).then(function (value) {
+                if (window._cleanUpCalled) return lists;
+
+                var parsed = apply && apply.parseTags ? apply.parseTags(value) : null;
+                lists.push(Array.isArray(parsed) ? parsed : []);
+                return next(index + 1);
+            }, function () {
+                // Unreadable is not the same as empty: the window says so.
+                state.tagsUnreadable = true;
+                lists.push([]);
+                return next(index + 1);
+            });
+        }
+
+        return next(0);
+    }
+
+    /** A stored tag's value, tolerating the spellings the engine collapses. */
+    function tagTextFrom(tags, title) {
+        var list = tags || [];
+
+        for (var i = 0; i < list.length; i++) {
+            var tag = list[i];
+            if (!tag) continue;
+
+            var matches = apply && typeof apply.tagNameMatches === 'function'
+                ? apply.tagNameMatches(tag.title, title)
+                : String(tag.title || '').toLowerCase() === String(title).toLowerCase();
+
+            if (matches) return mbzTagText(tag.value);
+        }
+
+        return '';
+    }
+
     function loadTagRowsAsync(scope) {
         state.tagsById = null;
         state.tagsUnreadable = false;
+
+        // Files outside the library: read the tags from the files themselves,
+        // because there is no Songs row to read them from.
+        if (scope && scope.tagOnly) {
+            return window.localPromise(loadFileTagsAsync(scope)).then(function (lists) {
+                if (window._cleanUpCalled) return;
+
+                state.fileTagLists = lists;
+                state.fileReleaseId = tagTextFrom(lists[0], 'MUSICBRAINZ_ALBUMID');
+                state.rows = buildRows(lists, lists.length);
+            });
+        }
 
         if (!mbz || !scope.songIds.length || typeof mbz.lookupExtendedTagsAsync !== 'function') {
             state.rows = [];
@@ -2893,8 +3097,20 @@ function init(params) {
     }
 
     function loadReleaseAsync(scope) {
-        if (!fetch || !(scope.albumId > 0)) {
-            return Promise.resolve({ skipped: true, reason: 'no-album' });
+        if (!fetch) return Promise.resolve({ skipped: true, reason: 'no-album' });
+
+        if (!(scope.albumId > 0)) {
+            // Files outside the library: nothing is read from MusicBrainz on
+            // its own. The release is only ever the one the user loaded in the
+            // field, so an empty release ID costs no request at all.
+            if (state.hasRelease && state.release) {
+                return Promise.resolve({
+                    releaseId: mbzTagText(state.release.id || state.fileReleaseId),
+                    release: state.release
+                });
+            }
+
+            return Promise.resolve({ skipped: true, reason: 'no-release-id' });
         }
 
         // A release picked out of the group is the one the window is working
@@ -3012,6 +3228,18 @@ function init(params) {
 
     /** Library rows for the selection, then the suggestions and the strip. */
     function loadLibraryContextAsync(scope) {
+        // Outside the library there are no album, artist or song rows to read:
+        // nothing to suggest, and nothing for the strip to reconcile.
+        if (scope && scope.tagOnly) {
+            state.suggestions = [];
+            state.natives = null;
+            state.groupNative = null;
+            renderSuggestions();
+            renderDivergence();
+            renderLinks();
+            return Promise.resolve();
+        }
+
         if (!mbz) return Promise.resolve();
 
         var artists = Promise.resolve();
@@ -3058,6 +3286,14 @@ function init(params) {
         });
     }
 
+    /** The way in for files outside the library, shown before their tags. */
+    function showFileLookup() {
+        syncAlbumIdInput();
+
+        var info = searchTerms();
+        if (info) setSearch(mbzTagSearchUrl(info.album, info.artist));
+    }
+
     function reloadAsync() {
         var scope = state.scope;
         if (!scope) return Promise.resolve();
@@ -3068,6 +3304,11 @@ function init(params) {
         refreshApply();
         setStatus('');
         setTagStatus('');
+
+        // Outside the library the release ID field and the search link are the
+        // only way in, so they appear before the files' tags are read: a slow
+        // or missing tag read must never leave the window with nothing to use.
+        if (scope.tagOnly) showFileLookup();
 
         return trackWork(loadTagRowsAsync(scope).then(function () {
             if (window._cleanUpCalled) return null;
@@ -3304,6 +3545,14 @@ function init(params) {
 
                 state.scope = scope;
 
+                // Files outside the library are scoped by album name: two
+                // records in one window have no release to agree on.
+                if (scope.tagOnly && scope.albumNameConflict) {
+                    setSummary(_('These files do not carry the same album name.'), true);
+                    setNote(_('Tag from MusicBrainz works on one album at a time: select files whose album name matches, or where it is empty on all of them.'));
+                    return null;
+                }
+
                 // One album at a time. The entry point already asked; this is
                 // the same rule applied again, so the two cannot disagree.
                 if (scope.multiAlbum && !forced) {
@@ -3314,7 +3563,12 @@ function init(params) {
                     return null;
                 }
 
-                setSummary(_('Reading the release from MusicBrainz...'));
+                // Files outside the library have no release to read until the
+                // user loads one: say what is actually being read, so an empty
+                // release ID never looks like a lookup in progress.
+                setSummary(scope.tagOnly
+                    ? _('Reading the files\' tags...')
+                    : _('Reading the release from MusicBrainz...'));
                 return reloadAsync();
             });
         })).catch(function (error) {

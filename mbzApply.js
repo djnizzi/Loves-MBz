@@ -499,12 +499,43 @@
      * @param {Object|Array} source selected tracklist or an array of tracks
      * @returns {Promise<{tracks: Array, songIds: number[], albumIds: number[],
      *   albumId: number, releaseIds: Object, releaseId: string,
-     *   sharedRelease: boolean, multiAlbum: boolean}>}
+     *   sharedRelease: boolean, multiAlbum: boolean, albumName: string,
+     *   albumNameConflict: boolean, tagOnly: boolean, outOfLibrary: boolean}>}
      */
+    /**
+     * The album names the selection carries, in the order they appear. Files
+     * outside the library have no album row, so the name in their tags is the
+     * only thing that can scope them: every selected track must carry the same
+     * one, and all of them carrying none is allowed.
+     */
+    function albumNameScope(tracks) {
+        var names = [];
+        var first = '';
+
+        (tracks || []).forEach(function (track) {
+            var name = text(track && track.album);
+            if (!first && name) first = name;
+
+            var key = normalizeText(name);
+            if (names.indexOf(key) === -1) names.push(key);
+        });
+
+        return {
+            albumName: first,
+            albumNameConflict: names.length > 1
+        };
+    }
+
     async function resolveTagScope(source) {
         var tracks = await collectSelectionAsync(source);
         var albumIds = [];
         var songIds = [];
+        var outOfLibrary = false;
+
+        tracks.forEach(function (track) {
+            if (!(parseInt(track && track.id, 10) > 0)) outOfLibrary = true;
+        });
+        var names = albumNameScope(tracks);
 
         tracks.forEach(function (track) {
             var albumId = parseInt(track && track.idalbum, 10);
@@ -531,7 +562,14 @@
             releaseIds: releaseIds,
             releaseId: unique.length === 1 ? unique[0] : '',
             sharedRelease: unique.length === 1 && !!unique[0],
-            multiAlbum: albumIds.length > 1
+            multiAlbum: albumIds.length > 1,
+            albumName: names.albumName,
+            albumNameConflict: names.albumNameConflict,
+            // No album row at all: the selection is files, and their tags are
+            // the only thing Apply may write. Nothing here touches Albums or
+            // Artists, because outside the library there is no such row.
+            tagOnly: albumIds.length === 0,
+            outOfLibrary: outOfLibrary
         };
     }
 
@@ -611,7 +649,7 @@
         var tags = [];
         try {
             var currentTags = tagsText === undefined
-                ? await track.getExtendedTagsAsync()
+                ? await readTrackTagsAsync(track)
                 : tagsText;
             tags = parseTags(currentTags) || [];
         } catch (e) {
@@ -730,7 +768,11 @@
             var songId = parseInt(track && track.id, 10) || 0;
             var albumId = parseInt(track && track.idalbum, 10) || 0;
 
-            if (!(songId > 0)) {
+            // A file outside the library has no song row to read: its tags are
+            // read from the track itself in buildPendingAsync and written back
+            // with commitAsync. Only a track with neither a row nor a file is
+            // skipped.
+            if (!(songId > 0) && !text(track && track.path)) {
                 skipped.noLibrary++;
                 continue;
             }
@@ -938,6 +980,23 @@
         });
     }
 
+    /*
+     * Reading a file's tags goes through MediaMonkey's own file reader, which
+     * can stall the same way a save does. Every read the window and the plan
+     * builder make gets a deadline, so neither can sit on "Reading the files'
+     * tags..." forever.
+     */
+    var READ_TAGS_TIMEOUT_MS = 5000;
+
+    function readTrackTagsAsync(track, ms) {
+        if (!track || typeof track.getExtendedTagsAsync !== 'function') {
+            return Promise.resolve('');
+        }
+
+        return withTimeout(track.getExtendedTagsAsync(), ms || READ_TAGS_TIMEOUT_MS,
+            _('Reading the extended tags timed out.'));
+    }
+
     /**
      * The only write path. For every selected track: the ticked native fields,
      * then one read and one merged ExtendedTags write (fill tags and tag edits
@@ -1066,6 +1125,7 @@
         collectSelectionAsync: collectSelectionAsync,
         resolveTagScope: resolveTagScope,
         buildPendingAsync: buildPendingAsync,
+        readTrackTagsAsync: readTrackTagsAsync,
         buildSelectionPlanAsync: buildSelectionPlanAsync,
         aggregateFields: aggregateFields,
         applySelectionAsync: applySelectionAsync,

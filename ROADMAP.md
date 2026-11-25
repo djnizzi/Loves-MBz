@@ -366,15 +366,26 @@ load, not a write.
 
 ### 0.6.2 — tag files that are not in the library yet
 
-The other 0.6 job, not started.
+The other 0.6 job. The window works on files MediaMonkey has no album row for,
+and writes nothing but their tags.
 
-- Scope by **album name** instead of album ID: every selected track must carry
-  the same album name, and an empty name on all of them is allowed.
-- Start from an empty release ID when the tag has none, instead of refusing the
-  lookup, so a file outside the library can be tagged from a release ID the
-  user supplies or picks from its release group.
-- The write path stays `mbzApply.applySelectionAsync`, with the same per-track
-  order and per-track failure isolation.
+- [x] Scope by **album name** instead of album ID: every selected track must
+      carry the same album name, and an empty name on all of them is allowed.
+      `resolveTagScope` returns `albumName`, `albumNameConflict`, `tagOnly` and
+      `outOfLibrary`; a differing name does not open the window.
+- [x] Start from an empty release ID when the tag has none, instead of refusing
+      the lookup, so a file outside the library can be tagged from a release ID
+      the user supplies or picks from its release group. The field shows the
+      files' `MUSICBRAINZ_ALBUMID` and its button is **Load**, not **Save ID**.
+- [x] A track with a file but no library row is planned from its own
+      `ExtendedTags` instead of being skipped as `noLibrary`.
+- [x] The write path stays `mbzApply.applySelectionAsync`, with the same
+      per-track order and per-track failure isolation; nothing on that path
+      calls `setAlbumGuidAsync`.
+- [ ] Test the package in MediaMonkey on files outside the library.
+- [x] Drop the channel for 0.6.2: `BUILD_CHANNEL` is empty, the changelog
+      carries the release entry, and `LovesMBz.mmip` is tagged `v0.6.2` with the
+      package on the GitHub release.
 
 ## Nice to have
 

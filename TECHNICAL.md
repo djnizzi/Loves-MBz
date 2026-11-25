@@ -441,7 +441,13 @@ still reports the disagreement but shows no buttons.
 - **Scope** — `mbzApply.resolveTagScope` is the only place that decides what the
   window works on: the selected tracks, their album IDs, each album's release
   ID, and whether the selection spans more than one album. The action and the
-  window both call it, so they cannot disagree.
+  window both call it, so they cannot disagree. A selection with no album row
+  (files browsed from MediaMonkey's Folders node) is scoped by **album name**
+  through `albumNameScope`: one name for every selected track, none at all is
+  allowed, and a differing name refuses the window. That scope reports
+  `tagOnly`, its release ID comes from the files' `MUSICBRAINZ_ALBUMID` tag,
+  `loadFileTagsAsync` reads their tags from the tracks themselves, and the ID
+  field's **Load** loads a release instead of writing an album row.
 - **The plan** — `mbzApply.buildSelectionPlanAsync` calls `buildPendingAsync`
   per track, matching by disc and track number and reading the selection's
   `ExtendedTags` in one database query, so the library's current value is

@@ -29,7 +29,12 @@ The contract:
 4. **One album at a time.** `resolveTagScope` is the only place that decides the
    scope. A selection spanning more than one album ID is refused unless the user
    insists; then the first album's release is used and tracks are matched by
-   disc and track number.
+   disc and track number. A selection with no album row — files outside the
+   library — is scoped by **album name**: every selected track must carry the
+   same one, and all of them carrying none is allowed. That scope is `tagOnly`:
+   the files' own tags are all Apply may write, nothing may touch `Albums` or
+   `Artists` (there is no row to touch), and the ID field says **Load** because
+   it loads a release instead of saving a column.
 5. **Field work belongs in the engine.** Fix field problems in
    `buildPendingAsync`, `aggregateFields`, `mergeTags` or `tagValue` — never in
    the dialog.
