@@ -485,6 +485,129 @@ still reports the disagreement but shows no buttons.
   `trackWork` adopts the promise through the native `Promise` one microtask
   after the rejection.
 
+### The release response, field by field
+
+`fetchReleaseAsync` makes one `release/{mbid}` lookup. This table is the audit
+of that response: every field it returns, whether the add-on reads it, and where
+it could go. **read** means a row in `NATIVE_FIELDS` or `TAG_FIELDS`;
+**dropped** means it arrives and nothing reads it; **needs `inc=`** means one
+subquery away; **refused** means deliberately not offered, with the reason.
+
+Audited on 2026-11-25 against five real lookups: Daft Punk *Random Access
+Memories* (`1f1710cf…`, 13 tracks, digital), Glenn Gould *The Goldberg
+Variations* (`fed9286f…`, 32 tracks on vinyl, track numbers like `A1`), Miles
+Davis *Kind of Blue* (`e32a3f0b…`, CD with five disc IDs), Karajan/Beethoven 9
+(`84462a15…`, conductor and orchestra credits) and The Beatles *Abbey Road*
+(`cf754b8b…`, engineers).
+
+#### The release
+
+| Field | JSON path | Destination | State | Seen in a sample |
+|---|---|---|---|---|
+| Release title | `title` | — the album name belongs to the library | refused | every sample |
+| Artist credit | `artist-credit[]` | native Album artist, `ALBUMARTISTS`, `MUSICBRAINZ_ALBUMARTISTID` | read | Daft Punk; Bach / Glenn Gould |
+| Date | `date` | native Date and Year | read | `2013-05`, `1982`, `2005` |
+| Country | `country` | `RELEASECOUNTRY` | read | `KR`, `XE` |
+| Every release event | `release-events[]` (area + date) | `RELEASECOUNTRY` as a list | dropped | one area per sample |
+| Status, status ID | `status`, `status-id` | `RELEASESTATUS` (status only) | read | Official |
+| Packaging, packaging ID | `packaging` | — no Picard tag, no column | refused | Jewel Case, Gatefold Cover |
+| Quality | `quality` | — no destination | refused | normal |
+| Barcode | `barcode` | `BARCODE` | read | `8803581120707` |
+| ASIN | `asin` | `ASIN` | dropped | null in all five; field present |
+| Release group ID | `release-group.id` | `MUSICBRAINZ_RELEASEGROUPID` | read | `aa997ea0…` |
+| Release type | `release-group.primary-type`, `secondary-types` | `RELEASETYPE` | read | Album + none |
+| Release group first date | `release-group.first-release-date` | native Original date, `originaldate` | read | `2013-05-17` |
+| Release group title | `release-group.title` | — no Picard tag for it | refused | same as the release in samples |
+| Release group comment | `release-group.disambiguation` | — | refused | `1981 recording` |
+| Script | `text-representation.script` | — | refused: the contract never offers `SCRIPT` | Latn |
+| Language | `text-representation.language` | native Language | dropped, no `inc=` needed | `eng`; null on the vinyl |
+| Release comment | `disambiguation` | `comment` (Picard's name) | dropped | empty in all five |
+| Cover art availability | `cover-art-archive.front`, `back`, `count` | — a header concern, not a tag | dropped | front true, count 6 |
+| Label name | `label-info[].label.name` | native Labels (`publisher`) | read | Columbia, EMI Classics |
+| Catalogue number | `label-info[].catalog-number` | `CATALOGNUMBER` | read | `CK 40579` |
+| Label MBID | `label-info[].label.id` | `MUSICBRAINZ_LABELID` | dropped | `011d1192…` |
+| Label sort name, code, type | `label-info[].label.*` | — no destination | refused | label-code 162 |
+| Release relations | `relations[]` | Discogs URL, and the artist relations `PRODUCER` already reads | partly read | discogs, amazon asin, producer, mix, liner notes |
+| Genres | `genres[]` | native Genre | needs `genres` | classical, symphony |
+| Tags | `tags[]` | — | refused: folksonomy with counts, duplicates the genres | club/dance, dance music |
+| Annotation | `annotation` | — | refused: long free text that changes under the user | null |
+| Aliases | `aliases[]` | — | refused: releases carry none (the include is accepted) | empty |
+
+#### The medium and the track
+
+| Field | JSON path | Destination | State | Seen in a sample |
+|---|---|---|---|---|
+| Disc number | `media[].position` | native Disc # (`discNumberInt`) | read | 1 |
+| Format | `media[].format` | `media` | dropped | CD, `12" Vinyl` |
+| Medium title | `media[].title` | `discsubtitle` | dropped | empty in the samples |
+| Disc ID | `media[].discs[].id` | `MUSICBRAINZ_DISCID` | dropped | `4kSYpFmYHKYLhncXgoJSsyaY488-` |
+| Track count, offset | `media[].track-count`, `track-offset` | — read-only | refused | — |
+| Track number | `tracks[].number` | matching by disc and track | read | `1`; `A1` on vinyl |
+| Track position | `tracks[].position` | matching, when the number carries none | read | 1 |
+| Track title | `tracks[].title` | native Title | read | The Goldberg Variations: Aria |
+| Lengths | `tracks[].length`, `recording.length` | — read-only | refused | 274000 ms |
+| Release track MBID | `tracks[].id` | `MUSICBRAINZ_RELEASETRACKID` | read | `80eabf52…` |
+| Track artist credit | `tracks[].artist-credit[]` | native Artist, `ARTISTS`, `MUSICBRAINZ_ARTISTID` | read | every sample |
+
+#### The recording, the work and their relations
+
+| Field | JSON path | Destination | State | Seen in a sample |
+|---|---|---|---|---|
+| Recording MBID | `recording.id` | `MUSICBRAINZ_TRACKID` | read | every sample |
+| ISRCs | `recording.isrcs[]` | native ISRC | read, **first only** | Goldberg carries 3 on one track |
+| Recording comment | `recording.disambiguation` | `comment` | dropped | empty in the samples |
+| Recording first release date | `recording.first-release-date` | — a Picard variable only | refused | `2013-05-17` |
+| Video flag | `recording.video` | — no destination | refused | false |
+| Recording genres | `recording.genres[]` | native Genre | needs `genres` | classical, romantic classical, symphony |
+| Recording tags | `recording.tags[]` | — | refused | same reason as release tags |
+| Producer | relation `producer` to artist | `PRODUCER` | read | George Martin; Thomas Bangalter |
+| Remixer | relation `remixer` to artist | `REMIXER` | read | — |
+| Instrument (performer) | relation `instrument` with `attributes[]` | native Involved people, `performer:instrument` | dropped | keyboard, bass guitar, piano |
+| Vocal | relation `vocal` to artist | — no column | dropped | John Lennon, Paul McCartney |
+| Performing orchestra | relation `performing orchestra` to artist | — no column | dropped | Wiener Philharmoniker |
+| Conductor | relation `conductor` to artist | native Conductor | dropped | Herbert von Karajan, George Martin |
+| Engineer | relation `engineer` to artist | `engineer` | dropped | Geoff Emerick, Phil McDonald |
+| Mix | relation `mix` to artist | `mixer` | dropped | Kind of Blue, at release level |
+| Balance | relation `balance` to artist | — Picard has no tag for it | dropped | Douglas Larter |
+| Instrument arranger | relation `instrument arranger` to artist | `arranger` | dropped | George Martin |
+| Arranger, DJ-mix | relations `arranger`, `DJ-mix` to artist | `arranger`, `djmixer` | dropped | documented type; not in these five |
+| Phonographic copyright | relation `phonographic copyright` | — | refused | — |
+| Liner notes | relation `liner notes` to artist | — | refused | Kind of Blue, at release level |
+| Recording to recording | relations `mashes up`, `remix`, `edit` | — | refused | one dance track |
+| Work ID, title, language, ISWC | `work.id`, `title`, `language`, `languages`, `iswcs` | `MUSICBRAINZ_WORKID`, `WORK`, native Language, `ISWC` | dropped (composer and lyricist are read) | work IDs and `zxx`/`eng` |
+| Work relations | `work.relations[]` composer, lyricist, writer, arranger | native Composer, Lyricist, `WRITER`, `arranger` | partly read | Beethoven, Bach |
+| Work genres | `work.genres` | — | **not delivered** by a release lookup, even with `genres` | absent in all five |
+| Recorded at | relation `recorded at` to place | — no column | dropped | needs `place-rels` |
+| Part of a series | release-group relation `part of` to series | — | refused | 18 series on one pop album |
+| URL relations | release, group and recording `url-rels` | `discogs_url` only | partly read | official homepage, allmusic, wikidata, streaming |
+| Artist sort name, type, country | `artist.*` | — no column | refused | `Beatles, The` |
+
+#### What the audit says
+
+- **One include adds a native field: `genres`.** The release's genres and the
+  release group's genres arrive in the same request, because the group is a
+  subquery of the release — no second request and no group lookup.
+- **The relations the lookup already asks for carry far more than is read.**
+  `instrument` (with the instrument in `attributes`), `vocal`, `performing
+  orchestra`, `conductor`, `engineer`, `mix`, `balance`, `instrument arranger`
+  and `phonographic copyright` were all in the base response. `place-rels` adds
+  `recorded at`; `release-group-level-rels` adds the group's `part of` (series)
+  and its web links.
+- **Work genres are the exception:** they are not in a release response at all.
+  A work ID, title, language and ISWC are.
+- **Free fields nobody reads:** `asin`, `media[].format`, `media[].title`,
+  `media[].discs[].id` (five on one CD), every ISRC after the first (three on
+  one track), `release-events`, the label MBID, `recording.first-release-date`,
+  the three comment fields, and `cover-art-archive`.
+- **Cost:** 275,236 → 301,460 bytes (+10%) for an 11-track classical release
+  with every extra include, one request, 0.55 s of server time. The queue's
+  1.1 s spacing still dominates the wait.
+- **Response shapes worth knowing:** `tracks[].number` is a string that may be
+  `A1`; labels live under `label-info`, not `labels`; an absent value is `null`
+  or `""`, never missing; relation types are link type names (`instrument`,
+  `performing orchestra`, `phonographic copyright`), so matching by type name is
+  stable but must be spelled exactly.
+
 ### Deliberately not included
 
 - **Album Artist MBGID** — the album artist is a separate relation

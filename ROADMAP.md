@@ -90,8 +90,9 @@ and track number, never by title.
       generic writer relations fill Composer when no composer exists. Producer
       and remixer extended tags come from release/recording relations. All are
       multivalues joined with `; `.
-- [ ] Other relational native tags — genre, conductor, copyright and language
-      still need their own includes and mappings.
+- [ ] **Moved to 0.7.0** — other relational native tags (genre, conductor,
+      language and the rest) are audited there in one pass, not one include at
+      a time.
 - [x] Extended tags for values with no column, under Picard's names:
       `MUSICBRAINZ_*` IDs, `BARCODE`, `ARTISTS`, `ALBUMARTISTS`,
       `WRITER`, `PRODUCER`, `REMIXER`, `originaldate`, album type/status/country,
@@ -105,8 +106,8 @@ and track number, never by title.
       extended tags and uses the dialog's normal group save. The album and
       artist ID columns are never written, so a fetched ID cannot silently
       overwrite the library value the lookup came from.
-- [ ] Keep the fetched-release cache across dialog openings; it currently lives
-      as long as the dialog.
+- [ ] **Moved to 0.7.0** — the fetched-release cache across dialog openings;
+      it currently lives as long as the dialog.
 
 ### Not in 0.4.0
 
@@ -387,10 +388,183 @@ and writes nothing but their tags.
       carries the release entry, and `LovesMBz.mmip` is tagged `v0.6.2` with the
       package on the GitHub release.
 
+## 0.7.x — every field MusicBrainz gives us, and a tag set you choose
+
+Two jobs. 0.7.0 is research and engine work: the release lookup already carries
+more than the window offers, and several fields are one include away. 0.7.1 is
+the window: which of those fields Apply offers becomes a saved setting that any
+selection can override, and the window's cards move into tabs.
+
+### 0.7.0 — the field audit
+
+The lookup asks for
+
+`artist-credits+labels+recordings+release-groups+media+discids+isrcs+url-rels+recording-level-rels+work-rels+work-level-rels+artist-rels`
+
+and maps eleven native fields and eighteen tags. Everything else the response
+carries is dropped: `release.asin`, `media.format`, `media.title`, the
+release's and recording's `disambiguation`, every ISRC after the first, and the
+relationships the `*_level_rels` switches already pull in but nobody reads. Of
+those, only genre needs a new include: language arrives with the release,
+conductor and performer credits are in the relations already asked for, and work
+IDs ride along with `work-rels`.
+
+Audit the whole response — relational and not — and decide per field: a native
+column, a Picard tag name, or deliberately not offered, with the reason written
+down. `NATIVE_FIELDS` and `TAG_FIELDS` in `mbzApply.js` stay the only place a
+field is declared; `describeRelease` is the only place it is filled.
+
+**The audit is done.** Every field of that response — read, dropped, one include
+away, or refused — is tabled in
+[TECHNICAL.md](TECHNICAL.md#the-release-response-field-by-field), verified on
+2026-11-25 against five real releases (Daft Punk, Glenn Gould, Miles Davis,
+Karajan/Beethoven, The Beatles).
+
+What it found:
+
+- **One include adds a native field: `genres`.** The release's genres and the
+  release group's genres come back in the same request, because the group is a
+  subquery of the release — no second request, no group lookup.
+- **The relations we already ask for carry far more than we read.** `instrument`
+  (with the instrument in `attributes`), `vocal`, `performing orchestra`,
+  `conductor`, `engineer`, `mix`, `balance`, `instrument arranger` and
+  `phonographic copyright` were all in the base response; `place-rels` adds
+  `recorded at`, and `release-group-level-rels` adds the group's `part of`
+  (series) and its web links.
+- **Work genres are not in a release response**, even with `genres`. A work ID,
+  title, language and ISWC are.
+- **Free fields nobody reads:** `asin`, `media[].format`, `media[].title`,
+  `media[].discs[].id` (five disc IDs on one CD), every ISRC after the first
+  (three on one track), `release-events`, the label MBID,
+  `recording.first-release-date`, the comment fields, and `cover-art-archive`.
+- **Measured cost:** 275,236 → 301,460 bytes (+10%) for an 11-track classical
+  release with every extra include, one request, 0.55 s of server time. The
+  queue's 1.1 s spacing still dominates.
+- **Refused, with the reason in the table:** `SCRIPT` (the write contract),
+  `tags` and ratings (folksonomy, or user auth), annotations, series membership
+  (18 on one pop album), release comments, per-track web links, and everything
+  with no MediaMonkey column and no Picard tag.
+
+The candidates that survive: genre, language, conductor, performer with
+instrument, engineer/mixer/arranger, work ID and ISWC, media format, disc
+subtitle, ASIN, disc ID, every ISRC, the full release-country list and the label
+MBID. Fields with **no** MusicBrainz source stay out of the audit — BPM, initial
+key, mood, occasion, energy, grouping, lyrics and artwork bytes are
+MediaMonkey columns or another service, and nobody should hunt for them twice.
+
+Checklist:
+
+- [x] Audit the response field by field against real lookups, and write the
+      table into `TECHNICAL.md`.
+- [ ] One include string, checked against the API documentation: `genres`,
+      `annotation`, `release-group-level-rels` and the relationship target
+      types the new fields need, added to the release lookup. The relationship
+      switches stay switches — `work-level-rels` alone provides no
+      relationships without `work-rels` or `artist-rels` beside it.
+- [ ] One request stays one request. Everything on a release or a recording is
+      free; a field that lives on the release group is folded into the
+      release-group request the Discogs URL already needs (made
+      unconditionally once such a field is in the set), not into a new one.
+- [ ] Measure the cost on a bad case — multi-disc, dense relationships: response
+      size, parse time and wall time. The queue still spaces requests 1.1 s
+      apart and nothing loops per track.
+- [ ] `describeRelease` fills one value per new field; the field rows are the
+      same eleven-plus-eight table plus the new ones, so `aggregateFields`,
+      `tagValue` and the window need no per-field code.
+- [ ] Alias collapse for every field MusicBrainz spells more than one way. Today
+      that is country, status and type; each new field is checked for a second
+      spelling before it is offered.
+- [ ] Cache across dialog openings (the 0.4.0 leftover). Decide where it lives —
+      an object on the main window, or a file-backed cache under the add-on's
+      settings folder — with a size bound and a clear rule for reference data
+      that changes (a release is fetched once per session, and the group
+      listing with it).
+- [ ] Not offered, with the reason in the table: `SCRIPT` (the write contract
+      bars it, even though `text-representation.script` arrives anyway), user
+      ratings, user tags and collections (need the user's OAuth), annotations
+      (long free text), cover art (a URL, and another service).
+- [ ] `tests/tag-path.test.js`: the field tables and their aliases, no `SCRIPT`,
+      one write path, and the extra includes still in one release request.
+- [ ] `TECHNICAL.md` gets the audit table (field, source, include,
+      destination), the README's field list matches it, and the changelog names
+      what was added and what was refused.
+
+### 0.7.1 — "MBZ tags to use": a saved set, and tabs instead of cards
+
+The user chooses once which fields the add-on offers; any selection can
+override that choice; and the window stops being one long scroll of cards.
+
+- **The saved set.** Stored with the add-on's own settings (`app.getValue` /
+  `app.setValue`, the way `init.js` remembers the toolbar offer): one key
+  holding field keys from `NATIVE_FIELDS` and `TAG_FIELDS`, versioned so a
+  later release can migrate it. A missing key, or a key this build does not
+  know, falls back to today's list — so installing 0.7.1 changes nothing until
+  the user edits the set.
+- **Two levels, not two settings.** The saved set decides which field rows the
+  window *offers*; the ticks in **Fields to write** still decide what *this*
+  Apply writes. Ticking or unticking there is the per-selection override and
+  touches no setting. **Save as default** writes the current ticks back to the
+  setting; **Reset to saved** returns to it. Nothing in this path writes tags:
+  the files change only on Apply, through `applySelectionAsync`.
+- **Tab 1 — ID and changes.** Every card the window has today: the
+  release-group card with the release ID field, the release card, **Fields to
+  write**, **Selected tracks**, and the **MusicBrainz tags** editor.
+- **Tab 2 — MBZ tags to use.** The catalogue: album fields and track fields,
+  each with its native column or Picard tag name beside it, the saved-set ticks,
+  **Save as default**, **Reset to saved**, and one sentence saying what the set
+  is for. A field the release did not supply is still listed, marked as not
+  supplied by this release, so it cannot look like a lost setting.
+- **Copy MediaMonkey's own tab pattern** (its properties modal, in
+  `../src/js/dialogs/dlgTrackProperties.html` and `.js`): the host draws the
+  whole thing from one
+  `<div data-id="tabs" data-control-class="Tabs" data-init-params="{resizeable: true}"></div>`;
+  each tab is an object with `name`, `order` and `load(track, dialog)`, its
+  panel is built once and attached with `tabs.controlClass.setTabPanel(key,
+  panel)`, and an `isLoaded` flag keeps the second visit free. The add-on keeps
+  both panels in `dlgMBzTag.html` — the package already ships that page — and
+  attaches them the same way. *Verify in app* which loader the add-on's dialog
+  may use for a panel file if the panels are split out.
+- **The stale page.** `AGENTS.md`'s rule applies in full: MediaMonkey keeps the
+  dialog page it loaded at start-up, so the tab container and both panels must
+  be creatable from `dlgMBzTag.js` when the installed page has neither —
+  exactly like the release-group card and the busy ring. Otherwise installing
+  the build appears to do nothing.
+- **The guard has to be changed deliberately.** `tests/tag-path.test.js` pins
+  one `.mbzTagScroll` with `overflow-y: auto`, `fitScrollColumn` sized from
+  `basis * 0.68`, the `.mbzSection` rhythm and `qid()` ↔ `data-id` parity. Two
+  panels mean one scroll column per panel (or one inside the tab body); that is
+  a guard update with its own test, not a workaround, and `fitScrollColumn`
+  has to run again when a tab is first shown.
+- [ ] The saved set: read, fall back, version, write on **Save as default**.
+- [ ] Per-selection ticks that never touch the setting; **Reset to saved**.
+- [ ] The two tab keys, and which cards sit in which panel.
+- [ ] The panels built by script when the page has none.
+- [ ] The footer pending-work summary (UI 1.1) counts the rows that exist, and
+      says so when the saved set leaves nothing to offer.
+- [ ] Guard: tab split, saved-set round trip, no tag write from the tag-set tab.
+- [ ] `TECHNICAL.md`, `README.md` and the changelog describe the setting and the
+      two tabs; UI-ROADMAP's 3.1 closes with this release.
+
+## 0.8.0 — general UI revision (TBD)
+
+Placeholder: the scope is not set yet. It takes what UI-ROADMAP has left after
+0.7.1 — the single notice area and copyable failure report (1.6), hierarchy and
+vocabulary (1.7), window context, resize and keyboard (1.8), plurals (1.9), the
+control conversion and the IDs dialog work in Phase 2, shared styling and the
+theme pass — and it is where the audit's "rendered screens have not been
+captured" stops being true.
+
+To settle before it is numbered: one revision or the remaining phases in order;
+cover art in the header (3.3); a filter for large selections (3.4); copy depth
+(3.5); and the open questions in UI-ROADMAP's *Decisions needed* that 0.7.1
+still leaves — a confirmation sheet above a threshold, and whether a close
+window may guard unsaved edits. The All/None control (3.2) is partly answered
+by the tag set and only needs the per-scope counts.
+
 ## Nice to have
 
-- Conductor, genre, copyright and other relational credits, fetched from
-  artist/work relations and genres; these have native columns to write to.
+- Moved to **0.7.0**: conductor, genre and the other relational credits, with
+  the rest of what the release carries.
 
 ## Backlog
 

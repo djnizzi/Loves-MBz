@@ -262,7 +262,14 @@ Goal: the window still works when there is a lot to read.
 - **Dependency:** the guard pins one `.mbzTagScroll` with `overflow-y: auto`,
   `fitScrollColumn` and its `basis * 0.68`; a tabbed body requires a deliberate
   guard update, not a workaround.
-- **Decision needed:** tabs vs collapsible sections vs today's scroll.
+- **Decided:** tabs — but the split is not Release / Extended tags. Tab 1,
+  **ID and changes**, keeps every card the window has today; tab 2, **MBZ tags
+  to use**, holds the saved set of fields the add-on offers. Moved to
+  ROADMAP.md **0.7.1**, because the tab exists to hold that setting.
+- **Pattern to copy:** MediaMonkey's own properties modal
+  (`../src/js/dialogs/dlgTrackProperties.html` / `.js`) draws tabs from one
+  `data-control-class="Tabs"` element and registers each tab as an object with
+  `name`, `order` and `load(track, dialog)`.
 
 ### 3.2 Field selection controls · S
 - Add `All` / `None` per scope, and show `9 of 12 selected` in the section
@@ -345,7 +352,7 @@ UI work.
 | 7 | IDs dialog hierarchy + keyboard | 2.4 | M | parity between windows |
 | 8 | Shared styling + theme pass | 2.5, 2.6 | S | maintainability |
 | 9 | Links, removals, unsaved guard | 2.2, 2.3, 2.7 | S+S+M | polish |
-| 10 | Tabs / structure decision | 3.1 | L | long-term layout |
+| 10 | Tabs — "ID and changes" / "MBZ tags to use" | 3.1 → 0.7.1 | L | long-term layout |
 
 ## Review checklist
 
@@ -369,7 +376,8 @@ do not cover any of that.
 1. Footer summary only, or also a confirmation sheet above a threshold of
    changed fields?
 2. Per-row skinned `Edit` controls, or a single editor for the selected tag row?
-3. Tabs, collapsible sections, or keep one scroll?
+3. ~~Tabs, collapsible sections, or keep one scroll?~~ **Answered:** tabs, split
+   as **ID and changes** / **MBZ tags to use** — see 3.1 and ROADMAP.md 0.7.1.
 4. Is a close guard acceptable given the host's dialog lifecycle, or should the
    window simply warn in the footer before Apply?
 
