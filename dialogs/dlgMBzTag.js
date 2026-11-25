@@ -24,10 +24,10 @@ localRequirejs('mbzMbgid');
  * carries its channel separately and reads as 0.6.3-rc1 in the footer.
  */
 var ADDON_VERSION = '0.7.1';
-var BUILD_CHANNEL = 'rc7';   // '' for a release build
+var BUILD_CHANNEL = '';   // '' for a release build
 
 /* Filled in by tools/build-mmip.js; empty when the dialog runs from source. */
-var BUILD_TIME = '2026-11-25 20:23';
+var BUILD_TIME = '2026-11-25 21:15';
 
 /* Restored whenever a release finally loads, so an error note does not linger. */
 var DEFAULT_NOTE = _('Nothing is written until Apply. Closing the window writes nothing.');
@@ -247,6 +247,7 @@ function init(params) {
         summary: qid('summary'),
         working: qid('working'),
         btnRetry: qid('btnRetry'),
+        btnApplyClose: qid('btnApplyClose'),
         warning: qid('warning'),
         searchRow: qid('searchRow'),
         btnSearch: qid('btnSearch'),
@@ -263,8 +264,9 @@ function init(params) {
         albumIdValue: qid('albumIdValue'),
         btnSaveAlbumId: qid('btnSaveAlbumId'),
         albumIdStatus: qid('albumIdStatus'),
-        fieldsSection: qid('fieldsSection'),
-        fieldRows: qid('fieldRows'),
+        // Fields to write is not in the page: `panelTagSet` is its mount point
+        // and `buildFieldSetPanel()` sets `UI.fieldRows` from there, so neither
+        // name goes through qid(). `ensureTabs()` drops a stale card.
         trackSection: qid('trackSection'),
         trackRows: qid('trackRows'),
         tagSummary: qid('tagSummary'),
@@ -416,10 +418,6 @@ function init(params) {
             if (element.style.setProperty) element.style.setProperty('display', 'none', 'important');
             else element.style.display = 'none';
         }
-    }
-
-    function showRetry(visible) {
-        show(UI.btnRetry, !!visible);
     }
 
     /* ---------------------------------------------------------------- *
@@ -679,7 +677,11 @@ function init(params) {
 
     function resetView() {
         scheduleTableSync();
-        showRetry(false);
+
+        // The retry is always on screen. A page installed before this build
+        // still carries the class that used to hide it, so the window clears
+        // that here as well.
+        if (UI.btnRetry) show(UI.btnRetry, true);
 
         if (UI.metaRows) UI.metaRows.textContent = '';
         if (UI.fieldRows) UI.fieldRows.textContent = '';
@@ -700,13 +702,16 @@ function init(params) {
         show(UI.linksBar, false);
         show(UI.albumIdRow, false);
         show(UI.metaScroll, false);
-        show(UI.fieldsSection, false);
         show(UI.trackSection, false);
         syncGroupCard();
         show(UI.divergeBar, false);
         show(UI.suggestBar, false);
         show(UI.tagTable, true);
         show(UI.tagEmpty, false);
+
+        // The field table is the catalogue, so it is filled before a release
+        // arrives as well; a row gains its tick once the plan says it changes.
+        renderFields(null);
 
         fitScrollColumn();
 
@@ -895,10 +900,7 @@ function init(params) {
             }
         }
 
-        // The field list is only its table, and only once a release is behind
-        // it: no rows or no release means no section.
-        show(UI.fieldsSection,
-            !!state.hasRelease && !!(UI.fieldRows && UI.fieldRows.rows.length));
+
     }
 
     /* The renders fill their tables synchronously; this runs right after. */
@@ -1036,7 +1038,6 @@ function init(params) {
 
         metaPairs = [];
         setSearch('');
-        showRetry(false);
         setNote(DEFAULT_NOTE);
 
         addMeta(_('Artist'), mbzTagCredit(release));
@@ -1054,12 +1055,12 @@ function init(params) {
 
         setSummary(release.title || result.releaseId || '', false);
         renderLinks();
+        showFirstTab();
         fitScrollColumn();
     }
 
     function renderSkipped(result) {
         var reason = (result && result.reason) || 'no-album';
-        showRetry(false);
 
         // A release that went away must not leave the old overview on screen.
         metaPairs = [];
@@ -1076,8 +1077,8 @@ function init(params) {
         state.groupMessage = '';
         state.groupRetryable = false;
         state.hasRelease = false;
-        show(UI.fieldsSection, false);
         show(UI.trackSection, false);
+        renderFields(null);
         syncGroupCard();
 
         if (reason === 'no-album') {
@@ -1438,21 +1439,12 @@ function init(params) {
         var cell = document.createElement('td');
         cell.className = 'mbzNote';
         cell.setAttribute('colspan', '6');
-        cell.textContent = text;
-
-        if (state.groupRetryable) {
-            var button = document.createElement('div');
-            button.className = 'button mbzButton';
-            button.textContent = _('Retry');
-            button.title = _('Read the releases of this group again.');
-            button.setAttribute('data-group-retry', '1');
-            // Inline, so the button keeps its gap on a page older than this script.
-            button.style.marginLeft = '10px';
-
-            if (state.busy) button.classList.add('mbzDisabled');
-
-            cell.appendChild(button);
-        }
+        // One Retry button serves the whole window, beside the summary. A
+        // second one here would run the same read on the same selection, and
+        // would vanish with the card exactly when it is needed.
+        cell.textContent = text + (state.groupRetryable
+            ? ' ' + _('Press Retry to read them again.')
+            : '');
 
         row.appendChild(cell);
         UI.groupRows.appendChild(row);
@@ -1605,17 +1597,11 @@ function init(params) {
         var node = target;
 
         while (node && node !== UI.groupRows) {
-            var retry = node.getAttribute && node.getAttribute('data-group-retry');
             var releaseId = node.getAttribute && node.getAttribute('data-release');
 
-            if (retry || releaseId) {
+            if (releaseId) {
                 if (event.preventDefault) event.preventDefault();
                 if (state.busy || state.readOnly) return;
-
-                if (retry) {
-                    retryGroupReleases();
-                    return;
-                }
 
                 (state.groupReleases || []).forEach(function (release) {
                     if (release.id === releaseId) chooseRelease(release);
@@ -1679,21 +1665,11 @@ function init(params) {
         }));
     }
 
-    /** Reads the group's releases again, keeping the card and its sentence. */
-    function retryGroupReleases() {
-        if (state.busy || !state.release) return;
-
-        state.groupMessage = _('Reading the releases of this group...');
-        state.groupRetryable = false;
-        renderGroupReleases();
-        loadGroupReleasesAsync(state.release, true);
-    }
-
     /* ---------------------------------------------------------------- *
      * The two tabs and the saved field set (0.7.1)
      * ---------------------------------------------------------------- */
 
-    var FIELD_SET_NOTE = _('Choose the fields the window offers. The ticks in Fields to write still decide what this Apply writes.');
+    var FIELD_TABLE_NOTE = _('The fields that are on in the add-on configuration are listed here. Tick one to write it with this Apply; a field whose value already matches has no tick.');
 
     /** The saved set, read once. */
     function offeredKeys() {
@@ -1706,10 +1682,6 @@ function init(params) {
 
     function isOffered(key) {
         return offeredKeys().indexOf(key) !== -1;
-    }
-
-    function setFieldSetStatus(text) {
-        if (UI.fieldSetStatus) UI.fieldSetStatus.textContent = text || '';
     }
 
     /**
@@ -1736,108 +1708,30 @@ function init(params) {
         fitScrollColumn();
     }
 
+    /**
+     * Brings the first tab to the front after a release is loaded, so the
+     * comparison the load was for is what the reader sees. The host control
+     * selects by index; a host that will not take the index leaves the window
+     * on the tab it already shows.
+     */
+    function showFirstTab() {
+        if (!UI.tabs) {
+            showTab('changes');
+            return;
+        }
+
+        try {
+            UI.tabs.selectedIndex = 0;
+        } catch (e) {
+            // The panel stays where the reader left it; nothing else breaks.
+        }
+    }
+
     function onTabClick(event) {
         var target = event && event.target;
         var name = target && target.getAttribute ? target.getAttribute('data-tab') : '';
 
         if (name) showTab(name);
-    }
-
-    /** The catalogue: every declared field, and what this release supplied. */
-    function renderFieldSet() {
-        scheduleTableSync();
-
-        if (!UI.fieldSetRows || !apply) return;
-
-        // What the release carries, not what the plan has left: the plan holds
-        // only the fields that differ, so a match would read as "not supplied".
-        var supplied = state.release ? apply.suppliedFields(state.release) : null;
-
-        UI.fieldSetRows.textContent = '';
-
-        apply.fieldCatalogue().forEach(function (field) {
-            var row = document.createElement('tr');
-            var checkCell = document.createElement('td');
-            checkCell.className = 'mbzNowrap';
-
-            var box = document.createElement('div');
-            box.setAttribute('data-control-class', 'Checkbox');
-            box.setAttribute('data-id', 'mbzFieldSet' + field.key);
-            box.setAttribute('data-key', field.key);
-            checkCell.appendChild(box);
-            row.appendChild(checkCell);
-
-            row.appendChild(mbzTagCell(field.label));
-            row.appendChild(mbzTagCell(field.scope === 'album' ? _('Album') : _('Track'), 'mbzNowrap'));
-            row.appendChild(mbzTagCell(field.target, 'mbzNowrap'));
-
-            // A field this release did not supply is still listed: a missing
-            // row would read as a lost setting.
-            row.appendChild(mbzTagCell(supplied && !supplied[field.key]
-                ? _('not supplied') : '', 'mbzNote'));
-
-            UI.fieldSetRows.appendChild(row);
-
-            if (typeof initializeControl === 'function') initializeControl(box);
-            if (box.controlClass) box.controlClass.checked = isOffered(field.key);
-
-            window.localListen(box, 'click', markFieldSetDirty);
-            window.localListen(box, 'change', markFieldSetDirty);
-        });
-
-        lockFieldSet();
-    }
-
-    function markFieldSetDirty() {
-        setFieldSetStatus(_('Not saved yet \u2014 press Save as default.'));
-    }
-
-    /**
-     * Save as default writes a setting, never a tag: Apply stays the only
-     * writer, and the ticks in Fields to write are untouched.
-     */
-    function saveFieldSet() {
-        if (!apply || state.readOnly || state.busy) return;
-
-        var keys = checkedKeysIn(UI.fieldSetRows);
-
-        if (!apply.writeFieldSet(keys)) {
-            setFieldSetStatus(_('Could not save the field set.'));
-            return;
-        }
-
-        state.offered = keys;
-        renderFields(state.plan);
-        setFieldSetStatus(keys.length
-            ? sprintf(_('Saved: %d fields offered.'), keys.length)
-            : _('Saved: the window offers no field until you tick one here.'));
-    }
-
-    /** Puts the ticks back the way the setting has them. */
-    function resetFieldSet() {
-        if (!apply || state.readOnly || state.busy) return;
-
-        state.offered = apply.readFieldSet();
-        renderFieldSet();
-        renderFields(state.plan);
-        setFieldSetStatus(_('The ticks are the saved set again.'));
-    }
-
-    /** Party Mode and a running write lock the catalogue like the field rows. */
-    function lockFieldSet() {
-        var boxes = UI.fieldSetRows ? UI.fieldSetRows.querySelectorAll('[data-key]') : [];
-
-        for (var i = 0; i < boxes.length; i++) {
-            if (boxes[i].controlClass) boxes[i].controlClass.disabled = !!state.busy || state.readOnly;
-        }
-
-        if (UI.btnSaveFieldSet) {
-            UI.btnSaveFieldSet.classList.toggle('mbzDisabled', !!state.busy || state.readOnly);
-        }
-
-        if (UI.btnResetFieldSet) {
-            UI.btnResetFieldSet.classList.toggle('mbzDisabled', !!state.busy || state.readOnly);
-        }
     }
 
     function makeNode(tag, className, id, text) {
@@ -1860,40 +1754,30 @@ function init(params) {
         var panel = host || makeNode('div', 'mbzPanel mbzHidden', 'panelTagSet');
         var card = makeNode('fieldset', 'mbzSection mbzCard');
 
-        card.appendChild(makeNode('legend', 'mbzCardTitle', '', _('MBZ tags to use')));
-        card.appendChild(makeNode('label', 'mbzInfo', '', FIELD_SET_NOTE));
+        card.appendChild(makeNode('legend', 'mbzCardTitle', '', _('Fields to write')));
+        card.appendChild(makeNode('label', 'mbzInfo', '', FIELD_TABLE_NOTE));
 
         var table = makeNode('table', 'mbzTable');
         var thead = makeNode('thead');
         var head = makeNode('tr');
-        var titles = ['', _('Field'), _('Scope'), _('Written as'), _('This release')];
+        var titles = ['', _('Field'), _('Scope'), _('Written as'), _('Current'), _('MusicBrainz'), _('Changes')];
 
         for (var i = 0; i < titles.length; i++) head.appendChild(makeNode('th', '', '', titles[i]));
 
         thead.appendChild(head);
         table.appendChild(thead);
 
-        var rows = makeNode('tbody', '', 'fieldSetRows');
+        // One table for both levels: the configuration decides which fields are
+        // listed, and the tick on a listed field decides this Apply.
+        var rows = makeNode('tbody', '', 'fieldRows');
         table.appendChild(rows);
         card.appendChild(table);
-
-        var bar = makeNode('div', 'flex row mbzFieldSetBar');
-        var save = makeNode('div', 'button mbzButton', 'btnSaveFieldSet', _('Save as default'));
-        var reset = makeNode('div', 'button mbzButton', 'btnResetFieldSet', _('Reset to saved'));
-        var status = makeNode('label', 'mbzNote fill', 'fieldSetStatus');
-
-        bar.appendChild(save);
-        bar.appendChild(reset);
-        bar.appendChild(status);
-        card.appendChild(bar);
 
         panel.appendChild(card);
 
         UI.panelTagSet = panel;
-        UI.fieldSetRows = rows;
-        UI.fieldSetStatus = status;
-        UI.btnSaveFieldSet = save;
-        UI.btnResetFieldSet = reset;
+        UI.fieldTable = table;
+        UI.fieldRows = rows;
 
         return panel;
     }
@@ -1952,7 +1836,7 @@ function init(params) {
 
         try {
             tabs.addTab(_('ID and changes'));
-            tabs.addTab(_('MBZ tags to use'));
+            tabs.addTab(_('Fields to write'));
         } catch (e) {
             removeNode(host);
             return false;
@@ -2006,7 +1890,7 @@ function init(params) {
 
         var bar = makeNode('div', 'flex row mbzTabBar', 'tabBar');
         var changes = makeNode('div', 'button mbzButton mbzTab mbzTabActive', 'tabChanges', _('ID and changes'));
-        var tagSet = makeNode('div', 'button mbzButton mbzTab', 'tabTagSet', _('MBZ tags to use'));
+        var tagSet = makeNode('div', 'button mbzButton mbzTab', 'tabTagSet', _('Fields to write'));
 
         changes.setAttribute('data-tab', 'changes');
         tagSet.setAttribute('data-tab', 'tagSet');
@@ -2039,7 +1923,13 @@ function init(params) {
             UI.panelChanges = changes;
         }
 
-        if (!UI.fieldSetRows && UI.scrollColumn) {
+        // The field table lives in the second tab only: a page installed with
+        // the old card would otherwise show two tables, so the card goes.
+        if (typeof document.querySelector === 'function') {
+            removeNode(document.querySelector('[data-id="fieldsSection"]'));
+        }
+
+        if (!UI.fieldTable && UI.scrollColumn) {
             var host = UI.panelTagSet;
             var panel = buildFieldSetPanel(host);
 
@@ -2051,51 +1941,93 @@ function init(params) {
         if (!UI.tabs && !UI.tabBar && !buildHostTabs()) buildTabBar();
 
         if (UI.tabBar) window.localListen(UI.tabBar, 'click', onTabClick);
-        if (UI.btnSaveFieldSet) window.localListen(UI.btnSaveFieldSet, 'click', saveFieldSet);
-        if (UI.btnResetFieldSet) window.localListen(UI.btnResetFieldSet, 'click', resetFieldSet);
 
         if (UI.tabs) listenTabChange();
         else showTab('changes');
     }
 
+    /**
+     * The one field table: the fields the configuration page leaves on, the
+     * library's value and the release's for each, and a tick on every field
+     * this selection would change. A field whose value already matches has no
+     * tick, because there is nothing to write.
+     */
     function renderFields(plan) {
         scheduleTableSync();
 
-        if (!UI.fieldRows) return;
+        if (!UI.fieldRows || !apply) return;
 
-        UI.fieldRows.textContent = '';
-
-        // The saved set decides which rows are offered; the ticks stay per
-        // selection.
-        var fields = ((plan && plan.fields) || []).filter(function (field) {
+        // The configuration page decides which rows exist at all.
+        var offered = apply.fieldCatalogue().filter(function (field) {
             return isOffered(field.key);
         });
 
-        if (!fields.length) {
-            show(UI.fieldsSection, false);
+        // The plan holds only the fields that differ, so a key it carries is a
+        // field with something to write; every other row is listed without a
+        // tick.
+        var differing = {};
+        ((plan && plan.fields) || []).forEach(function (field) {
+            differing[field.key] = field;
+        });
+
+        // What the release carries, read from the release and not the plan: a
+        // field equal to the library's value never reaches the plan.
+        var supplied = state.release ? apply.suppliedFields(state.release) : null;
+
+        UI.fieldRows.textContent = '';
+
+        if (!offered.length) {
+            var emptyRow = document.createElement('tr');
+            var empty = mbzTagCell(_('No field is on in the add-on configuration.'), 'mbzNote');
+            empty.colSpan = 7;
+            emptyRow.appendChild(empty);
+            UI.fieldRows.appendChild(emptyRow);
             updatePending();
             return;
         }
 
-        fields.forEach(function (field) {
+        offered.forEach(function (field) {
+            var change = differing[field.key];
+            var box = null;
             var row = document.createElement('tr');
-
             var checkCell = document.createElement('td');
             checkCell.className = 'mbzNowrap';
 
-            var box = document.createElement('div');
-            box.setAttribute('data-control-class', 'Checkbox');
-            box.setAttribute('data-id', 'mbzTagField' + field.key);
-            box.setAttribute('data-key', field.key);
-            checkCell.appendChild(box);
-            row.appendChild(checkCell);
+            if (change) {
+                box = document.createElement('div');
+                box.setAttribute('data-control-class', 'Checkbox');
+                box.setAttribute('data-id', 'mbzTagField' + field.key);
+                box.setAttribute('data-key', field.key);
+                checkCell.appendChild(box);
+            }
 
+            row.appendChild(checkCell);
             row.appendChild(mbzTagCell(field.label));
-            row.appendChild(mbzTagCell(field.currentText || '\u2014'));
-            row.appendChild(mbzTagCell(field.perTrack ? _('per track') : field.value, field.perTrack ? 'mbzNote' : ''));
-            row.appendChild(mbzTagCell(field.changes + ' / ' + field.total, 'mbzNowrap'));
+            row.appendChild(mbzTagCell(field.scope === 'album' ? _('Album') : _('Track'), 'mbzNowrap'));
+            row.appendChild(mbzTagCell(field.target, 'mbzNowrap'));
+
+            if (change) {
+                row.appendChild(mbzTagCell(change.currentText || '—'));
+                row.appendChild(mbzTagCell(change.perTrack ? _('per track') : change.value,
+                    change.perTrack ? 'mbzNote' : ''));
+                row.appendChild(mbzTagCell(change.changes + ' / ' + change.total, 'mbzNowrap'));
+            } else {
+                // No tick, so the row says why rather than leaving the reader
+                // to guess at a field that is listed but writes nothing.
+                var note = document.createElement('td');
+                note.className = 'mbzNote';
+                note.colSpan = 3;
+                note.textContent = !state.release
+                    ? _('No release loaded yet.')
+                    : (supplied && !supplied[field.key]
+                        ? _('This release does not supply it.')
+                        : _('unchanged'));
+                row.appendChild(note);
+            }
 
             UI.fieldRows.appendChild(row);
+
+            if (!box) return;
 
             if (typeof initializeControl === 'function') initializeControl(box);
             if (box.controlClass) {
@@ -2107,11 +2039,10 @@ function init(params) {
             window.localListen(box, 'change', schedulePending);
         });
 
-        show(UI.fieldsSection, true);
         updatePending();
     }
 
-    /** The ticked keys in one table of controls: the field rows or the catalogue. */
+    /** The ticked keys in the field table: the fields this Apply will write. */
     function checkedKeysIn(rows) {
         var keys = [];
         if (!rows) return keys;
@@ -2194,7 +2125,7 @@ function init(params) {
                 && ((state.plan.fields || []).length) && !offeredKeys().length;
 
             UI.pendingSummary.textContent = nothingOffered
-                ? _('No field is on in MBZ tags to use \u2014 turn one on, or edit a tag.')
+                ? _('No field is on in the add-on configuration \u2014 turn one on, or edit a tag.')
                 : _('Nothing to apply yet \u2014 tick a field or edit a tag.');
             UI.pendingSummary.removeAttribute('title');
             return;
@@ -3478,7 +3409,6 @@ function init(params) {
         setNote(retryable
             ? _('The release ID is unchanged and nothing was written. Press Retry to look it up again.')
             : _('The release ID is unchanged and nothing was written. Check the album release ID, or clear it and search MusicBrainz for the right release.'));
-        showRetry(retryable);
         return { skipped: true, reason: 'error' };
     }
 
@@ -3527,7 +3457,6 @@ function init(params) {
 
         var scope = state.scope;
 
-        showRetry(false);
         setSummary(_('Reading the release from MusicBrainz...'), true);
 
         trackWork(window.localPromise(loadReleaseAsync(scope)).then(function (result) {
@@ -3663,7 +3592,6 @@ function init(params) {
             state.plan = plan;
             refreshApply();
             renderFields(plan);
-            renderFieldSet();
             renderTracks(plan);
             renderWarnings(plan);
         }, function (error) {
@@ -3685,7 +3613,6 @@ function init(params) {
         var scope = state.scope;
         if (!scope) return Promise.resolve();
 
-        showRetry(false);
         state.plan = null;
         updatePending();
         refreshApply();
@@ -3772,12 +3699,24 @@ function init(params) {
     function refreshApply() {
         if (!UI.btnApply) return;
 
-        UI.btnApply.classList.toggle('mbzDisabled', !canApply());
+        var disabled = !canApply();
+
+        UI.btnApply.classList.toggle('mbzDisabled', disabled);
 
         if (!state.plan) {
             UI.btnApply.title = _('Waiting for the release comparison to finish.');
         } else {
             UI.btnApply.removeAttribute('title');
+        }
+
+        if (!UI.btnApplyClose) return;
+
+        UI.btnApplyClose.classList.toggle('mbzDisabled', disabled);
+
+        if (!state.plan) {
+            UI.btnApplyClose.title = _('Waiting for the release comparison to finish.');
+        } else {
+            UI.btnApplyClose.removeAttribute('title');
         }
     }
 
@@ -3790,7 +3729,7 @@ function init(params) {
         state.busy = !!on;
 
         if (UI.btnSaveAlbumId) UI.btnSaveAlbumId.classList.toggle('mbzDisabled', state.busy);
-        if (UI.btnRetry) UI.btnRetry.classList.toggle('mbzDisabled', state.busy);
+        if (UI.btnRetry) UI.btnRetry.classList.toggle('mbzDisabled', state.busy || state.readOnly);
         if (UI.addButton) {
             UI.addButton.classList.toggle('mbzDisabled', state.busy || state.readOnly);
         }
@@ -3817,8 +3756,6 @@ function init(params) {
             }
         }
 
-        lockFieldSet();
-
         var chips = UI.suggestBar ? UI.suggestBar.querySelectorAll('.mbzChip') : [];
 
         for (var c = 0; c < chips.length; c++) {
@@ -3833,7 +3770,7 @@ function init(params) {
 
         // A release picked from the group is a load, not a write: it is locked
         // with the rest so the window cannot change under a running write.
-        var picks = UI.groupRows ? UI.groupRows.querySelectorAll('[data-release], [data-group-retry]') : [];
+        var picks = UI.groupRows ? UI.groupRows.querySelectorAll('[data-release]') : [];
 
         for (var g = 0; g < picks.length; g++) {
             picks[g].classList.toggle('mbzDisabled', state.busy || state.readOnly);
@@ -3843,6 +3780,45 @@ function init(params) {
     }
 
     function applyNow() {
+        runApply(false);
+    }
+
+    /**
+     * Apply, then close the window when every track was written. A run with a
+     * failed track stays open: the report is what the reader needs then.
+     */
+    function applyAndClose() {
+        runApply(true);
+    }
+
+    /**
+     * Asks the host to close the window. The dialog's own window object carries
+     * `closeWindow`; the plain browser close is the fallback. False means the
+     * window is still there and the caller must draw its report.
+     */
+    function closeWindow() {
+        try {
+            if (typeof window.closeWindow === 'function') {
+                window.closeWindow();
+                return true;
+            }
+        } catch (e) {
+            return false;
+        }
+
+        try {
+            if (typeof window.close === 'function') {
+                window.close();
+                return true;
+            }
+        } catch (e) {
+            return false;
+        }
+
+        return false;
+    }
+
+    function runApply(closeAfter) {
         if (state.readOnly || state.busy || !state.plan || !apply) return;
 
         var keys = checkedKeys();
@@ -3866,6 +3842,13 @@ function init(params) {
             if (window._cleanUpCalled) return;
 
             var message = reportText(result);
+
+            // Apply and close closes on a clean run only, and only when the
+            // host took the request: a failed track is something to read.
+            if (closeAfter && !result.failed.length) {
+                setStatus(message);
+                if (closeWindow()) return;
+            }
 
             // The report is shown whether or not the reload that follows it
             // works, because the write has already happened.
@@ -3898,9 +3881,9 @@ function init(params) {
             canEdit = true;
         }
         state.readOnly = !canEdit || !!window.isReadOnly;
-        lockFieldSet();
 
         show(UI.btnApply, !state.readOnly);
+        show(UI.btnApplyClose, !state.readOnly);
         show(UI.addBar, !state.readOnly);
         refreshApply();
         if (UI.addButton) UI.addButton.classList.toggle('mbzDisabled', state.readOnly);
@@ -3980,7 +3963,6 @@ function init(params) {
     pinCardSpacing();
     italicizeInfo();
     resetView();
-    renderFieldSet();
 
     if (UI.btnSearch) window.localListen(UI.btnSearch, 'click', openSearch);
     if (UI.btnRetry) window.localListen(UI.btnRetry, 'click', retryRelease);
@@ -3997,6 +3979,7 @@ function init(params) {
     if (UI.addButton) window.localListen(UI.addButton, 'click', addPending);
     if (UI.addValue) window.localListen(UI.addValue, 'keydown', onAddKey);
     if (UI.btnApply) window.localListen(UI.btnApply, 'click', applyNow);
+    if (UI.btnApplyClose) window.localListen(UI.btnApplyClose, 'click', applyAndClose);
 
     start();
 }

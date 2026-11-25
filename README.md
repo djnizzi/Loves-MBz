@@ -27,19 +27,22 @@ button in MediaMonkey's toolbar. It works on one album at a time.
 - **You choose what gets written.** Every field starts ticked, and beside
   **Apply** the footer counts exactly what that click will do — for example
   `Will write 9 field changes on 5 tracks · 2 tag edits`. Untick a field to
-  keep your value.
-- **Two tabs, and a field set you choose once.** **ID and changes** holds every
-  card the window draws; **MBZ tags to use** lists every field the add-on can
-  write, with the column or Picard tag name beside it and whether this release
-  supplied it. A field you turn off there is not offered again — in any
-  window, for any album — until you turn it back on; **Save as default**
-  stores the set and **Reset to saved** puts the ticks back. The ticks in
-  **Fields to write** still decide what this Apply writes, so turning a field
-  off is a setting, not a write.
+  keep your value. **Apply** is the primary button, so Enter presses it;
+  **Apply and close** does the same write and then closes the window, unless a
+  track failed — a failure is a report to read, so the window stays open.
+- **Two tabs, and one table of fields.** **ID and changes** holds the release
+  group with its release ID, the release, the selected tracks and the
+  MusicBrainz tags editor. **Fields to write** is the one field table: the
+  fields you left on in the add-on's configuration, each with the column or
+  Picard tag name it is written as, your library's value, the release's, and
+  how many tracks it would change. Every field that differs is ticked; a field
+  whose value already matches has no tick, because there is nothing to write.
+  Unticking a field skips it for this Apply only — the configuration is what
+  keeps a field out of every window.
 - **The same set from the add-on's own settings.** **Tools → Addons → Loves
   MBz → Configure** opens the field list on a page of its own, saved with OK.
-  It edits the one setting the window's **MBZ tags to use** tab edits, so a
-  field turned off in either place is off in both. Each row names the column or
+  It is the only place the field set is saved: the window's **Fields to
+  write** tab lists exactly the fields the page leaves on. Each row names the column or
   Picard tag it is written as and marks it as an **extended tag** or a
   **MediaMonkey field**. A fresh install opens the page once, with every field
   ticked. The page also carries **Show Tag from MusicBrainz on the MediaMonkey
@@ -51,8 +54,9 @@ button in MediaMonkey's toolbar. It works on one album at a time.
   The window's first card lists every release of the group with its date,
   country, format and track count, under the album's release ID field;
   **use this** loads one in place, and the fields, the track comparison and
-  **Apply** follow it. A list that could not be read says why and offers
-  **Retry**. Nothing is written to the album by picking: **Save ID** is still
+  **Apply** follow it. A list that could not be read says why, and the window's
+  **Retry** button reads it again. A loaded release brings the first tab
+  forward. Nothing is written to the album by picking: **Save ID** is still
   what changes the album's release ID.
 - **Tracks are matched by disc and track number, never by title.** A library
   track with no counterpart in the release is skipped and counted, so a partial

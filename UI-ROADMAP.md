@@ -363,7 +363,7 @@ UI work.
 | 7 | IDs dialog hierarchy + keyboard | 2.4 | M | parity between windows |
 | 8 | Shared styling + theme pass | 2.5, 2.6 | S | maintainability |
 | 9 | Links, removals, unsaved guard | 2.2, 2.3, 2.7 | S+S+M | polish |
-| 10 | Tabs — "ID and changes" / "MBZ tags to use" | 3.1 → 0.7.1 | L | long-term layout |
+| 10 | Tabs — "ID and changes" / "Fields to write" | 3.1 → 0.7.1 | L | long-term layout |
 
 ## Review checklist
 
@@ -388,7 +388,7 @@ do not cover any of that.
    changed fields?
 2. Per-row skinned `Edit` controls, or a single editor for the selected tag row?
 3. ~~Tabs, collapsible sections, or keep one scroll?~~ **Answered:** tabs, split
-   as **ID and changes** / **MBZ tags to use** — see 3.1 and ROADMAP.md 0.7.1.
+   as **ID and changes** / **Fields to write** — see 3.1 and ROADMAP.md 0.7.1.
 4. Is a close guard acceptable given the host's dialog lifecycle, or should the
    window simply warn in the footer before Apply?
 

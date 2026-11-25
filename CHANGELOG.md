@@ -4,7 +4,7 @@ All notable changes to Loves MBz, newest first. Version numbers match
 `info.json` and the git tags. A test build names its channel in the window
 footer and in the package, because `info.json` must stay three numbers.
 
-## 0.7.1 (2026-11-25)
+## 0.7.1 "Tidying up" (2026-11-25)
 
 The 0.7 job: every field the audit found is reachable, the window offers only
 the ones you choose, and that choice — like the window's tabs — is drawn by
@@ -26,15 +26,33 @@ unreleased 0.7.0 ships here too.
   the old **Year** row wrote the same value a second time and could erase the
   month and day the **Date** row had just written. The row is gone; a release
   dated only `1982` arrives as `19820000` through **Date**.
-- **Two levels, not two settings.** The saved set decides which rows **Fields to
-  write** offers; its ticks still decide what this Apply writes and never touch
-  the setting. **Save as default** writes the set and **Reset to saved** reloads
-  it. Nothing in that path writes a tag.
+- **One table of fields, in the second tab.** The two tables are gone. **ID and
+  changes** keeps the release group, the release, the tracks and the tags
+  editor; **Fields to write** lists exactly the fields left on in the
+  configuration page, each with the library's value, the release's value and the
+  tracks it would change. A field that differs is ticked and can be unticked for
+  this Apply only. A field whose value already matches has no tick at all,
+  because there is nothing to write. The window keeps no **Save as default** or
+  **Reset to saved**: the configuration page is the only writer of the setting,
+  and nothing in that path writes a tag.
 - **The tab strip is MediaMonkey's own `Tabs` control**, the strip the
   properties modal draws: the window hands it the two panels it already has, so
   the cards, their wiring and the one scrolling column are unchanged. A host
   without the control gets the window's own button bar, so neither panel is ever
   unreachable.
+- **Apply is the primary button, and there is Apply and close.** The footer's
+  two buttons are one host `Buttons` control, so MediaMonkey draws Apply
+  highlighted and gives it Enter. **Apply and close** runs the same write and
+  then closes the window — but only when no track failed, because a failure is
+  something to read.
+- **One Retry button, always there.** It used to appear beside the summary only
+  after a failure, and the release-group card drew a second one of its own. The
+  window now has one button that re-reads the release and this release group's
+  list in place; a group that could not be read points at it. A page installed
+  before this build has the class that used to hide it cleared by the script.
+- **A loaded release shows the first tab.** Opening the window on a release ID,
+  saving or pasting one, picking one from the group and **Retry** all land on
+  **ID and changes**, also when the host's tab control remembered another tab.
 - **The toolbar button can be turned off.** The configuration page opens with
   **Show Tag from MusicBrainz on the MediaMonkey toolbar** ticked; unticking it
   and pressing OK stops the button being added to the right-hand strip. Only a

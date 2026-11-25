@@ -518,20 +518,23 @@ host draws.
   later release can migrate it. A missing key, or a key this build does not
   know, falls back to today's list — so installing 0.7.1 changes nothing until
   the user edits the set.
-- **Two levels, not two settings.** The saved set decides which field rows the
-  window *offers*; the ticks in **Fields to write** still decide what *this*
-  Apply writes. Ticking or unticking there is the per-selection override and
-  touches no setting. **Save as default** writes the current ticks back to the
-  setting; **Reset to saved** returns to it. Nothing in this path writes tags:
-  the files change only on Apply, through `applySelectionAsync`.
-- **Tab 1 — ID and changes.** Every card the window has today: the
-  release-group card with the release ID field, the release card, **Fields to
-  write**, **Selected tracks**, and the **MusicBrainz tags** editor.
-- **Tab 2 — MBZ tags to use.** The catalogue: album fields and track fields,
-  each with its native column or Picard tag name beside it, the saved-set ticks,
-  **Save as default**, **Reset to saved**, and one sentence saying what the set
-  is for. A field the release did not supply is still listed, marked as not
-  supplied by this release, so it cannot look like a lost setting. That mark is
+- **Two levels, one table.** The saved set decides which field rows the window
+  *offers*; the tick on an offered row decides what *this* Apply writes, and
+  ticking or unticking touches no setting. Both levels live in the one table in
+  the second tab: a field left off in the configuration has no row, and a field
+  whose value already matches has no tick. The setting is written by the
+  configuration page alone — the window keeps no **Save as default** / **Reset
+  to saved**. Nothing in this path writes tags: the files change only on Apply,
+  through `applySelectionAsync`.
+- **Tab 1 — ID and changes.** The release-group card with the release ID field,
+  the release card, **Selected tracks**, and the **MusicBrainz tags** editor.
+- **Tab 2 — Fields to write.** The one field table: the fields the configuration
+  page leaves on, album fields and track fields, each with its scope, its native
+  column or Picard tag name, the library's value, the release's, and the tracks
+  it changes. Only a field that would change carries a tick; a field that
+  already matches is listed without one and says so, because there is nothing to
+  write. The window keeps no saved-set buttons: the configuration page is the
+  only writer of the setting. A field the release did not supply is marked from
   `suppliedFields(release)` — the release before any comparison — and not the
   plan: the plan carries only the fields that differ, so a field equal to the
   library's value would otherwise read as one MusicBrainz never sent.
@@ -557,12 +560,12 @@ host draws.
   panels mean one scroll column per panel (or one inside the tab body); that is
   a guard update with its own test, not a workaround, and `fitScrollColumn`
   has to run again when a tab is first shown.
-- [x] The saved set: read, fall back, version, write on **Save as default**.
-      `lovesMBzFieldSet` as `{version, keys}`, read and written only by
+- [x] The saved set: read, fall back, version, written by the configuration
+      page. `lovesMBzFieldSet` as `{version, keys}`, read and written only by
       `mbzApply.readFieldSet` / `writeFieldSet`; a missing setting, another
       version or an unknown key falls back to the whole catalogue, and an empty
       list is kept as the user's answer.
-- [x] Per-selection ticks that never touch the setting; **Reset to saved**.
+- [x] Per-selection ticks that never touch the setting.
 - [x] The two tab keys, and which cards sit in which panel.
 - [x] The panels built by script when the page has none; the catalogue card is
       always drawn by the script into its mount point, never duplicated in the

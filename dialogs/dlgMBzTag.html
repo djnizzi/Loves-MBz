@@ -155,9 +155,11 @@
         .mbzTabBar { align-items: center; gap: 8px; }
         .mbzTab { opacity: 0.6; }
         .mbzTabActive { opacity: 1; font-weight: 600 !important; }
-        .mbzFieldSetBar { align-items: center; gap: 8px; padding-top: 8px; }
         .mbzDisabled { opacity: 0.5; pointer-events: none; }
         .mbzButton { padding: 0 14px; line-height: 24px; white-space: nowrap; }
+        /* Primary is emphasis on the same box, never a bigger button: the host's
+           `Buttons` control sized Apply at twice this and cannot be pinned back. */
+        .mbzPrimary { font-weight: 600 !important; }
 
         /* The busy ring: it turns while a lookup or a write runs, next to the
            sentence that says what is running. */
@@ -211,7 +213,8 @@
         <div class="flex row" style="align-items: center; gap: 10px;">
             <div class="mbzSpinner mbzHidden" data-id="working"></div>
             <label data-id="summary" class="padding fill mbzInfo" data-localize>Reading the release from MusicBrainz...</label>
-            <div class="button mbzButton mbzHidden" data-id="btnRetry" data-localize>Retry</div>
+            <div class="button mbzButton" data-id="btnRetry" data-localize
+                title="Read the release from MusicBrainz again, and this release group's releases with it.">Retry</div>
         </div>
         <label data-id="warning" class="mbzWarning" style="display: none;" data-localize></label>
 
@@ -267,22 +270,6 @@
                 </div>
             </fieldset>
 
-            <fieldset class="mbzSection mbzCard mbzHidden" data-id="fieldsSection">
-                <legend class="mbzCardTitle" data-localize>Fields to write</legend>
-                <table class="mbzTable">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th data-localize>Field</th>
-                            <th data-localize>Current</th>
-                            <th data-localize>MusicBrainz</th>
-                            <th data-localize>Changes</th>
-                        </tr>
-                    </thead>
-                    <tbody data-id="fieldRows"></tbody>
-                </table>
-            </fieldset>
-
             <fieldset class="mbzSection mbzCard mbzHidden" data-id="trackSection">
                 <legend class="mbzCardTitle" data-localize>Selected tracks</legend>
                 <table class="mbzTable">
@@ -336,14 +323,19 @@
             <label data-id="note" class="mbzNote" data-localize>Nothing is written until Apply. Closing the window writes nothing.</label>
             </div>
 
-            <!-- A mount point, not a second copy: the script draws the card, its
-                 table and its buttons, so a page installed before this tab gets
-                 the same panel and there is nothing to keep in step. -->
+            <!-- A mount point, not a second copy: the script draws the card and
+                 its one table, so a page installed before this tab gets the
+                 same panel and there is nothing to keep in step. -->
             <div class="mbzPanel mbzHidden" data-id="panelTagSet"></div>
         </div>
 
         <div class="flex row mbzFooter">
-            <div class="button mbzButton" data-id="btnApply" data-localize>Apply</div>
+            <!-- Two plain buttons, built exactly like Retry above: the host's
+                 `Buttons` control drew them at its own dialog-button size,
+                 about twice this one, and no inline pin brought that back. Apply
+                 carries the primary emphasis instead. -->
+            <div class="button mbzButton mbzPrimary" data-id="btnApply" data-localize>Apply</div>
+            <div class="button mbzButton" data-id="btnApplyClose" data-localize>Apply and close</div>
             <label data-id="pendingSummary" class="mbzPending"></label>
             <label data-id="applyStatus" class="fill mbzInfo"></label>
             <label data-id="buildStamp" class="mbzStamp"></label>

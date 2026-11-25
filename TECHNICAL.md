@@ -172,8 +172,14 @@ rest still commit; the status line reads `Updated 12 of 15 tracks. Skipped 3
 error. Every step — reading the extended tags, writing them, and the commit —
 has a 30-second deadline, so one stuck track is reported instead of leaving the
 window on **Writing…** with the rest of the selection unwritten. **Apply** is
-greyed out until the release comparison has produced a plan, with a tooltip
-saying why. While it runs, the field checkboxes, tag values, **Add** row,
+the window's primary button: the two Apply buttons are one host `Buttons`
+control with `data-default` on Apply, so MediaMonkey draws it highlighted and
+gives it Enter, and a host that will not build the control leaves two plain
+buttons that the window wires itself. Apply is greyed out until the release
+comparison has produced a plan, with a tooltip saying why. **Apply and close**
+runs the same write and then closes the window through the host's
+`closeWindow` — but only when no track failed, because a failure is a report to
+read, not a window to close over. While it runs, the field checkboxes, tag values, **Add** row,
 **Save ID**, the library suggestions and the disagreement strip's buttons are
 locked, so an edit cannot
 be typed into a write that has already read its inputs. The window
@@ -197,26 +203,37 @@ No API key is needed: the add-on identifies itself with a `User-Agent` and
 keeps requests at least 1.1 s apart. A busy server (`503`/`429`) is retried
 twice with a growing delay, and the parsed release is cached by ID for the
 session, so opening the same album again does not call the API. When the lookup
-still fails, the window says why and, for a busy server, a timeout or a network
-error, offers **Retry** beside the message. **Retry** repeats the lookup in
-place, so the tag edits and every other value in the window stay; when the
-release ID points at a release MusicBrainz does not have, the message says to
-check the ID instead of offering a retry that cannot help.
+still fails, the window says why. **Retry** sits beside the summary at all
+times — not only after a failure — and repeats the lookup in place, so the tag
+edits and every other value in the window stay; it then re-reads the release
+group's list with the same button, which is why the card carries no second one
+and points at this. When the release ID points at a release MusicBrainz does
+not have, the message says to check the ID: retrying cannot help there.
+
+A release that is loaded — at open, from a saved or pasted ID, from the group
+picker, or by **Retry** — brings the first tab, **ID and changes**, to the
+front, so the release and its tracks are what the reader sees; the field table
+is one tab away, in **Fields to write**. The host's
+`Tabs` control is moved with `selectedIndex`; the window's own bar calls
+`showTab('changes')`.
 
 ### The field set and the two tabs
 
 The window is two tabs over the one scrolling column the guard pins.
 
-- **ID and changes** holds every card: the release group with its release ID
-  field, the release, **Fields to write**, **Selected tracks** and the
-  MusicBrainz tags editor. **MBZ tags to use** holds the catalogue: every field
-  in `NATIVE_FIELDS` and `TAG_FIELDS`, with its scope, the native column or
-  Picard tag name it is written as, and whether this release supplied a value.
-  A field the release did not supply is still listed, so it cannot read as a
-  lost setting. Both marks come from `mbzApply.suppliedFields(release)` — the
-  release described before any comparison — never from the plan: the plan holds
-  only the fields whose value **differs**, so a field that already matches the
-  library is supplied, it just has nothing to change.
+- **ID and changes** holds the release group with its release ID field, the
+  release, **Selected tracks** and the MusicBrainz tags editor. **Fields to
+  write** holds the one field table: the fields in `NATIVE_FIELDS` and
+  `TAG_FIELDS` that the configuration page leaves on, each with its scope, the
+  native column or Picard tag name it is written as, the library's value, the
+  release's, and how many tracks it would change. The page decides which rows
+  exist at all: a field turned off there has no row. The table is the catalogue,
+  not the plan — a field whose value already matches is still listed, and the
+  plan, which holds only the fields that **differ**, adds the tick. A row
+  without a tick is a row with nothing to write, and says which of the two
+  reasons it is: the plan does not carry it, so either the value matches or the
+  release supplied nothing, and `mbzApply.suppliedFields(release)` — the release
+  before any comparison — tells them apart.
 - **The saved set** is one setting, `lovesMBzFieldSet`, written as
   `{ version: 1, keys: [...] }`. `mbzApply.readFieldSet()` and
   `mbzApply.writeFieldSet()` are its only reader and writer. A missing setting,
@@ -225,11 +242,12 @@ The window is two tabs over the one scrolling column the guard pins.
   edited. An empty list is a real answer: the window offers no field, and the
   footer says where to turn one on instead of asking for a tick that has
   nowhere to go.
-- **Two levels.** The saved set decides which rows **Fields to write** offers;
-  its ticks decide what *this* Apply writes and never touch the setting. **Save
-  as default** writes the catalogue's ticks to the setting and **Reset to
-  saved** reloads them. Neither writes a tag: `applySelectionAsync` is still
-  the only writer.
+- **Two levels, one table.** The saved set decides which rows the table offers.
+  A tick on an offered row decides what *this* Apply writes, is created ticked by
+  `renderFields()` and never touches the setting: the window has no **Save as
+  default** or **Reset to saved**, and the configuration page is the only writer
+  of `lovesMBzFieldSet`. Neither path writes a tag: `applySelectionAsync` is
+  still the only writer.
 - **The strip is the host's `Tabs` control.** `addTab(title, panel)` takes any
   content panel — the `load(track, dialog)` model belongs to the properties
   dialog's own tab list, not to the control — so the window hands it the two
@@ -238,10 +256,11 @@ The window is two tabs over the one scrolling column the guard pins.
   column is measured again for the panel that is shown. A host without the
   control gets the window's own `.mbzButton` bar instead, with `showTab` as its
   switch, so neither panel is ever unreachable. The
-  catalogue card is not in the page at all: `panelTagSet` is a mount point and
-  `buildFieldSetPanel()` draws the card, its table and its buttons into it, so a
-  page installed before the tab gets the same panel and there is no second copy
-  to drift from the first. The tab bar and the first panel are built by
+  field card is not in the page at all: `panelTagSet` is a mount point and
+  `buildFieldSetPanel()` draws the card and its one table into it, so a page
+  installed before the tab gets the same panel and there is no second copy to
+  drift from the first. A page that still carries the old **Fields to write**
+  card has it dropped by `ensureTabs()`, so the table exists once. The tab bar and the first panel are built by
   `ensureTabs()` only when the page has neither, like the group card. Why not
   the host's `Tabs` control is recorded in ROADMAP's 0.7.1.
 - **The configuration page.** `info.json` names `config.js`, so MediaMonkey
@@ -815,8 +834,9 @@ and the 0.4.x invariants (`discNumberInt`, no `SCRIPT`). The contract is in
 - **The window reports that MusicBrainz is busy** — three requests in a row
   were answered with `503`/`429`. Wait a moment and press **Retry** in the
   window: it repeats the lookup in place, so your tag edits stay. When the
-  album release ID points at a release MusicBrainz does not have, **Retry** is
-  not offered; correct the ID or clear it and search.
+  album release ID points at a release MusicBrainz does not have, the message
+  says so; **Retry** is there but cannot help — correct the ID or clear it and
+  search.
 - **The toolbar button is missing** — it is added to the right-hand strip at
   start-up; check `debug.log` for `Loves MBz: could not add the toolbar button`.
   The action is also listed under **Options → Layout → Toolbar**, so it can be

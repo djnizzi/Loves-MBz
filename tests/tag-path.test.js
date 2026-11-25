@@ -110,7 +110,7 @@ assert.match(dialogCode, /fitScrollColumn/, 'the column must be sized in pixels,
 assert.match(dialogHtml, /data-id="scrollColumn"/, 'the scrolling column needs a handle');
 assert.match(dialogHtml, /\.mbzSection \{ padding-top: 10px/, 'sections must keep the 0.4.5 rhythm');
 assert.match(dialogHtml, /<fieldset class="mbzSection mbzCard/, 'sections must be drawn as cards');
-assert.match(dialogHtml, /<legend class="mbzCardTitle" data-localize>Fields to write<\/legend>/,
+assert.match(dialogHtml, /<legend class="mbzCardTitle" data-localize>Selected tracks<\/legend>/,
     'the card needs a titled legend');
 assert.match(dialogHtml, /data-id="releaseCard"/, 'the release block needs its card');
 assert.match(dialogCode, /function syncReleaseCard/, 'an empty release card must hide itself');
@@ -119,8 +119,12 @@ assert.match(dialogHtml, /\.mbzInfo \{[^}]*font-style: italic/,
     'guidance must read as an aside');
 assert.match(dialogHtml, /<fieldset class="mbzSection mbzCard mbzHidden" data-id="trackSection"/,
     'the track card starts hidden');
-assert.match(dialogCode, /show\(UI\.fieldsSection, false\);\s*show\(UI\.trackSection, false\);/,
-    'a release that is not loaded hides the comparison cards');
+assert.match(dialogCode, /show\(UI\.trackSection, false\);/,
+    'a release that is not loaded hides the track card');
+assert.doesNotMatch(dialogHtml, /data-id="fieldsSection"/,
+    'the field table lives in the second tab, not in the page');
+assert.match(dialogCode, /querySelector\('\[data-id="fieldsSection"\]'\)/,
+    'a page installed with the old card has it dropped, so the table exists once');
 assert.match(dialogCode, /setProperty\('display', 'none', 'important'\)/,
     'hiding must outrank the skin stylesheet, as the control sizing does');
 assert.match(dialogCode, /function pinCardSpacing/,
@@ -131,8 +135,8 @@ assert.match(dialogCode, /function italicizeInfo/,
     'the asides must be italicized from script');
 assert.match(dialogCode, /setProperty\('font-style', 'italic', 'important'\)/,
     'italic text must outrank the host font');
-assert.match(dialogCode, /show\(UI\.fieldsSection,\s*!!state\.hasRelease/,
-    'the field card must not return before a release is loaded');
+assert.match(dialogCode, /function renderFields\(plan\)[\s\S]*?apply\.fieldCatalogue\(\)/,
+    'the field table is the catalogue, so a matching field is still listed');
 assert.match(dialogHtml, /\.mbzMetaTable th \{[^}]*text-align: left !important/,
     'the meta labels must be left aligned, not centred by the skin');
 assert.match(dialogCode, /function syncTables/, 'empty tables must not draw their header row');
@@ -239,12 +243,10 @@ assert.match(dialogCode, /function renderGroupCardNote/,
     'a group that could not be read must say so instead of vanishing');
 assert.match(dialogCode, /Could not read the other releases of this group: %s/,
     'the card must carry the reason it has no rows');
-assert.match(dialogCode, /data-group-retry/,
-    'a listing that failed must offer another attempt');
-assert.match(dialogCode, /function retryGroupReleases/,
-    'the retry must read the same group again');
-assert.match(dialogCode, /loadGroupReleasesAsync\(state\.release, true\)/,
-    'a retry keeps the card while the group is read again');
+assert.doesNotMatch(dialogCode, /data-group-retry/,
+    'the card must not draw a second retry button of its own');
+assert.match(dialogCode, /Press Retry to read them again\./,
+    'a listing that failed must point at the window\'s retry');
 assert.match(dialogCode, /state\.groupRetryable = canRetryRelease\(error\)/,
     'only a failure that can pass may offer a retry');
 
@@ -330,7 +332,20 @@ assert.match(dialogCode, /var current = storedAlbumReleaseId\(\);/,
     'Save ID must compare with the album row, not with a picked release');
 
 // A failed release lookup is recoverable in the window, not by closing it.
-assert.match(dialogHtml, /data-id="btnRetry"/, 'a failed lookup must offer a retry');
+assert.match(dialogHtml, /class="button mbzButton" data-id="btnRetry"/,
+    'the one retry button carries no hiding class');
+assert.doesNotMatch(dialogHtml, /mbzHidden[^>]*btnRetry/,
+    'the retry button must not start hidden');
+assert.match(dialogCode, /if \(UI\.btnRetry\) show\(UI\.btnRetry, true\);/,
+    'an installed page that still hides the retry must be corrected by the script');
+assert.doesNotMatch(dialogCode, /\bshowRetry\b/,
+    'nothing hides the retry any more, so no call may ask it to');
+assert.match(dialogCode, /function showFirstTab[\s\S]{0,300}?showTab\('changes'\)/,
+    'a host without the Tabs control shows the first panel');
+assert.match(dialogCode, /function showFirstTab[\s\S]{0,400}?selectedIndex = 0/,
+    'the host control is moved to the first tab');
+assert.match(dialogCode, /showFirstTab\(\);\s+fitScrollColumn\(\);/,
+    'a rendered release must bring the first tab forward');
 assert.match(dialogCode, /function retryRelease/, 'the retry must reload the release in place');
 assert.match(dialogCode, /localListen\(UI\.btnRetry, 'click', retryRelease\)/,
     'the retry button must be wired to the reload');
@@ -338,6 +353,20 @@ assert.match(dialogCode, /localListen\(UI\.btnRetry, 'click', retryRelease\)/,
 // Apply states its pending work before it runs, and follows the table.
 assert.match(dialogHtml, /data-id="pendingSummary"/,
     'the footer must state what Apply will write');
+assert.match(dialogHtml, /<div class="button mbzButton mbzPrimary" data-id="btnApply"/,
+    'Apply is a plain button, built like Retry, and marked primary');
+assert.match(dialogHtml, /\.mbzPrimary \{[^}]*font-weight/,
+    'primary is emphasis on the same box, not a bigger button');
+assert.doesNotMatch(dialogHtml, /data-control-class="Buttons"|data-id="applyButtons"/,
+    'the host Buttons control drew these at its own size, so it is gone');
+assert.match(dialogCode, /localListen\(UI\.btnApplyClose, 'click', applyAndClose\)/,
+    'Apply and close must be wired to the same write');
+assert.match(dialogCode, /closeAfter && !result\.failed\.length[\s\S]{0,160}?closeWindow\(\)/,
+    'a clean run closes, a failed track keeps the window open');
+assert.match(dialogCode, /typeof window\.closeWindow === 'function'/,
+    'the window closes the way the host closes it');
+assert.doesNotMatch(dialogCode, /pinApplySize|ensureApplyButtons|UI\.applyButtons/,
+    'no code depends on the host Buttons control any more');
 assert.match(dialogCode, /function updatePending/, 'the pending summary must be computed in the window');
 assert.match(dialogCode, /localListen\(UI\.fieldRows, 'click', updatePending\)/,
     'ticking a field must update the pending summary');
@@ -1421,7 +1450,7 @@ global.app = {
 
     assert.strictEqual(apply.writeFieldSet(['title', 'barcode']), true);
     assert.deepStrictEqual(settings.lovesMBzFieldSet, { version: 1, keys: ['title', 'barcode'] },
-        'Save as default stores the keys under a version');
+        'the configuration page stores the keys under a version');
     assert.deepStrictEqual(apply.readFieldSet(), ['title', 'barcode'],
         'what was saved is what the next window offers');
 
@@ -1441,16 +1470,19 @@ global.app = {
     );
 
     assert.ok(changesPanel.length > 0, 'both panels must be in the page');
-    for (const id of ['groupCard', 'releaseCard', 'fieldsSection', 'trackSection', 'tagSection']) {
+    for (const id of ['groupCard', 'releaseCard', 'trackSection', 'tagSection']) {
         assert.ok(changesPanel.includes('data-id="' + id + '"'), id + ' belongs to ID and changes');
     }
+
+    assert.doesNotMatch(changesPanel, /data-id="fieldsSection"/,
+        'the field table is in the second tab only');
 
     // The catalogue lives in one place only: the page is a mount point and the
     // script draws the card, so a stale install and a fresh one cannot drift.
     assert.match(dialogHtml, /data-id="panelTagSet"><\/div>/,
         'the catalogue panel is a mount point, not a second copy of the card');
-    assert.doesNotMatch(dialogHtml, /fieldSetRows|btnSaveFieldSet|btnResetFieldSet/,
-        'the catalogue markup must not also live in the page');
+    assert.doesNotMatch(dialogHtml, /fieldSetRows|btnSaveFieldSet|btnResetFieldSet|fieldsSection/,
+        'the field table and its buttons must not also live in the page');
 
     const buildPanelCode = dialogCode.slice(
         dialogCode.indexOf('function buildFieldSetPanel'),
@@ -1460,12 +1492,12 @@ global.app = {
     assert.match(buildPanelCode, /function buildFieldSetPanel\(host\)/,
         'the builder takes the page mount point');
 
-    for (const id of ['fieldSetRows', 'fieldSetStatus', 'btnSaveFieldSet', 'btnResetFieldSet']) {
-        assert.ok(buildPanelCode.includes("'" + id + "'"),
-            id + ' must be created by the one builder');
-    }
+    assert.match(buildPanelCode, /makeNode\('tbody', '', 'fieldRows'\)/,
+        'the one builder draws the one field table');
 
-    assert.match(buildPanelCode, /_\('Save as default'\)/, 'Save as default says what it does');
+    assert.match(buildPanelCode, /_\('Fields to write'\)/, 'the card says what it holds');
+    assert.doesNotMatch(buildPanelCode, /Save as default|Reset to saved|writeFieldSet/,
+        'the window no longer writes the setting; the configuration page does');
     assert.match(buildPanelCode, /'mbzSection mbzCard'/, 'the catalogue is a card like the others');
     assert.match(dialogCode, /var host = UI\.panelTagSet;\s*var panel = buildFieldSetPanel\(host\);/,
         'a page with the mount point and one without get the same panel');
@@ -1500,28 +1532,19 @@ global.app = {
 
     assert.match(dialogCode, /function renderFields\(plan\)[\s\S]*?isOffered\(field\.key\)/,
         'Fields to write offers only the saved set');
-    assert.match(dialogCode, /function renderFieldSet\(\)[\s\S]*?not supplied/,
-        'a field this release did not supply is still listed');
-
-    const renderFieldSetCode = dialogCode.slice(
-        dialogCode.indexOf('function renderFieldSet'),
-        dialogCode.indexOf('function markFieldSetDirty')
+    const renderFieldsCode = dialogCode.slice(
+        dialogCode.indexOf('function renderFields(plan)'),
+        dialogCode.indexOf('function checkedKeysIn')
     );
 
-    assert.doesNotMatch(renderFieldSetCode, /plan\.fields/,
-        'the plan holds only differing fields, so it cannot say what was supplied');
-
-    // Saving the set writes a setting, never a tag: the window has one tag
-    // write, and it is Apply through the engine.
-    const saveFieldSetCode = dialogCode.slice(
-        dialogCode.indexOf('function saveFieldSet'),
-        dialogCode.indexOf('function resetFieldSet')
-    );
-
-    assert.match(saveFieldSetCode, /apply\.writeFieldSet\(keys\)/,
-        'Save as default writes the setting');
-    assert.doesNotMatch(saveFieldSetCode, /applySelectionAsync|setExtendedTagsAsync|commitAsync/,
-        'saving the set must not write tags');
+    assert.match(renderFieldsCode, /if \(change\)[\s\S]*?mbzTagField/,
+        'only a field this selection would change carries a tick');
+    assert.match(renderFieldsCode, /unchanged/,
+        'a listed field with nothing to write says so instead of offering a tick');
+    assert.match(renderFieldsCode, /apply\.suppliedFields/,
+        'a field the release did not supply is marked from the release, not the plan');
+    assert.doesNotMatch(dialogCode, /function renderFieldSet|function saveFieldSet|function resetFieldSet|writeFieldSet/,
+        'one field table, and the setting is written by the configuration page alone');
 
     /* ---------------------------------------------------------------------- *
      * 0.7.1: the add-on's configuration page
